@@ -1,6 +1,7 @@
-def main():
-    print("Hello from qmdr!")
+import flet as ft
 
 
 if __name__ == "__main__":
-    main()
+    from qmdr.app import main
+
+    ft.run(main)

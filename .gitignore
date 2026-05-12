@@ -9,3 +9,9 @@ wheels/
 # Virtual environments
 .venv
 .agents
+
+# Qmdr local data
+music/
+qqmusic_cred.pkl
+qqmusic_qrcode.png
+qqmusic_credential_*.json
