@@ -12,7 +12,7 @@ from .models import DownloadEvent, DownloadOptions, PlaylistItem, SongItem
 from .music import MusicService
 from .playlist import CredentialRequiredError, PlaylistService
 from .quality import QUALITY_OPTIONS
-from .settings import default_download_dir
+from .settings import default_download_dir, load_download_dir, save_download_dir
 from .utils import clamp_int
 
 
@@ -61,7 +61,13 @@ class QmdrApp:
         self.search_quality_dropdown = self.make_quality_dropdown()
         self.playlist_quality_dropdown = self.make_quality_dropdown()
         self.settings_quality_dropdown = self.make_quality_dropdown()
-        self.download_dir_input = ft.TextField(label="下载目录", value=str(default_download_dir()), expand=True)
+        self.download_dir_input = ft.TextField(
+            label="下载目录",
+            value=str(load_download_dir()),
+            expand=True,
+            on_blur=self.on_download_dir_commit,
+            on_submit=self.on_download_dir_commit,
+        )
         self.batch_size_input = ft.TextField(label="并发", value="5", width=92)
         self.cover_size_dropdown = ft.Dropdown(
             label="封面",
@@ -77,7 +83,7 @@ class QmdrApp:
         self.search_status = ft.Text("", size=13, color="#52616b")
         self.search_results_list = ft.ListView(expand=True, spacing=8, padding=0)
 
-        self.musicid_input = ft.TextField(label="musicid", expand=True)
+        self.musicid_input = ft.TextField(label="musicid(通常为 qq 号或微信 id)", expand=True)
         self.playlist_status = ft.Text("", size=13, color="#52616b")
         self.playlist_list = ft.ListView(expand=True, spacing=8, padding=0)
         self.playlist_preview = ft.ListView(expand=True, spacing=4, padding=0)
@@ -314,6 +320,7 @@ class QmdrApp:
         self.page.update()
 
     def options(self) -> DownloadOptions:
+        self.save_download_dir_setting()
         return DownloadOptions(
             download_dir=Path(self.download_dir_input.value or default_download_dir()),
             quality_level=clamp_int(self.quality_value, 3, 1, 4),
@@ -321,6 +328,21 @@ class QmdrApp:
             batch_size=clamp_int(self.batch_size_input.value, 5, 1, 12),
             overwrite=bool(self.overwrite_checkbox.value),
         )
+
+    def save_download_dir_setting(self, show_message: bool = False) -> None:
+        value = (self.download_dir_input.value or "").strip()
+        if not value:
+            return
+        try:
+            save_download_dir(Path(value))
+        except OSError as exc:
+            self.toast(f"保存下载目录失败: {exc}")
+            return
+        if show_message:
+            self.toast("下载目录已保存")
+
+    def on_download_dir_commit(self, event: ft.Event[ft.TextField] | None = None) -> None:
+        self.save_download_dir_setting()
 
     async def reload_credential(self, show_message: bool = True) -> None:
         self.credential_service.set_external_api_url(self.external_api_input.value or "")
@@ -604,6 +626,7 @@ class QmdrApp:
             return
         if selected:
             self.download_dir_input.value = selected
+            self.save_download_dir_setting(show_message=True)
             self.page.update()
 
     def on_open_download_dir(self, event: ft.Event | None = None) -> None:

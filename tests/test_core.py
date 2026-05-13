@@ -14,6 +14,7 @@ from qmdr.models import DownloadEvent, DownloadOptions, DownloadResult, Playlist
 from qmdr.music import MusicService
 from qmdr.playlist import PlaylistService
 from qmdr.quality import get_quality_strategy
+from qmdr.settings import load_download_dir, save_download_dir
 from qmdr.utils import sanitize_filename
 
 
@@ -37,6 +38,25 @@ class CoreTests(unittest.TestCase):
             legacy = root / "qqmusic_cred.pkl"
             service = CredentialService(credential_path=primary, legacy_path=legacy)
             self.assertEqual(service.candidate_paths(), [primary, legacy])
+
+    def test_download_dir_setting_round_trips(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            settings_path = root / "settings.json"
+            download_dir = root / "downloads"
+
+            save_download_dir(download_dir, settings_path=settings_path)
+
+            self.assertEqual(load_download_dir(settings_path=settings_path), download_dir)
+
+    def test_download_dir_setting_falls_back_on_invalid_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            settings_path = root / "settings.json"
+            fallback = root / "fallback"
+            settings_path.write_text("not-json", encoding="utf-8")
+
+            self.assertEqual(load_download_dir(settings_path=settings_path, default=fallback), fallback)
 
     def test_existing_file_is_skipped_without_network(self) -> None:
         async def run() -> None:
