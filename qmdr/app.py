@@ -16,6 +16,12 @@ from .settings import default_download_dir, load_download_dir, save_download_dir
 from .utils import clamp_int
 
 
+APP_ROOT = Path(__file__).resolve().parent.parent
+ASSETS_DIR = APP_ROOT / "assets"
+APP_ICON_PNG = ASSETS_DIR / "qmdr.png"
+APP_ICON_ICO = ASSETS_DIR / "qmdr.ico"
+
+
 def _border(color: str = "#d8dee9") -> ft.Border:
     side = ft.BorderSide(1, color)
     return ft.Border(side, side, side, side)
@@ -38,6 +44,14 @@ def _section(title: str, controls: list[ft.Control], expand: bool | int | None =
     )
 
 
+NAV_ITEMS = [
+    (ft.Icons.SEARCH, "搜索下载"),
+    (ft.Icons.LIBRARY_MUSIC, "歌单下载"),
+    (ft.Icons.QUEUE_MUSIC, "下载队列"),
+    (ft.Icons.SETTINGS, "凭证设置"),
+]
+
+
 class QmdrApp:
     def __init__(self, page: ft.Page) -> None:
         self.page = page
@@ -56,6 +70,9 @@ class QmdrApp:
         self.search_request_id = 0
         self.playlist_request_id = 0
         self.preview_request_id = 0
+        self.selected_nav_index = 0
+        self.nav_collapsed = False
+        self.app_icon_bytes = self.load_app_icon_bytes()
 
         self.quality_value = "3"
         self.search_quality_dropdown = self.make_quality_dropdown()
@@ -89,31 +106,21 @@ class QmdrApp:
         self.playlist_preview = ft.ListView(expand=True, spacing=4, padding=0)
 
         self.current_task_text = ft.Text("暂无任务", size=14, weight=ft.FontWeight.BOLD)
-        self.progress_bar = ft.ProgressBar(value=0, height=8)
+        self.progress_bar = ft.ProgressBar(value=0, bar_height=8, height=8, border_radius=8, track_gap=0)
         self.progress_text = ft.Text("0/0", size=13, color="#52616b")
         self.download_log = ft.ListView(expand=True, spacing=6, padding=0)
         self.file_picker = ft.FilePicker()
 
         self.views: list[ft.Control] = []
-        self.nav = ft.NavigationRail(
-            selected_index=0,
-            extended=True,
-            min_extended_width=172,
-            bgcolor="#f7f9fc",
-            destinations=[
-                ft.NavigationRailDestination(icon=ft.Icons.SEARCH, label="搜索下载"),
-                ft.NavigationRailDestination(icon=ft.Icons.LIBRARY_MUSIC, label="歌单下载"),
-                ft.NavigationRailDestination(icon=ft.Icons.QUEUE_MUSIC, label="下载队列"),
-                ft.NavigationRailDestination(icon=ft.Icons.SETTINGS, label="凭证设置"),
-            ],
-            on_change=self.on_nav_change,
-        )
+        self.nav = self.build_nav()
 
     async def start(self) -> None:
         self.page.title = "Qmdr"
         self.page.bgcolor = "#f3f6fa"
         self.page.padding = 0
         self.page.theme_mode = ft.ThemeMode.LIGHT
+        if APP_ICON_ICO.exists():
+            self.page.window.icon = str(APP_ICON_ICO)
 
         self.search_input.on_submit = self.on_search
         self.musicid_input.on_submit = self.on_load_playlists
@@ -143,6 +150,114 @@ class QmdrApp:
             )
         )
         await self.reload_credential(show_message=False)
+
+    def load_app_icon_bytes(self) -> bytes | None:
+        try:
+            return APP_ICON_PNG.read_bytes()
+        except OSError:
+            return None
+
+    def app_icon(self, size: int = 22) -> ft.Control:
+        if self.app_icon_bytes is None:
+            return ft.Icon(ft.Icons.MUSIC_NOTE, size=size, color="#263241")
+        return ft.Image(src=self.app_icon_bytes, width=size, height=size, fit=ft.BoxFit.CONTAIN)
+
+    def build_nav(self) -> ft.Container:
+        return ft.Container(
+            width=208,
+            bgcolor="#f7f9fc",
+            padding=ft.Padding.symmetric(horizontal=12, vertical=14),
+            content=self.build_nav_content(),
+        )
+
+    def build_nav_content(self) -> ft.Column:
+        toggle_button = ft.IconButton(
+            icon=ft.Icons.CHEVRON_RIGHT if self.nav_collapsed else ft.Icons.CHEVRON_LEFT,
+            tooltip="展开导航" if self.nav_collapsed else "折叠导航",
+            on_click=self.on_toggle_nav,
+        )
+        header = (
+            ft.Container(width=64, height=40, alignment=ft.Alignment.CENTER, content=self.app_icon(26))
+            if self.nav_collapsed
+            else ft.Container(
+                width=176,
+                height=40,
+                padding=ft.Padding.symmetric(horizontal=16),
+                content=ft.Row(
+                    spacing=8,
+                    alignment=ft.MainAxisAlignment.START,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        self.app_icon(22),
+                        ft.Text("Qmdr", size=16, weight=ft.FontWeight.BOLD, color="#1f2937"),
+                    ],
+                ),
+            )
+        )
+        footer = ft.Container(
+            width=64 if self.nav_collapsed else 176,
+            height=48,
+            alignment=ft.Alignment.CENTER if self.nav_collapsed else ft.Alignment.CENTER_RIGHT,
+            content=toggle_button,
+        )
+        return ft.Column(
+            expand=True,
+            spacing=6,
+            controls=[
+                header,
+                ft.Container(height=4),
+                *[self.build_nav_item(index, icon, label) for index, (icon, label) in enumerate(NAV_ITEMS)],
+                ft.Container(expand=True),
+                footer,
+            ],
+        )
+
+    def build_nav_item(self, index: int, icon: ft.IconData, label: str) -> ft.Container:
+        selected = index == self.selected_nav_index
+        color = "#263241" if selected else "#4b5563"
+        controls: list[ft.Control] = [ft.Icon(icon, size=25, color=color)]
+        if not self.nav_collapsed:
+            controls.append(
+                ft.Text(
+                    label,
+                    size=14,
+                    weight=ft.FontWeight.BOLD if selected else ft.FontWeight.W_500,
+                    color=color,
+                )
+            )
+        return ft.Container(
+            width=64 if self.nav_collapsed else 176,
+            height=50,
+            border_radius=25,
+            bgcolor="#dbe8fb" if selected else None,
+            padding=ft.Padding.symmetric(horizontal=0 if self.nav_collapsed else 16),
+            ink=True,
+            ink_color="#d9e7fb",
+            on_click=lambda e, item_index=index: self.select_nav(item_index),
+            content=ft.Row(
+                spacing=14,
+                alignment=ft.MainAxisAlignment.CENTER if self.nav_collapsed else ft.MainAxisAlignment.START,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=controls,
+            ),
+        )
+
+    def refresh_nav(self) -> None:
+        self.nav.width = 88 if self.nav_collapsed else 208
+        self.nav.padding = ft.Padding.symmetric(horizontal=12, vertical=14)
+        self.nav.content = self.build_nav_content()
+
+    def select_nav(self, index: int) -> None:
+        self.selected_nav_index = index
+        for view_index, view in enumerate(self.views):
+            view.visible = view_index == index
+        self.refresh_nav()
+        self.page.update()
+
+    def on_toggle_nav(self, event: ft.Event | None = None) -> None:
+        self.nav_collapsed = not self.nav_collapsed
+        self.refresh_nav()
+        self.page.update()
 
     def build_search_view(self) -> ft.Container:
         return ft.Container(
@@ -311,12 +426,6 @@ class QmdrApp:
         ):
             if control is not event.control:
                 control.value = self.quality_value
-        self.page.update()
-
-    def on_nav_change(self, event: ft.Event[ft.NavigationRail]) -> None:
-        selected = event.control.selected_index or 0
-        for index, view in enumerate(self.views):
-            view.visible = index == selected
         self.page.update()
 
     def options(self) -> DownloadOptions:
@@ -609,10 +718,7 @@ class QmdrApp:
         self.page.update()
 
     def switch_to_queue(self) -> None:
-        self.nav.selected_index = 2
-        for index, view in enumerate(self.views):
-            view.visible = index == 2
-        self.page.update()
+        self.select_nav(2)
 
     def on_cancel_download(self, event: ft.Event | None = None) -> None:
         self.coordinator.cancel()
@@ -649,13 +755,27 @@ class QmdrApp:
     async def on_reload_with_external_api(self, event: ft.Event | None = None) -> None:
         await self.reload_credential(show_message=True)
 
-    def on_export_credential(self, event: ft.Event | None = None) -> None:
+    async def on_export_credential(self, event: ft.Event | None = None) -> None:
+        default_name = "qqmusic_credential.json"
         try:
-            path = self.credential_service.export_credential_to_json(Path.cwd())
+            selected = await self.file_picker.save_file(
+                dialog_title="导出脱敏凭证 JSON",
+                file_name=default_name,
+                initial_directory=str(APP_ROOT),
+                file_type=ft.FilePickerFileType.CUSTOM,
+                allowed_extensions=["json"],
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.toast(f"无法打开保存对话框: {exc}")
+            return
+        if not selected:
+            return
+        try:
+            path = self.credential_service.export_credential_to_json_file(Path(selected))
         except Exception as exc:  # noqa: BLE001
             self.toast(str(exc))
             return
-        self.toast(f"已导出脱敏 JSON: {path.name}")
+        self.toast(f"已导出脱敏 JSON: {path}")
 
     async def on_qr_login(self, login_type: str) -> None:
         self.qr_cancelled = False

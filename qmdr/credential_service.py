@@ -234,13 +234,7 @@ class CredentialService:
             return QRLoginPollResult(event_name=event.name, message="等待确认登录")
         return QRLoginPollResult(event_name=event.name, message=f"二维码状态: {event.name}")
 
-    def export_credential_to_json(self, output_dir: Path | None = None) -> Path:
-        credential, _, _ = self.load_local_credential()
-        if credential is None:
-            raise ValueError("未找到凭证，无法导出")
-        output_dir = ensure_directory(output_dir or Path.cwd())
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        json_file = output_dir / f"qqmusic_credential_{timestamp}.json"
+    def _credential_export_data(self, credential: Credential) -> dict[str, Any]:
         export_data: dict[str, Any] = {}
         for key, value in credential.__dict__.items():
             if key.lower() in {"access_token", "refresh_token", "musickey", "refresh_key"}:
@@ -249,6 +243,28 @@ class CredentialService:
                 export_data[key] = value
             else:
                 export_data[key] = str(value)
+        return export_data
+
+    def export_credential_to_json_file(self, output_path: Path) -> Path:
+        credential, _, _ = self.load_local_credential()
+        if credential is None:
+            raise ValueError("未找到凭证，无法导出")
+
+        output_path = output_path.expanduser()
+        if output_path.suffix.lower() != ".json":
+            output_path = output_path.with_suffix(".json")
+        ensure_directory(output_path.parent)
+        with output_path.open("w", encoding="utf-8") as fp:
+            json.dump(self._credential_export_data(credential), fp, ensure_ascii=False, indent=2)
+        return output_path
+
+    def export_credential_to_json(self, output_dir: Path | None = None) -> Path:
+        credential, _, _ = self.load_local_credential()
+        if credential is None:
+            raise ValueError("未找到凭证，无法导出")
+        output_dir = ensure_directory(output_dir or Path.cwd())
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        json_file = output_dir / f"qqmusic_credential_{timestamp}.json"
         with json_file.open("w", encoding="utf-8") as fp:
-            json.dump(export_data, fp, ensure_ascii=False, indent=2)
+            json.dump(self._credential_export_data(credential), fp, ensure_ascii=False, indent=2)
         return json_file
