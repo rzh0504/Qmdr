@@ -9,12 +9,27 @@ from .models import DownloadEvent
 
 T = TypeVar("T")
 
+WINDOWS_RESERVED_NAMES = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{index}" for index in range(1, 10)),
+    *(f"LPT{index}" for index in range(1, 10)),
+}
 
-def sanitize_filename(filename: str) -> str:
+
+def sanitize_filename(filename: str, max_length: int = 180) -> str:
     illegal_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*']
     for char in illegal_chars:
         filename = filename.replace(char, "_")
-    return filename.strip() or "untitled"
+    filename = filename.strip().rstrip(". ") or "untitled"
+    stem = filename.split(".", 1)[0].upper()
+    if stem in WINDOWS_RESERVED_NAMES:
+        filename = f"_{filename}"
+    if len(filename) > max_length:
+        filename = filename[:max_length].rstrip(". ") or "untitled"
+    return filename
 
 
 def ensure_directory(path: Path) -> Path:

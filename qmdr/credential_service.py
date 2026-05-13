@@ -50,6 +50,7 @@ class CredentialService:
         return paths
 
     def load_local_credential(self) -> tuple[Credential | None, Path | None, str]:
+        first_error: tuple[Path, str] | None = None
         for path in self.candidate_paths():
             if not path.exists():
                 continue
@@ -59,9 +60,13 @@ class CredentialService:
                 if isinstance(credential, Credential):
                     self.credential = credential
                     return credential, path, "已加载本地凭证"
-                return None, path, "凭证文件格式不正确"
+                if first_error is None:
+                    first_error = (path, "凭证文件格式不正确")
             except Exception as exc:  # noqa: BLE001 - surface a user friendly status.
-                return None, path, f"加载凭证失败: {exc}"
+                if first_error is None:
+                    first_error = (path, f"加载凭证失败: {exc}")
+        if first_error is not None:
+            return None, first_error[0], first_error[1]
         return None, None, "未找到本地凭证"
 
     def save_credential(self, credential: Credential | None = None) -> Path:
@@ -115,6 +120,16 @@ class CredentialService:
                     self.last_state = state
                     return state
                 message = "本地凭证已过期且刷新失败"
+                self.credential = None
+                state = CredentialState(
+                    loaded=False,
+                    expired=True,
+                    path=path,
+                    user_id=str(getattr(credential, "musicid", "") or ""),
+                    message=message,
+                )
+                self.last_state = state
+                return state
 
         state = CredentialState(
             loaded=True,

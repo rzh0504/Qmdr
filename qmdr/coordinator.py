@@ -33,8 +33,10 @@ class DownloadCoordinator:
         credential: Credential | None,
         on_event: DownloadCallback | None = None,
         folder: Path | None = None,
+        reset_cancel: bool = True,
     ) -> list[DownloadResult]:
-        self.reset()
+        if reset_cancel:
+            self.reset()
         total = len(songs)
         results: list[DownloadResult] = []
         if total == 0:
@@ -46,7 +48,7 @@ class DownloadCoordinator:
         for start in range(0, total, batch_size):
             if self.cancel_requested:
                 await emit_event(on_event, DownloadEvent(kind="cancelled", message="下载已取消", total=total))
-                break
+                return results
 
             batch = songs[start : start + batch_size]
             tasks = [
@@ -61,8 +63,17 @@ class DownloadCoordinator:
                 )
                 for index, song in enumerate(batch)
             ]
-            batch_results = await asyncio.gather(*tasks)
-            results.extend(batch_results)
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+            for song, result in zip(batch, batch_results, strict=False):
+                if isinstance(result, Exception):
+                    message = f"下载失败: {song.display_name} - {result}"
+                    await emit_event(
+                        on_event,
+                        DownloadEvent(kind="failed", message=message, song=song, error=str(result)),
+                    )
+                    results.append(DownloadResult(False, song=song, error=str(result)))
+                else:
+                    results.append(result)
 
             finished = min(start + len(batch), total)
             success = sum(1 for item in results if item.success and not item.skipped)
@@ -77,6 +88,13 @@ class DownloadCoordinator:
                     total=total,
                 ),
             )
+
+            if self.cancel_requested and finished < total:
+                await emit_event(
+                    on_event,
+                    DownloadEvent(kind="cancelled", message="下载已取消", current=finished, total=total),
+                )
+                return results
 
         success = sum(1 for item in results if item.success and not item.skipped)
         skipped = sum(1 for item in results if item.skipped)
@@ -100,6 +118,7 @@ class DownloadCoordinator:
         options: DownloadOptions,
         credential: Credential | None,
         on_event: DownloadCallback | None = None,
+        reset_cancel: bool = True,
     ) -> list[DownloadResult]:
         if self.playlist_service is None:
             raise RuntimeError("PlaylistService 未初始化")
@@ -108,4 +127,4 @@ class DownloadCoordinator:
             on_event,
             DownloadEvent(kind="playlist", message=f"开始下载歌单: {playlist.name}", total=len(songs), file_path=folder),
         )
-        return await self.download_songs(songs, options, credential, on_event=on_event, folder=folder)
+        return await self.download_songs(songs, options, credential, on_event=on_event, folder=folder, reset_cancel=reset_cancel)

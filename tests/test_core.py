@@ -10,8 +10,9 @@ from qqmusic_api.song import SongFileType
 
 from qmdr.coordinator import DownloadCoordinator
 from qmdr.credential_service import CredentialService
-from qmdr.models import DownloadEvent, DownloadOptions, DownloadResult, SongItem
+from qmdr.models import DownloadEvent, DownloadOptions, DownloadResult, PlaylistItem, SongItem
 from qmdr.music import MusicService
+from qmdr.playlist import PlaylistService
 from qmdr.quality import get_quality_strategy
 from qmdr.utils import sanitize_filename
 
@@ -19,6 +20,10 @@ from qmdr.utils import sanitize_filename
 class CoreTests(unittest.TestCase):
     def test_sanitize_filename_replaces_invalid_chars(self) -> None:
         self.assertEqual(sanitize_filename('A<B>C:D"E/F\\G|H?I*'), "A_B_C_D_E_F_G_H_I_")
+
+    def test_sanitize_filename_handles_windows_reserved_names(self) -> None:
+        self.assertEqual(sanitize_filename("CON"), "_CON")
+        self.assertEqual(sanitize_filename("name. "), "name")
 
     def test_quality_strategy_falls_back_in_expected_order(self) -> None:
         strategy = get_quality_strategy(1)
@@ -100,6 +105,59 @@ class CoreTests(unittest.TestCase):
             self.assertEqual(events[-1].kind, "done")
 
         asyncio.run(run())
+
+    def test_coordinator_preserves_cancelled_state_when_requested(self) -> None:
+        class FakeMusicService:
+            async def download_song(self, song, options, credential=None, on_event=None, folder=None, current=1, total=1):
+                return DownloadResult(True, song=song)
+
+        async def run() -> None:
+            events: list[DownloadEvent] = []
+            coordinator = DownloadCoordinator(FakeMusicService())  # type: ignore[arg-type]
+            coordinator.cancel()
+            results = await coordinator.download_songs(
+                [SongItem(title="Song", singer="Artist", mid="1")],
+                DownloadOptions(download_dir=Path(".")),
+                credential=None,
+                on_event=events.append,
+                reset_cancel=False,
+            )
+            self.assertEqual(results, [])
+            self.assertEqual(events[-1].kind, "cancelled")
+            self.assertNotIn("done", [event.kind for event in events])
+
+        asyncio.run(run())
+
+    def test_coordinator_converts_task_exception_to_failed_result(self) -> None:
+        class FakeMusicService:
+            async def download_song(self, song, options, credential=None, on_event=None, folder=None, current=1, total=1):
+                raise RuntimeError("boom")
+
+        async def run() -> None:
+            events: list[DownloadEvent] = []
+            coordinator = DownloadCoordinator(FakeMusicService())  # type: ignore[arg-type]
+            results = await coordinator.download_songs(
+                [SongItem(title="Song", singer="Artist", mid="1")],
+                DownloadOptions(download_dir=Path(".")),
+                credential=None,
+                on_event=events.append,
+            )
+            self.assertFalse(results[0].success)
+            self.assertIn("failed", [event.kind for event in events])
+
+        asyncio.run(run())
+
+    def test_playlist_folder_uses_unique_name_but_keeps_existing_legacy_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            playlist = PlaylistItem(name="Daily", dir_id=123, tid=456)
+            service = PlaylistService(MusicService())
+
+            self.assertEqual(service.playlist_folder(root, playlist, "user"), root / "user_123_Daily")
+
+            legacy = root / "Daily"
+            legacy.mkdir()
+            self.assertEqual(service.playlist_folder(root, playlist, "user"), legacy)
 
 
 if __name__ == "__main__":

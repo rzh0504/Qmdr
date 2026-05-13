@@ -53,6 +53,9 @@ class QmdrApp:
         self.selected_playlist: PlaylistItem | None = None
         self.active_download = False
         self.qr_cancelled = False
+        self.search_request_id = 0
+        self.playlist_request_id = 0
+        self.preview_request_id = 0
 
         self.quality_value = "3"
         self.search_quality_dropdown = self.make_quality_dropdown()
@@ -83,6 +86,7 @@ class QmdrApp:
         self.progress_bar = ft.ProgressBar(value=0, height=8)
         self.progress_text = ft.Text("0/0", size=13, color="#52616b")
         self.download_log = ft.ListView(expand=True, spacing=6, padding=0)
+        self.file_picker = ft.FilePicker()
 
         self.views: list[ft.Control] = []
         self.nav = ft.NavigationRail(
@@ -107,6 +111,7 @@ class QmdrApp:
 
         self.search_input.on_submit = self.on_search
         self.musicid_input.on_submit = self.on_load_playlists
+        self.page.services.append(self.file_picker)
 
         self.views = [
             self.build_search_view(),
@@ -118,14 +123,17 @@ class QmdrApp:
             view.visible = index == 0
 
         self.page.add(
-            ft.Row(
+            ft.SafeArea(
                 expand=True,
-                spacing=0,
-                controls=[
-                    self.nav,
-                    ft.VerticalDivider(width=1),
-                    ft.Container(expand=True, padding=18, content=ft.Column(expand=True, controls=self.views)),
-                ],
+                content=ft.Row(
+                    expand=True,
+                    spacing=0,
+                    controls=[
+                        self.nav,
+                        ft.VerticalDivider(width=1),
+                        ft.Container(expand=True, padding=18, content=ft.Column(expand=True, controls=self.views)),
+                    ],
+                ),
             )
         )
         await self.reload_credential(show_message=False)
@@ -238,7 +246,7 @@ class QmdrApp:
                                     ft.Button("QQ 登录", icon=ft.Icons.LOGIN, on_click=lambda e: self.page.run_task(self.on_qr_login, "qq")),
                                     ft.Button("微信登录", icon=ft.Icons.LOGIN, on_click=lambda e: self.page.run_task(self.on_qr_login, "wx")),
                                     ft.Button("刷新凭证", icon=ft.Icons.REFRESH, on_click=self.on_refresh_credential),
-                                    ft.Button("导出 JSON", icon=ft.Icons.SAVE, on_click=self.on_export_credential),
+                                    ft.Button("导出脱敏 JSON", icon=ft.Icons.SAVE, on_click=self.on_export_credential),
                                 ],
                             ),
                         ],
@@ -333,15 +341,22 @@ class QmdrApp:
         if not keyword:
             self.toast("请输入歌曲关键词")
             return
+        self.search_request_id += 1
+        request_id = self.search_request_id
         self.search_status.value = "搜索中..."
         self.search_results_list.controls.clear()
         self.page.update()
         try:
-            self.search_songs = await self.music_service.search_songs(keyword)
+            songs = await self.music_service.search_songs(keyword)
         except Exception as exc:  # noqa: BLE001
+            if request_id != self.search_request_id:
+                return
             self.search_status.value = f"搜索失败: {exc}"
             self.page.update()
             return
+        if request_id != self.search_request_id:
+            return
+        self.search_songs = songs
         self.search_status.value = f"找到 {len(self.search_songs)} 个结果"
         self.render_search_results()
 
@@ -393,20 +408,29 @@ class QmdrApp:
         if not user_id:
             self.toast("请输入 musicid")
             return
+        self.playlist_request_id += 1
+        request_id = self.playlist_request_id
         self.playlist_status.value = "正在获取歌单..."
         self.playlist_list.controls.clear()
         self.playlist_preview.controls.clear()
         self.page.update()
         try:
-            self.playlists = await self.playlist_service.get_user_playlists(user_id, self.credential)
+            playlists = await self.playlist_service.get_user_playlists(user_id, self.credential)
         except CredentialRequiredError as exc:
+            if request_id != self.playlist_request_id:
+                return
             self.playlist_status.value = str(exc)
             self.page.update()
             return
         except Exception as exc:  # noqa: BLE001
+            if request_id != self.playlist_request_id:
+                return
             self.playlist_status.value = f"获取歌单失败: {exc}"
             self.page.update()
             return
+        if request_id != self.playlist_request_id:
+            return
+        self.playlists = playlists
         self.playlist_status.value = f"找到 {len(self.playlists)} 个歌单"
         self.render_playlists()
 
@@ -440,14 +464,21 @@ class QmdrApp:
     async def preview_playlist(self, playlist: PlaylistItem) -> None:
         user_id = (self.musicid_input.value or "").strip()
         self.selected_playlist = playlist
+        self.preview_request_id += 1
+        request_id = self.preview_request_id
         self.playlist_preview.controls = [ft.Text("正在加载歌曲...")]
         self.page.update()
         try:
-            self.playlist_songs = await self.playlist_service.get_playlist_songs(playlist, user_id, self.credential)
+            songs = await self.playlist_service.get_playlist_songs(playlist, user_id, self.credential)
         except Exception as exc:  # noqa: BLE001
+            if request_id != self.preview_request_id:
+                return
             self.playlist_preview.controls = [ft.Text(f"预览失败: {exc}", color="#b42318")]
             self.page.update()
             return
+        if request_id != self.preview_request_id:
+            return
+        self.playlist_songs = songs
         self.render_playlist_preview(playlist)
 
     def render_playlist_preview(self, playlist: PlaylistItem) -> None:
@@ -499,24 +530,43 @@ class QmdrApp:
             return
         self.set_download_running(True)
         self.switch_to_queue()
+        self.coordinator.reset()
+        cancelled_before_playlist = False
         try:
             for playlist in self.playlists:
                 if self.coordinator.cancel_requested:
+                    cancelled_before_playlist = True
                     break
                 try:
                     songs = await self.playlist_service.get_playlist_songs(playlist, user_id, self.credential)
-                    await self.coordinator.download_playlist(playlist, user_id, songs, self.options(), self.credential, self.on_download_event)
+                    if self.coordinator.cancel_requested:
+                        cancelled_before_playlist = True
+                        break
+                    await self.coordinator.download_playlist(
+                        playlist,
+                        user_id,
+                        songs,
+                        self.options(),
+                        self.credential,
+                        self.on_download_event,
+                        reset_cancel=False,
+                    )
                 except Exception as exc:  # noqa: BLE001
                     await self.on_download_event(DownloadEvent(kind="failed", message=f"{playlist.name}: {exc}", error=str(exc)))
+            if cancelled_before_playlist:
+                await self.on_download_event(DownloadEvent(kind="cancelled", message="下载已取消"))
         finally:
             self.set_download_running(False)
 
     async def on_download_event(self, event: DownloadEvent) -> None:
-        if event.total:
+        if event.kind in {"start", "playlist", "progress", "done", "cancelled"} and event.total:
             self.progress_bar.value = min(1, max(0, event.current / event.total))
             self.progress_text.value = f"{event.current}/{event.total}"
-        if event.kind in {"start", "playlist", "downloading", "progress", "done", "cancelled"}:
+        if event.kind in {"start", "playlist", "downloading", "file_progress", "progress", "done", "cancelled"}:
             self.current_task_text.value = event.message
+        if event.kind == "file_progress":
+            self.page.update()
+            return
         color = {
             "success": "#087443",
             "failed": "#b42318",
@@ -548,7 +598,7 @@ class QmdrApp:
 
     async def on_pick_download_dir(self, event: ft.Event | None = None) -> None:
         try:
-            selected = await ft.FilePicker().get_directory_path(dialog_title="选择下载目录")
+            selected = await self.file_picker.get_directory_path(dialog_title="选择下载目录")
         except Exception as exc:  # noqa: BLE001
             self.toast(f"无法打开目录选择器: {exc}")
             return
@@ -557,7 +607,7 @@ class QmdrApp:
             self.page.update()
 
     def on_open_download_dir(self, event: ft.Event | None = None) -> None:
-        path = Path(self.download_dir_input.value or default_download_dir())
+        path = Path(self.download_dir_input.value or default_download_dir()).resolve()
         path.mkdir(parents=True, exist_ok=True)
         try:
             if os.name == "nt":
@@ -582,7 +632,7 @@ class QmdrApp:
         except Exception as exc:  # noqa: BLE001
             self.toast(str(exc))
             return
-        self.toast(f"已导出: {path.name}")
+        self.toast(f"已导出脱敏 JSON: {path.name}")
 
     async def on_qr_login(self, login_type: str) -> None:
         self.qr_cancelled = False

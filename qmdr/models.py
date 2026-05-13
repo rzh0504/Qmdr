@@ -64,6 +64,7 @@ class CredentialState:
     loaded: bool
     refreshed: bool = False
     loaded_from_api: bool = False
+    expired: bool = False
     path: Path | None = None
     user_id: str | None = None
     message: str = ""

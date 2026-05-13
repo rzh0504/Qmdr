@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,7 @@ import aiofiles
 import aiohttp
 from mutagen.flac import FLAC, Picture
 from mutagen.id3 import APIC, ID3, TALB, TIT2, TPE1, USLT
+from mutagen.mp4 import MP4, MP4Cover
 from qqmusic_api import search
 from qqmusic_api.login import Credential
 from qqmusic_api.lyric import get_lyric
@@ -69,11 +71,21 @@ class CoverManager:
         network: NetworkManager,
         size: int = 800,
     ) -> str | None:
+        cover = await CoverManager.get_valid_cover(song_data, network, size)
+        return cover[0] if cover else None
+
+    @staticmethod
+    async def get_valid_cover(
+        song_data: dict[str, Any],
+        network: NetworkManager,
+        size: int = 800,
+    ) -> tuple[str, bytes] | None:
         album_mid = song_data.get("album", {}).get("mid", "")
         if album_mid:
             url = CoverManager.get_cover_url_by_album_mid(album_mid, size)
-            if await CoverManager.download_cover(url, network):
-                return url
+            cover_data = await CoverManager.download_cover(url, network)
+            if cover_data:
+                return url, cover_data
 
         candidates: list[tuple[int, str]] = []
         for i, vs in enumerate(song_data.get("vs", [])):
@@ -87,8 +99,9 @@ class CoverManager:
 
         for _, value in sorted(candidates, key=lambda item: item[0]):
             url = CoverManager.get_cover_url_by_vs(value, size)
-            if await CoverManager.download_cover(url, network):
-                return url
+            cover_data = await CoverManager.download_cover(url, network)
+            if cover_data:
+                return url, cover_data
         return None
 
     @staticmethod
@@ -125,8 +138,10 @@ class MetadataManager:
         suffix = file_path.suffix.lower()
         if suffix == ".flac":
             await self._add_metadata_to_flac(file_path, song, lyrics_data, song_data, cover_size)
-        elif suffix in {".mp3", ".m4a"}:
+        elif suffix == ".mp3":
             await self._add_metadata_to_mp3(file_path, song, lyrics_data, song_data, cover_size)
+        elif suffix == ".m4a":
+            await self._add_metadata_to_mp4(file_path, song, lyrics_data, song_data, cover_size)
 
     async def _add_metadata_to_flac(
         self,
@@ -141,9 +156,9 @@ class MetadataManager:
             audio["title"] = song.title
             audio["artist"] = song.singer
             audio["album"] = song.album_name
-            cover_url = await CoverManager.get_valid_cover_url(song_data, self.network, cover_size)
-            cover_data = await CoverManager.download_cover(cover_url, self.network)
-            if cover_data:
+            cover = await CoverManager.get_valid_cover(song_data, self.network, cover_size)
+            if cover:
+                _, cover_data = cover
                 image = Picture()
                 image.type = 3
                 image.mime = "image/png" if cover_data.startswith(b"\x89PNG") else "image/jpeg"
@@ -179,9 +194,9 @@ class MetadataManager:
             audio.add(TIT2(encoding=3, text=song.title))
             audio.add(TPE1(encoding=3, text=song.singer))
             audio.add(TALB(encoding=3, text=song.album_name))
-            cover_url = await CoverManager.get_valid_cover_url(song_data, self.network, cover_size)
-            cover_data = await CoverManager.download_cover(cover_url, self.network)
-            if cover_data:
+            cover = await CoverManager.get_valid_cover(song_data, self.network, cover_size)
+            if cover:
+                _, cover_data = cover
                 audio.add(
                     APIC(
                         encoding=3,
@@ -196,6 +211,31 @@ class MetadataManager:
             audio.save(file_path, v2_version=3)
         except Exception as exc:  # noqa: BLE001
             raise MetadataError(f"MP3 元数据处理失败: {exc}") from exc
+
+    async def _add_metadata_to_mp4(
+        self,
+        file_path: Path,
+        song: SongItem,
+        lyrics_data: dict[str, Any] | None,
+        song_data: dict[str, Any],
+        cover_size: int,
+    ) -> None:
+        try:
+            audio = MP4(file_path)
+            audio["\xa9nam"] = [song.title]
+            audio["\xa9ART"] = [song.singer]
+            if song.album_name:
+                audio["\xa9alb"] = [song.album_name]
+            cover = await CoverManager.get_valid_cover(song_data, self.network, cover_size)
+            if cover:
+                _, cover_data = cover
+                image_format = MP4Cover.FORMAT_PNG if cover_data.startswith(b"\x89PNG") else MP4Cover.FORMAT_JPEG
+                audio["covr"] = [MP4Cover(cover_data, imageformat=image_format)]
+            if lyrics_data and (lyric_text := lyrics_data.get("lyric")):
+                audio["\xa9lyr"] = [lyric_text]
+            audio.save()
+        except Exception as exc:  # noqa: BLE001
+            raise MetadataError(f"MP4 元数据处理失败: {exc}") from exc
 
     async def _get_lyrics(self, song_mid: str) -> dict[str, Any] | None:
         try:
@@ -353,16 +393,15 @@ class MusicService:
             async with session.get(url) as response:
                 if response.status != 200:
                     return DownloadResult(False, song=song, quality=quality_name, error=f"HTTP {response.status}")
-                content = await response.read()
-        except (aiohttp.ClientError, TimeoutError) as exc:
-            return DownloadResult(False, song=song, quality=quality_name, error=f"网络错误: {exc}")
+                ensure_directory(file_path.parent)
+                file_size = await self._save_response_to_file(response, file_path, on_event, current, total, song)
+        except (aiohttp.ClientError, TimeoutError, OSError) as exc:
+            return DownloadResult(False, song=song, quality=quality_name, error=f"下载或写入失败: {exc}")
 
-        if len(content) <= MIN_FILE_SIZE:
+        if file_size <= MIN_FILE_SIZE:
+            with suppress(OSError):
+                file_path.unlink()
             return DownloadResult(False, song=song, quality=quality_name, error="文件过小，可能下载失败")
-
-        ensure_directory(file_path.parent)
-        async with aiofiles.open(file_path, "wb") as fp:
-            await fp.write(content)
 
         try:
             await self.metadata.add_metadata(file_path, song, song.raw, options.cover_size)
@@ -392,3 +431,49 @@ class MusicService:
             ),
         )
         return DownloadResult(True, song=song, quality=quality_name, file_path=file_path)
+
+    async def _save_response_to_file(
+        self,
+        response: aiohttp.ClientResponse,
+        file_path: Path,
+        on_event: DownloadCallback | None,
+        current: int,
+        total: int,
+        song: SongItem,
+    ) -> int:
+        temp_path = file_path.with_name(f"{file_path.name}.part")
+        downloaded = 0
+        try:
+            content_length = int(response.headers.get("Content-Length") or 0)
+        except ValueError:
+            content_length = 0
+        next_report = 0.1
+        try:
+            async with aiofiles.open(temp_path, "wb") as fp:
+                async for chunk in response.content.iter_chunked(256 * 1024):
+                    if not chunk:
+                        continue
+                    await fp.write(chunk)
+                    downloaded += len(chunk)
+                    if content_length:
+                        progress = min(1.0, downloaded / content_length)
+                        if progress >= next_report or progress >= 1.0:
+                            await emit_event(
+                                on_event,
+                                DownloadEvent(
+                                    kind="file_progress",
+                                    message=f"{song.display_name} 下载中 {progress:.0%}",
+                                    current=current,
+                                    total=total,
+                                    song=song,
+                                    file_path=file_path,
+                                ),
+                            )
+                            while next_report <= progress:
+                                next_report += 0.1
+            temp_path.replace(file_path)
+        except Exception:
+            with suppress(OSError):
+                temp_path.unlink()
+            raise
+        return downloaded
