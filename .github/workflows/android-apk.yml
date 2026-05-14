@@ -3,14 +3,6 @@ name: Build Android APK
 on:
   workflow_dispatch:
     inputs:
-      arch:
-        description: Android ABI to build
-        type: choice
-        options:
-          - arm64
-          - arm
-          - x64
-        default: arm64
       build_number:
         description: Optional Android build number
         required: false
@@ -90,11 +82,9 @@ jobs:
       - name: Build APK
         env:
           BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
-          TARGET_ARCH: ${{ inputs.arch }}
           APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
           uv run flet build apk . \
-            --arch "$TARGET_ARCH" \
             --output dist/android \
             --project qmdr \
             --product Qmdr \
@@ -130,6 +120,6 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: qmdr-android-${{ inputs.arch }}
+          name: qmdr-android-apk
           path: dist/android/**/*.apk
           if-no-files-found: error
