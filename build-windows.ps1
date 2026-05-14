@@ -15,6 +15,9 @@ $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
 
 $FlutterBat = $env:FLUTTER_BIN
+if ($FlutterBat -and -not (Test-Path -LiteralPath $FlutterBat)) {
+    $FlutterBat = $null
+}
 if (-not $FlutterBat) {
     $DefaultFlutter = "D:\Dev\Flutter\flutter\bin\flutter.BAT"
     if (Test-Path -LiteralPath $DefaultFlutter) {
@@ -33,12 +36,12 @@ if (-not $FlutterBat -or -not (Test-Path -LiteralPath $FlutterBat)) {
 
 if (-not (Test-Path -LiteralPath (Join-Path $FlutterDir "pubspec.yaml"))) {
     Write-Host "Creating Flet Flutter shell..."
-    uv run flet build windows --yes --no-rich-output -vv
+    uv run flet build windows --yes --no-rich-output --skip-flutter-doctor -vv
 }
 
 if (-not (Test-Path -LiteralPath $BuildPython)) {
     Write-Host "Preparing embedded Python with Flet..."
-    uv run flet build windows --yes --no-rich-output -vv
+    uv run flet build windows --yes --no-rich-output --skip-flutter-doctor -vv
 }
 
 if (Test-Path -LiteralPath $AppIcon) {
@@ -56,6 +59,36 @@ if (Test-Path -LiteralPath $FlutterMainDart) {
     $MainDart = $MainDart.Replace("const appBootScreenMessage = 'Preparing the app for its first launch…';", "const appBootScreenMessage = '';")
     $MainDart = $MainDart.Replace('final showAppStartupScreen = bool.tryParse("False".toLowerCase()) ?? false;', 'final showAppStartupScreen = bool.tryParse("True".toLowerCase()) ?? false;')
     $MainDart = $MainDart.Replace("const appStartupScreenMessage = 'Getting things ready…';", "const appStartupScreenMessage = '';")
+    $SimpleBootScreen = @'
+class BootScreen extends StatelessWidget {
+  const BootScreen({
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: Color(0xFFF5F7FB),
+        body: Center(
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: CircularProgressIndicator(strokeWidth: 3),
+          ),
+        ),
+      ),
+    );
+  }
+}
+'@
+    $MainDart = [System.Text.RegularExpressions.Regex]::Replace(
+        $MainDart,
+        'class BootScreen extends StatelessWidget \{.*?\r?\n\}\r?\n\r?\nclass BlankScreen',
+        $SimpleBootScreen + "`r`n`r`nclass BlankScreen",
+        [System.Text.RegularExpressions.RegexOptions]::Singleline
+    )
     Set-Content -LiteralPath $FlutterMainDart -Value $MainDart -Encoding UTF8
 }
 

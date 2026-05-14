@@ -1,0 +1,92 @@
+name: Build Windows Installer
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        shell: pwsh
+        run: flutter config --enable-windows-desktop
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Setup Python environment
+        shell: pwsh
+        run: |
+          uv python install 3.12
+          uv sync --python 3.12 --dev
+
+      - name: Build Windows app
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File .\build-windows.ps1
+
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath "build\windows\qmdr.exe")) {
+            throw "Missing build\windows\qmdr.exe"
+          }
+          if (-not (Test-Path -LiteralPath "build\windows\site-packages\certifi")) {
+            throw "Missing certifi in packaged site-packages"
+          }
+          if (-not (Test-Path -LiteralPath "build\windows\data\flutter_assets\app\app.zip")) {
+            throw "Missing packaged Python app.zip"
+          }
+
+      - name: Create portable zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          if (Test-Path -LiteralPath "dist\Qmdr-windows-portable.zip") {
+            Remove-Item -LiteralPath "dist\Qmdr-windows-portable.zip" -Force
+          }
+          Compress-Archive -Path "build\windows\*" -DestinationPath "dist\Qmdr-windows-portable.zip" -Force
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $version = uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
+          $root = (Get-Location).Path
+          $source = (Resolve-Path "build\windows").Path
+          $output = (Resolve-Path "dist").Path
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            throw "ISCC.exe not found at $iscc"
+          }
+          & $iscc "/DAppVersion=$version" "/DRootDir=$root" "/DSourceDir=$source" "/DOutputDir=$output" ".github\installer\qmdr.iss"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qmdr-windows
+          path: |
+            dist\Qmdr-windows-portable.zip
+            dist\Qmdr-Setup-*.exe
+          if-no-files-found: error
