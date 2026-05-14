@@ -6,11 +6,7 @@ from pathlib import Path
 
 import flet as ft
 
-from .coordinator import DownloadCoordinator
-from .credential_service import CredentialService
 from .models import DownloadEvent, DownloadOptions, PlaylistItem, SongItem
-from .music import MusicService
-from .playlist import CredentialRequiredError, PlaylistService
 from .quality import QUALITY_OPTIONS
 from .settings import default_download_dir, load_download_dir, save_download_dir
 from .utils import clamp_int
@@ -55,10 +51,11 @@ NAV_ITEMS = [
 class QmdrApp:
     def __init__(self, page: ft.Page) -> None:
         self.page = page
-        self.credential_service = CredentialService()
-        self.music_service = MusicService()
-        self.playlist_service = PlaylistService(self.music_service)
-        self.coordinator = DownloadCoordinator(self.music_service, self.playlist_service)
+        self.credential_service = None
+        self.music_service = None
+        self.playlist_service = None
+        self.coordinator = None
+        self.credential_required_error_type: type[Exception] | None = None
 
         self.credential = None
         self.search_songs: list[SongItem] = []
@@ -144,12 +141,43 @@ class QmdrApp:
                     controls=[
                         self.nav,
                         ft.VerticalDivider(width=1),
-                        ft.Container(expand=True, padding=18, content=ft.Column(expand=True, controls=self.views)),
+                        ft.Container(
+                            expand=True,
+                            padding=18,
+                            content=ft.Column(expand=True, controls=self.views),
+                        ),
                     ],
                 ),
             )
         )
-        await self.reload_credential(show_message=False)
+        self.page.update()
+        self.page.run_task(self.initialize_services)
+
+    async def initialize_services(self) -> None:
+        try:
+            self.ensure_services()
+            await self.reload_credential(show_message=False)
+        except Exception as exc:  # noqa: BLE001
+            self.credential_text.value = "初始化失败，请重启应用或检查依赖"
+            self.page.update()
+            return
+
+    def ensure_services(self) -> None:
+        if self.credential_service is not None:
+            return
+        from .coordinator import DownloadCoordinator
+        from .credential_service import CredentialService
+        from .music import MusicService
+        from .playlist import CredentialRequiredError, PlaylistService
+
+        self.credential_service = CredentialService()
+        self.music_service = MusicService()
+        self.playlist_service = PlaylistService(self.music_service)
+        self.coordinator = DownloadCoordinator(self.music_service, self.playlist_service)
+        self.credential_required_error_type = CredentialRequiredError
+
+    def is_credential_required_error(self, exc: Exception) -> bool:
+        return self.credential_required_error_type is not None and isinstance(exc, self.credential_required_error_type)
 
     def load_app_icon_bytes(self) -> bytes | None:
         try:
@@ -454,6 +482,7 @@ class QmdrApp:
         self.save_download_dir_setting()
 
     async def reload_credential(self, show_message: bool = True) -> None:
+        self.ensure_services()
         self.credential_service.set_external_api_url(self.external_api_input.value or "")
         state = await self.credential_service.load_and_refresh_credential()
         self.credential = state.credential if state.loaded else None
@@ -468,6 +497,7 @@ class QmdrApp:
         self.page.update()
 
     async def on_search(self, event: ft.Event | None = None) -> None:
+        self.ensure_services()
         keyword = (self.search_input.value or "").strip()
         if not keyword:
             self.toast("请输入歌曲关键词")
@@ -527,6 +557,7 @@ class QmdrApp:
         self.page.run_task(self.run_single_download, song)
 
     async def run_single_download(self, song: SongItem) -> None:
+        self.ensure_services()
         self.set_download_running(True)
         self.switch_to_queue()
         try:
@@ -535,6 +566,7 @@ class QmdrApp:
             self.set_download_running(False)
 
     async def on_load_playlists(self, event: ft.Event | None = None) -> None:
+        self.ensure_services()
         user_id = (self.musicid_input.value or "").strip()
         if not user_id:
             self.toast("请输入 musicid")
@@ -547,14 +579,12 @@ class QmdrApp:
         self.page.update()
         try:
             playlists = await self.playlist_service.get_user_playlists(user_id, self.credential)
-        except CredentialRequiredError as exc:
-            if request_id != self.playlist_request_id:
-                return
-            self.playlist_status.value = str(exc)
-            self.page.update()
-            return
         except Exception as exc:  # noqa: BLE001
             if request_id != self.playlist_request_id:
+                return
+            if self.is_credential_required_error(exc):
+                self.playlist_status.value = str(exc)
+                self.page.update()
                 return
             self.playlist_status.value = f"获取歌单失败: {exc}"
             self.page.update()
@@ -593,6 +623,7 @@ class QmdrApp:
         self.page.update()
 
     async def preview_playlist(self, playlist: PlaylistItem) -> None:
+        self.ensure_services()
         user_id = (self.musicid_input.value or "").strip()
         self.selected_playlist = playlist
         self.preview_request_id += 1
@@ -628,6 +659,7 @@ class QmdrApp:
         self.page.update()
 
     async def download_playlist(self, playlist: PlaylistItem) -> None:
+        self.ensure_services()
         if self.active_download:
             self.toast("已有下载任务在运行")
             return
@@ -648,6 +680,7 @@ class QmdrApp:
             self.set_download_running(False)
 
     async def on_download_all_playlists(self, event: ft.Event | None = None) -> None:
+        self.ensure_services()
         if self.active_download:
             self.toast("已有下载任务在运行")
             return
@@ -721,6 +754,7 @@ class QmdrApp:
         self.select_nav(2)
 
     def on_cancel_download(self, event: ft.Event | None = None) -> None:
+        self.ensure_services()
         self.coordinator.cancel()
         self.toast("已请求取消，当前批次结束后停止")
 
@@ -747,6 +781,7 @@ class QmdrApp:
             self.toast(f"打开目录失败: {exc}")
 
     async def on_refresh_credential(self, event: ft.Event | None = None) -> None:
+        self.ensure_services()
         refreshed = await self.credential_service.refresh_credential()
         if refreshed is None:
             self.toast("凭证刷新失败或不可刷新")
@@ -756,6 +791,7 @@ class QmdrApp:
         await self.reload_credential(show_message=True)
 
     async def on_export_credential(self, event: ft.Event | None = None) -> None:
+        self.ensure_services()
         default_name = "qqmusic_credential.json"
         try:
             selected = await self.file_picker.save_file(
@@ -778,6 +814,7 @@ class QmdrApp:
         self.toast(f"已导出脱敏 JSON: {path}")
 
     async def on_qr_login(self, login_type: str) -> None:
+        self.ensure_services()
         self.qr_cancelled = False
         status = ft.Text("正在获取二维码...", size=13)
         dialog = ft.AlertDialog(

@@ -1681,19 +1681,29 @@ source = { virtual = "." }
 dependencies = [
     { name = "aiofiles" },
     { name = "aiohttp" },
-    { name = "flet", extra = ["all"] },
+    { name = "certifi" },
+    { name = "flet" },
     { name = "mutagen" },
     { name = "qqmusic-api-python" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "flet", extra = ["all"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "aiofiles", specifier = ">=25.1.0" },
     { name = "aiohttp", specifier = ">=3.13.5" },
-    { name = "flet", extras = ["all"], specifier = ">=0.85.0,<0.86.0" },
+    { name = "certifi", specifier = ">=2026.4.22" },
+    { name = "flet", specifier = ">=0.85.0,<0.86.0" },
     { name = "mutagen", specifier = ">=1.47.0" },
     { name = "qqmusic-api-python", specifier = "==0.3.6" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "flet", extras = ["all"], specifier = ">=0.85.0,<0.86.0" }]
 
 [[package]]
 name = "qqmusic-api-python"
