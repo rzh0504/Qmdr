@@ -112,6 +112,7 @@ jobs:
                           "Requires-Dist: cryptography<45.0.6,>=45.0.5",
                           "Requires-Dist: cryptography==43.0.1",
                       )
+                      text = text.replace("Requires-Dist: orjson>=3.10.15\n", "")
                       data = text.encode("utf-8")
                   dst.writestr(item, data)
 
