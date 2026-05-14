@@ -81,13 +81,25 @@ jobs:
 
       - name: Use Android-compatible Python dependencies
         run: |
-          uv pip download --python .venv/bin/python --no-deps qqmusic-api-python==0.3.6 -d vendor/android-wheels
           python - <<'PY'
+          import json
+          import urllib.request
           from pathlib import Path
           from zipfile import ZIP_DEFLATED, ZipFile
 
           wheel_dir = Path("vendor/android-wheels")
-          wheel_path = next(wheel_dir.glob("qqmusic_api_python-0.3.6-*.whl"))
+          wheel_dir.mkdir(parents=True, exist_ok=True)
+
+          with urllib.request.urlopen("https://pypi.org/pypi/qqmusic-api-python/0.3.6/json") as response:
+              package = json.load(response)
+          wheel_url = next(
+              item["url"]
+              for item in package["urls"]
+              if item["packagetype"] == "bdist_wheel" and item["filename"].endswith(".whl")
+          )
+          wheel_path = wheel_dir / wheel_url.rsplit("/", 1)[1]
+          urllib.request.urlretrieve(wheel_url, wheel_path)
+
           patched_path = wheel_dir / wheel_path.name
           temp_path = wheel_dir / f"{wheel_path.stem}-patched.whl"
 
