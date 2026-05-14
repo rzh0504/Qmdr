@@ -69,6 +69,7 @@ class QmdrApp:
         self.preview_request_id = 0
         self.selected_nav_index = 0
         self.nav_collapsed = False
+        self.mobile_layout = False
         self.app_icon_bytes = self.load_app_icon_bytes()
 
         self.quality_value = "3"
@@ -109,6 +110,7 @@ class QmdrApp:
         self.file_picker = ft.FilePicker()
 
         self.views: list[ft.Control] = []
+        self.root: ft.SafeArea | None = None
         self.nav = self.build_nav()
 
     async def start(self) -> None:
@@ -123,35 +125,92 @@ class QmdrApp:
         self.musicid_input.on_submit = self.on_load_playlists
         self.page.services.append(self.file_picker)
 
+        self.rebuild_views()
+        self.root = ft.SafeArea(expand=True, content=self.build_shell())
+        self.page.add(self.root)
+        self.page.update()
+        self.page.run_task(self.initialize_services)
+
+    def is_mobile_layout(self) -> bool:
+        platform = str(getattr(self.page, "platform", "")).lower()
+        return "android" in platform or "ios" in platform
+
+    def configure_responsive_controls(self) -> None:
+        mobile = self.is_mobile_layout()
+        for control in (self.search_input, self.musicid_input, self.download_dir_input, self.external_api_input):
+            control.expand = not mobile
+        dropdown_width = None if mobile else 280
+        for control in (self.search_quality_dropdown, self.playlist_quality_dropdown, self.settings_quality_dropdown):
+            control.width = dropdown_width
+        self.mobile_layout = mobile
+        self.configure_list_containers()
+
+    def make_list_container(self, spacing: int) -> ft.Column | ft.ListView:
+        if self.mobile_layout:
+            return ft.Column(spacing=spacing, horizontal_alignment=ft.CrossAxisAlignment.STRETCH)
+        return ft.ListView(expand=True, spacing=spacing, padding=0)
+
+    def replace_list_container(self, current: ft.Column | ft.ListView, spacing: int) -> ft.Column | ft.ListView:
+        controls = list(current.controls)
+        replacement = self.make_list_container(spacing)
+        replacement.controls = controls
+        return replacement
+
+    def configure_list_containers(self) -> None:
+        self.search_results_list = self.replace_list_container(self.search_results_list, 8)
+        self.playlist_list = self.replace_list_container(self.playlist_list, 8)
+        self.playlist_preview = self.replace_list_container(self.playlist_preview, 4)
+        self.download_log = self.replace_list_container(self.download_log, 6)
+
+    def rebuild_views(self) -> None:
+        self.configure_responsive_controls()
         self.views = [
             self.build_search_view(),
             self.build_playlist_view(),
             self.build_queue_view(),
             self.build_settings_view(),
         ]
-        for index, view in enumerate(self.views):
-            view.visible = index == 0
+        self.apply_selected_view_visibility()
 
-        self.page.add(
-            ft.SafeArea(
-                expand=True,
-                content=ft.Row(
-                    expand=True,
-                    spacing=0,
-                    controls=[
-                        self.nav,
-                        ft.VerticalDivider(width=1),
-                        ft.Container(
-                            expand=True,
-                            padding=18,
-                            content=ft.Column(expand=True, controls=self.views),
-                        ),
-                    ],
-                ),
-            )
+    def apply_selected_view_visibility(self) -> None:
+        for index, view in enumerate(self.views):
+            view.visible = index == self.selected_nav_index
+
+    def refresh_result_layouts(self) -> None:
+        if self.search_songs:
+            self.render_search_results(update_page=False)
+        if self.playlists:
+            self.render_playlists(update_page=False)
+        if self.selected_playlist is not None and self.playlist_songs:
+            self.render_playlist_preview(self.selected_playlist, update_page=False)
+
+    def build_shell(self) -> ft.Control:
+        content_padding = 10 if self.mobile_layout else 18
+        content = ft.Container(
+            expand=True,
+            padding=content_padding,
+            content=ft.Column(expand=True, controls=self.views),
         )
-        self.page.update()
-        self.page.run_task(self.initialize_services)
+        if self.mobile_layout:
+            return ft.Column(
+                expand=True,
+                spacing=0,
+                controls=[
+                    content,
+                    ft.Divider(height=1),
+                    self.build_mobile_nav(),
+                ],
+            )
+        self.nav = self.build_nav()
+        return ft.Row(
+            expand=True,
+            spacing=0,
+            controls=[
+                self.nav,
+                ft.VerticalDivider(width=1),
+                content,
+            ],
+        )
 
     async def initialize_services(self) -> None:
         try:
@@ -270,6 +329,42 @@ class QmdrApp:
             ),
         )
 
+    def build_mobile_nav(self) -> ft.Container:
+        return ft.Container(
+            bgcolor="#ffffff",
+            padding=ft.Padding.symmetric(horizontal=6, vertical=6),
+            content=ft.Row(
+                spacing=4,
+                controls=[
+                    self.build_mobile_nav_item(index, icon, label)
+                    for index, (icon, label) in enumerate(NAV_ITEMS)
+                ],
+            ),
+        )
+
+    def build_mobile_nav_item(self, index: int, icon: ft.IconData, label: str) -> ft.Container:
+        selected = index == self.selected_nav_index
+        color = "#1d4ed8" if selected else "#52616b"
+        return ft.Container(
+            expand=True,
+            height=56,
+            border_radius=14,
+            bgcolor="#e8f1ff" if selected else None,
+            ink=True,
+            ink_color="#d9e7fb",
+            on_click=lambda e, item_index=index: self.select_nav(item_index),
+            content=ft.Column(
+                tight=True,
+                spacing=2,
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    ft.Icon(icon, size=22, color=color),
+                    ft.Text(label, size=11, color=color, no_wrap=True),
+                ],
+            ),
+        )
+
     def refresh_nav(self) -> None:
         self.nav.width = 88 if self.nav_collapsed else 208
         self.nav.padding = ft.Padding.symmetric(horizontal=12, vertical=14)
@@ -277,9 +372,11 @@ class QmdrApp:
 
     def select_nav(self, index: int) -> None:
         self.selected_nav_index = index
-        for view_index, view in enumerate(self.views):
-            view.visible = view_index == index
-        self.refresh_nav()
+        self.apply_selected_view_visibility()
+        if self.mobile_layout and self.root is not None:
+            self.root.content = self.build_shell()
+        else:
+            self.refresh_nav()
         self.page.update()
 
     def on_toggle_nav(self, event: ft.Event | None = None) -> None:
@@ -287,18 +384,34 @@ class QmdrApp:
         self.refresh_nav()
         self.page.update()
 
+    def input_action_controls(self, controls: list[ft.Control]) -> ft.Control:
+        if self.mobile_layout:
+            return ft.Column(
+                spacing=10,
+                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                controls=controls,
+            )
+        return ft.Row(controls=controls)
+
+    def view_column(self, controls: list[ft.Control]) -> ft.Column:
+        return ft.Column(
+            expand=True,
+            spacing=14,
+            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+            scroll=ft.ScrollMode.AUTO if self.mobile_layout else None,
+            controls=controls,
+        )
+
     def build_search_view(self) -> ft.Container:
         return ft.Container(
             expand=True,
-            content=ft.Column(
-                expand=True,
-                spacing=14,
-                controls=[
+            content=self.view_column(
+                [
                     _section(
                         "搜索单曲",
                         [
-                            ft.Row(
-                                controls=[
+                            self.input_action_controls(
+                                [
                                     self.search_input,
                                     ft.Button("搜索", icon=ft.Icons.SEARCH, on_click=self.on_search),
                                 ]
@@ -313,23 +426,21 @@ class QmdrApp:
                             self.search_status,
                         ],
                     ),
-                    _section("搜索结果", [self.search_results_list], expand=True),
-                ],
+                    _section("搜索结果", [self.search_results_list], expand=None if self.mobile_layout else True),
+                ]
             ),
         )
 
     def build_playlist_view(self) -> ft.Container:
         return ft.Container(
             expand=True,
-            content=ft.Column(
-                expand=True,
-                spacing=14,
-                controls=[
+            content=self.view_column(
+                [
                     _section(
                         "歌单",
                         [
-                            ft.Row(
-                                controls=[
+                            self.input_action_controls(
+                                [
                                     self.musicid_input,
                                     ft.Button("获取歌单", icon=ft.Icons.PLAYLIST_PLAY, on_click=self.on_load_playlists),
                                     ft.Button("下载全部", icon=ft.Icons.DOWNLOAD, on_click=self.on_download_all_playlists),
@@ -339,32 +450,36 @@ class QmdrApp:
                             self.playlist_status,
                         ],
                     ),
-                    ft.Row(
-                        expand=True,
-                        spacing=14,
-                        controls=[
-                            _section("歌单列表", [self.playlist_list], expand=1),
-                            _section("歌曲预览", [self.playlist_preview], expand=2),
-                        ],
-                    ),
-                ],
+                    self.build_playlist_content(),
+                ]
             ),
         )
+
+    def build_playlist_content(self) -> ft.Control:
+        if self.mobile_layout:
+            controls = [
+                _section("歌单列表", [self.playlist_list]),
+                _section("歌曲预览", [self.playlist_preview]),
+            ]
+            return ft.Column(spacing=14, horizontal_alignment=ft.CrossAxisAlignment.STRETCH, controls=controls)
+        controls = [
+            _section("歌单列表", [self.playlist_list], expand=1),
+            _section("歌曲预览", [self.playlist_preview], expand=2),
+        ]
+        return ft.Row(expand=True, spacing=14, controls=controls)
 
     def build_queue_view(self) -> ft.Container:
         return ft.Container(
             expand=True,
-            content=ft.Column(
-                expand=True,
-                spacing=14,
-                controls=[
+            content=self.view_column(
+                [
                     _section(
                         "当前任务",
                         [
                             self.current_task_text,
                             self.progress_bar,
-                            ft.Row(
-                                controls=[
+                            self.input_action_controls(
+                                [
                                     self.progress_text,
                                     ft.Button("取消", icon=ft.Icons.CANCEL, on_click=self.on_cancel_download),
                                     ft.Button("打开目录", icon=ft.Icons.FOLDER_OPEN, on_click=self.on_open_download_dir),
@@ -372,18 +487,16 @@ class QmdrApp:
                             ),
                         ],
                     ),
-                    _section("日志", [self.download_log], expand=True),
-                ],
+                    _section("日志", [self.download_log], expand=None if self.mobile_layout else True),
+                ]
             ),
         )
 
     def build_settings_view(self) -> ft.Container:
         return ft.Container(
             expand=True,
-            content=ft.Column(
-                expand=True,
-                spacing=14,
-                controls=[
+            content=self.view_column(
+                [
                     _section(
                         "凭证",
                         [
@@ -403,8 +516,8 @@ class QmdrApp:
                     _section(
                         "下载设置",
                         [
-                            ft.Row(
-                                controls=[
+                            self.input_action_controls(
+                                [
                                     self.download_dir_input,
                                     ft.Button("选择", icon=ft.Icons.FOLDER_OPEN, on_click=self.on_pick_download_dir),
                                 ]
@@ -424,15 +537,15 @@ class QmdrApp:
                     _section(
                         "高级",
                         [
-                            ft.Row(
-                                controls=[
+                            self.input_action_controls(
+                                [
                                     self.external_api_input,
                                     ft.Button("重新加载凭证", icon=ft.Icons.KEY, on_click=self.on_reload_with_external_api),
                                 ]
                             ),
                         ],
                     ),
-                ],
+                ]
             ),
         )
 
@@ -521,34 +634,36 @@ class QmdrApp:
         self.search_status.value = f"找到 {len(self.search_songs)} 个结果"
         self.render_search_results()
 
-    def render_search_results(self) -> None:
+    def render_search_results(self, update_page: bool = True) -> None:
         self.search_results_list.controls.clear()
         for index, song in enumerate(self.search_songs, 1):
             vip = "  VIP" if song.is_vip else ""
+            info = ft.Column(
+                expand=not self.mobile_layout,
+                spacing=3,
+                controls=[
+                    ft.Text(f"{index}. {song.title}{vip}", weight=ft.FontWeight.BOLD),
+                    ft.Text(song.singer, size=12, color="#52616b"),
+                    ft.Text(song.album_name or "未知专辑", size=12, color="#8792a2"),
+                ],
+            )
+            download_button = ft.Button("下载", icon=ft.Icons.DOWNLOAD, on_click=lambda e, item=song: self.start_song_download(item))
             self.search_results_list.controls.append(
                 ft.Container(
                     padding=10,
                     border=_border("#e1e7ef"),
                     border_radius=6,
                     bgcolor="#fbfcfe",
-                    content=ft.Row(
+                    content=ft.Column(spacing=10, controls=[info, download_button])
+                    if self.mobile_layout
+                    else ft.Row(
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                        controls=[
-                            ft.Column(
-                                expand=True,
-                                spacing=3,
-                                controls=[
-                                    ft.Text(f"{index}. {song.title}{vip}", weight=ft.FontWeight.BOLD),
-                                    ft.Text(song.singer, size=12, color="#52616b"),
-                                    ft.Text(song.album_name or "未知专辑", size=12, color="#8792a2"),
-                                ],
-                            ),
-                            ft.Button("下载", icon=ft.Icons.DOWNLOAD, on_click=lambda e, item=song: self.start_song_download(item)),
-                        ],
+                        controls=[info, download_button],
                     ),
                 )
             )
-        self.page.update()
+        if update_page:
+            self.page.update()
 
     def start_song_download(self, song: SongItem) -> None:
         if self.active_download:
@@ -595,32 +710,37 @@ class QmdrApp:
         self.playlist_status.value = f"找到 {len(self.playlists)} 个歌单"
         self.render_playlists()
 
-    def render_playlists(self) -> None:
+    def render_playlists(self, update_page: bool = True) -> None:
         self.playlist_list.controls.clear()
         for index, playlist in enumerate(self.playlists, 1):
+            info = ft.Column(
+                expand=not self.mobile_layout,
+                spacing=3,
+                controls=[
+                    ft.Text(f"{index}. {playlist.name}", weight=ft.FontWeight.BOLD),
+                    ft.Text(f"{playlist.song_count} 首", size=12, color="#52616b"),
+                ],
+            )
+            actions = ft.Row(
+                spacing=4,
+                controls=[
+                    ft.IconButton(ft.Icons.OPEN_IN_NEW, tooltip="预览", on_click=lambda e, item=playlist: self.page.run_task(self.preview_playlist, item)),
+                    ft.IconButton(ft.Icons.DOWNLOAD, tooltip="下载", on_click=lambda e, item=playlist: self.page.run_task(self.download_playlist, item)),
+                ],
+            )
             self.playlist_list.controls.append(
                 ft.Container(
                     padding=10,
                     border=_border("#e1e7ef"),
                     border_radius=6,
                     bgcolor="#fbfcfe",
-                    content=ft.Row(
-                        controls=[
-                            ft.Column(
-                                expand=True,
-                                spacing=3,
-                                controls=[
-                                    ft.Text(f"{index}. {playlist.name}", weight=ft.FontWeight.BOLD),
-                                    ft.Text(f"{playlist.song_count} 首", size=12, color="#52616b"),
-                                ],
-                            ),
-                            ft.IconButton(ft.Icons.OPEN_IN_NEW, tooltip="预览", on_click=lambda e, item=playlist: self.page.run_task(self.preview_playlist, item)),
-                            ft.IconButton(ft.Icons.DOWNLOAD, tooltip="下载", on_click=lambda e, item=playlist: self.page.run_task(self.download_playlist, item)),
-                        ],
-                    ),
+                    content=ft.Column(spacing=8, controls=[info, actions])
+                    if self.mobile_layout
+                    else ft.Row(controls=[info, actions]),
                 )
             )
-        self.page.update()
+        if update_page:
+            self.page.update()
 
     async def preview_playlist(self, playlist: PlaylistItem) -> None:
         self.ensure_services()
@@ -643,20 +763,22 @@ class QmdrApp:
         self.playlist_songs = songs
         self.render_playlist_preview(playlist)
 
-    def render_playlist_preview(self, playlist: PlaylistItem) -> None:
+    def render_playlist_preview(self, playlist: PlaylistItem, update_page: bool = True) -> None:
         self.playlist_preview.controls.clear()
+        header_controls: list[ft.Control] = [
+            ft.Text(f"{playlist.name}：{len(self.playlist_songs)} 首", weight=ft.FontWeight.BOLD, expand=not self.mobile_layout),
+            ft.Button("下载此歌单", icon=ft.Icons.DOWNLOAD, on_click=lambda e: self.page.run_task(self.download_playlist, playlist)),
+        ]
         self.playlist_preview.controls.append(
-            ft.Row(
-                controls=[
-                    ft.Text(f"{playlist.name}：{len(self.playlist_songs)} 首", weight=ft.FontWeight.BOLD, expand=True),
-                    ft.Button("下载此歌单", icon=ft.Icons.DOWNLOAD, on_click=lambda e: self.page.run_task(self.download_playlist, playlist)),
-                ]
-            )
+            ft.Column(spacing=8, controls=header_controls)
+            if self.mobile_layout
+            else ft.Row(controls=header_controls)
         )
         for index, song in enumerate(self.playlist_songs, 1):
             vip = "  VIP" if song.is_vip else ""
             self.playlist_preview.controls.append(ft.Text(f"{index}. {song.singer} - {song.title}{vip}", size=13))
-        self.page.update()
+        if update_page:
+            self.page.update()
 
     async def download_playlist(self, playlist: PlaylistItem) -> None:
         self.ensure_services()

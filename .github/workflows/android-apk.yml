@@ -1,0 +1,135 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: Android ABI to build
+        type: choice
+        options:
+          - arm64
+          - arm
+          - x64
+        default: arm64
+      build_number:
+        description: Optional Android build number
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+      AIOHTTP_NO_EXTENSIONS: "1"
+      MULTIDICT_NO_EXTENSIONS: "1"
+      YARL_NO_EXTENSIONS: "1"
+      FROZENLIST_NO_EXTENSIONS: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;34.0.0" \
+            "cmdline-tools;latest"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Configure Flutter Android toolchain
+        run: |
+          flutter config --no-analytics
+          flutter config --jdk-dir="$JAVA_HOME"
+          flutter doctor -v
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Setup Python environment
+        run: |
+          uv python install 3.12
+          uv sync --python 3.12 --dev
+
+      - name: Read project version
+        id: version
+        run: |
+          VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build APK
+        env:
+          BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
+          TARGET_ARCH: ${{ inputs.arch }}
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          uv run flet build apk . \
+            --arch "$TARGET_ARCH" \
+            --output dist/android \
+            --project qmdr \
+            --product Qmdr \
+            --description "QQ Music downloader" \
+            --org com.qmdr \
+            --build-version "$APP_VERSION" \
+            --build-number "$BUILD_NUMBER" \
+            --android-permissions android.permission.INTERNET=true \
+            --android-permissions android.permission.ACCESS_NETWORK_STATE=true \
+            --exclude .venv \
+            --exclude .git \
+            --exclude .agents \
+            --exclude .pytest_cache \
+            --exclude __pycache__ \
+            --exclude build \
+            --exclude dist \
+            --exclude tests \
+            --exclude "*.pyc" \
+            --exclude "*.pyo" \
+            --exclude "qqmusic_cred.pkl" \
+            --exclude music \
+            --cleanup-app \
+            --cleanup-packages \
+            --no-rich-output \
+            --skip-flutter-doctor \
+            --yes
+
+      - name: Verify APK output
+        run: |
+          find dist/android -type f -name "*.apk" -print
+          test -n "$(find dist/android -type f -name '*.apk' -print -quit)"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qmdr-android-${{ inputs.arch }}
+          path: dist/android/**/*.apk
+          if-no-files-found: error
