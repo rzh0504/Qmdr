@@ -81,12 +81,38 @@ jobs:
 
       - name: Use Android-compatible Python dependencies
         run: |
+          uv pip download --python .venv/bin/python --no-deps qqmusic-api-python==0.3.6 -d vendor/android-wheels
           python - <<'PY'
           from pathlib import Path
+          from zipfile import ZIP_DEFLATED, ZipFile
+
+          wheel_dir = Path("vendor/android-wheels")
+          wheel_path = next(wheel_dir.glob("qqmusic_api_python-0.3.6-*.whl"))
+          patched_path = wheel_dir / wheel_path.name
+          temp_path = wheel_dir / f"{wheel_path.stem}-patched.whl"
+
+          with ZipFile(wheel_path, "r") as src, ZipFile(temp_path, "w", ZIP_DEFLATED) as dst:
+              for item in src.infolist():
+                  data = src.read(item.filename)
+                  if item.filename.endswith(".dist-info/METADATA"):
+                      text = data.decode("utf-8")
+                      text = text.replace(
+                          "Requires-Dist: cryptography<45.0.6,>=45.0.5",
+                          "Requires-Dist: cryptography==43.0.1",
+                      )
+                      data = text.encode("utf-8")
+                  dst.writestr(item, data)
+
+          wheel_path.unlink()
+          temp_path.rename(patched_path)
 
           path = Path("pyproject.toml")
           text = path.read_text(encoding="utf-8")
           text = text.replace('"aiohttp>=3.13.5"', '"aiohttp==3.9.5"')
+          text = text.replace(
+              '"qqmusic-api-python==0.3.6"',
+              f'"qqmusic-api-python @ file://{patched_path.resolve()}"',
+          )
           path.write_text(text, encoding="utf-8")
           PY
 
