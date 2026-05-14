@@ -79,6 +79,17 @@ jobs:
           VERSION=$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      - name: Use Android-compatible Python dependencies
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace('"aiohttp>=3.13.5"', '"aiohttp==3.9.5"')
+          path.write_text(text, encoding="utf-8")
+          PY
+
       - name: Build APK
         env:
           BUILD_NUMBER: ${{ inputs.build_number || github.run_number }}
