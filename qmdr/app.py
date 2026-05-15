@@ -111,14 +111,14 @@ class QmdrApp:
 
         self.views: list[ft.Control] = []
         self.root: ft.SafeArea | None = None
-        self.nav = self.build_nav()
+        self.nav: ft.Container | None = None
 
     async def start(self) -> None:
         self.page.title = "Qmdr"
         self.page.bgcolor = "#f3f6fa"
         self.page.padding = 0
         self.page.theme_mode = ft.ThemeMode.LIGHT
-        if APP_ICON_ICO.exists():
+        if not self.is_mobile_layout() and APP_ICON_ICO.exists():
             self.page.window.icon = str(APP_ICON_ICO)
 
         self.search_input.on_submit = self.on_search
@@ -366,6 +366,8 @@ class QmdrApp:
         )
 
     def refresh_nav(self) -> None:
+        if self.nav is None:
+            self.nav = self.build_nav()
         self.nav.width = 88 if self.nav_collapsed else 208
         self.nav.padding = ft.Padding.symmetric(horizontal=12, vertical=14)
         self.nav.content = self.build_nav_content()
