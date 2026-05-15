@@ -82,6 +82,8 @@ jobs:
       - name: Use Android-compatible Python dependencies
         run: |
           python - <<'PY'
+          import base64
+          import hashlib
           import json
           import urllib.request
           from pathlib import Path
@@ -102,6 +104,11 @@ jobs:
 
           patched_path = wheel_dir / wheel_path.name
           temp_path = wheel_dir / f"{wheel_path.stem}-patched.whl"
+          orjson_shim = Path("orjson.py").read_bytes()
+          orjson_hash = base64.urlsafe_b64encode(
+              hashlib.sha256(orjson_shim).digest()
+          ).rstrip(b"=").decode("ascii")
+          orjson_record = f"orjson.py,sha256={orjson_hash},{len(orjson_shim)}\n"
 
           with ZipFile(wheel_path, "r") as src, ZipFile(temp_path, "w", ZIP_DEFLATED) as dst:
               for item in src.infolist():
@@ -114,7 +121,13 @@ jobs:
                       )
                       text = text.replace("Requires-Dist: orjson>=3.10.15\n", "")
                       data = text.encode("utf-8")
+                  elif item.filename.endswith(".dist-info/RECORD"):
+                      text = data.decode("utf-8")
+                      if not text.endswith("\n"):
+                          text += "\n"
+                      data = (text + orjson_record).encode("utf-8")
                   dst.writestr(item, data)
+              dst.writestr("orjson.py", orjson_shim)
 
           wheel_path.unlink()
           temp_path.rename(patched_path)
