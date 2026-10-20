@@ -10,9 +10,17 @@ wheels/
 .venv
 .agents
 
+# Go build output
+/build/
+/qmdr.exe
+*.exe
+*.exe~
+*.part
+
 # Qmdr local data
 music/
 qqmusic_cred.pkl
+qqmusic_cred.json
 qqmusic_qrcode.png
 qqmusic_credential_*.json
 OPTIMIZATION_NOTES.md

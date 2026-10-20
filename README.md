@@ -1,31 +1,44 @@
 # Qmdr
 
-Qmdr 是一个基于 Flet 的 QQ 音乐桌面下载工具，支持本地下载 QQ 音乐单曲和歌单。
+Qmdr 是一个使用 Go + MyGo 原生 UI 的 QQ 音乐桌面下载工具，目标平台为 Windows、macOS 和 Linux。
 
-本项目基于 GPL-3.0 项目 [qq-music-download](https://github.com/tooplick/qq-music-download) 实现图形界面。
+## 当前进度
+
+- 原生亮色 UI：搜索下载、歌单预览、下载队列、设置
+- 真实 QQ 音乐搜索
+- 读取本地凭证，真实获取 FLAC / MP3 下载链接
+- 真实文件下载：队列进度、取消、跳过已存在文件、任务日志
+- 待接入：扫码登录、歌单 API、封面/歌词元数据、设置持久化、打包与签名
+
+歌单页目前展示演示数据，下载按钮会提示接口待接入；扫码登录界面是占位。
 
 ## 运行
 
-```powershell
-uv run flet run -a assets main.py
-```
-
-## 热重载
+需要 Go 1.27.1 或更高版本。
 
 ```powershell
-uv run flet run --recursive --ignore-dirs .venv,.agents,__pycache__ -a assets main.py
+go run .
+# 或
+go build -o build/qmdr.exe .
 ```
 
-`--recursive` 会递归监听项目文件变化。建议忽略 `.venv`、`.agents` 和
-`__pycache__`，避免依赖或缓存文件变化触发重复重载，也能减少启动和监听开销。
+## 凭证
 
-## 功能
+Go 客户端从系统配置目录读取 `qqmusic_cred.json`：
 
-- QQ / 微信扫码登录，并将凭证保存到本地。
-- 单曲搜索下载，支持音质自动降级。
-- 歌单预览和批量下载。
-- 为下载文件写入封面、歌词和基础元数据。
-- 本地下载队列，显示进度和单曲状态。
+- Windows：`%AppData%\Qmdr\qqmusic_cred.json`
+- macOS：`~/Library/Application Support/Qmdr/qqmusic_cred.json`
+- Linux：`$XDG_CONFIG_HOME/Qmdr/qqmusic_cred.json`
+
+该文件包含登录令牌，不会提交到仓库。设置页可以重新加载或导出 JSON。旧版 Python 的 pickle 凭证已迁移为上述 JSON，`reference/python` 保留旧后端代码用于行为参考。
+
+## 目录
+
+- `main.go`、`view_*.go`、`components.go`、`theme.go`：MyGo 原生 UI
+- `download.go`：下载队列、文件命名与落盘
+- `internal/qqmusic`：请求封装、搜索、下载链接、歌词、文件下载
+- `reference/python`：旧 Python 后端，仅作参考
+- `assets`：应用图标资源
 
 ## 免责声明
 
