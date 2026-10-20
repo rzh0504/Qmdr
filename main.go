@@ -48,6 +48,7 @@ type app struct {
 	queue           []QueueItem
 	queueFilter     int
 	queueSeq        int
+	showLogs        bool
 	downloading     bool
 	overallProgress float64
 	currentTaskID   int

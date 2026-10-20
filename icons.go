@@ -13,6 +13,8 @@ var (
 	iconSettings     = mustIcon(`<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>`)
 	iconChevronLeft  = mustIcon(`<path d="m15 18-6-6 6-6"/>`)
 	iconChevronRight = mustIcon(`<path d="m9 18 6-6-6-6"/>`)
+	iconChevronDown  = mustIcon(`<path d="m6 9 6 6 6-6"/>`)
+	iconChevronUp    = mustIcon(`<path d="m18 15-6-6-6 6"/>`)
 	iconDownload     = mustIcon(`<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/>`)
 	iconFolder       = mustIcon(`<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/>`)
 	iconRefresh      = mustIcon(`<path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18.7 7M17.9 15A7 7 0 0 1 5.3 17"/>`)
