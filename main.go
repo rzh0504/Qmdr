@@ -119,7 +119,7 @@ func (a *app) viewRoot(c *ui.Context) {
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Background(col.bg).Children(func() {
 		a.sidebar(c, col)
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-			ui.Scroll(c).Grow(1).Padding(12, 32, 28).Gap(18).Children(func() {
+			ui.Scroll(c).Grow(1).Padding(16, 24, 24).Gap(16).Children(func() {
 				switch a.view {
 				case viewSearch:
 					a.searchView(c, col)
@@ -224,16 +224,13 @@ func (a *app) setPage(page string) {
 }
 
 func (a *app) sidebar(c *ui.Context, col colors) {
-	side := ui.Column(c).Width(210).FillHeight().Background(col.sidebar).
+	side := ui.Column(c).Width(200).FillHeight().Background(col.sidebar).
 		BorderWidth(0, 1, 0, 0).BorderColor(col.border)
 
 	side.Children(func() {
-		ui.Row(c).Padding(14, 16).Gap(9).AlignItems(ui.Center).Children(func() {
-			a.logoMark(c, col, 28)
-			ui.Column(c).Gap(1).Children(func() {
-				ui.Text(c, "Qmdr").FontSize(15).Bold().TextColor(col.text).SingleLine()
-				ui.Text(c, "QQ 音乐下载器").FontSize(10).TextColor(col.muted).SingleLine()
-			})
+		ui.Row(c).Padding(12, 14).Gap(8).AlignItems(ui.Center).Children(func() {
+			a.logoMark(c, col, 26)
+			ui.Text(c, "Qmdr").FontSize(14).Bold().TextColor(col.text).SingleLine()
 		})
 
 		page := a.pageKey()
@@ -256,7 +253,7 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 
 		divider(c, col)
 
-		account := ui.ButtonBase(c).Padding(10, 14).Gap(8).
+		account := ui.ButtonBase(c).Padding(8, 12).Gap(8).
 			AlignItems(ui.Center).Label("账号设置")
 		if account.Hovered() {
 			account = account.Background(col.cardHover)
@@ -266,20 +263,17 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 			a.refresh()
 		}
 		account.Children(func() {
-			a.avatar(c, col, 26)
+			a.avatar(c, col, 24)
 			ui.Column(c).Gap(1).Grow(1).Children(func() {
 				status := "未登录"
 				if a.loggedIn {
 					status = "已登录"
 				}
-				ui.Text(c, status).FontSize(11).Bold().TextColor(col.text).SingleLine()
-				ui.Text(c, a.userID).FontSize(10).TextColor(col.muted).SingleLine()
+				ui.Text(c, status).FontSize(10).Bold().TextColor(col.text).SingleLine()
+				ui.Text(c, a.userID).FontSize(9).TextColor(col.muted).SingleLine()
 			})
-			ui.Icon(c, iconChevronRight).FontSize(13).TextColor(col.faint)
+			ui.Icon(c, iconChevronRight).FontSize(12).TextColor(col.faint)
 		})
-
-		ui.Text(c, "版本 0.2.0 · UI 预览").FontSize(9).TextColor(col.faint).
-			Padding(14, 6).SingleLine()
 	})
 }
 

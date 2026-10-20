@@ -11,7 +11,7 @@ import (
 )
 
 func (a *app) searchView(c *ui.Context, col colors) {
-	pageHeader(c, col, "搜索下载", "搜索 QQ 音乐，选择音质后加入下载队列", func() {
+	pageHeader(c, col, "搜索下载", func() {
 		secondaryButton(c, col, iconFolder, "打开下载目录", func() {
 			a.openDownloadDir()
 		})
@@ -22,7 +22,7 @@ func (a *app) searchView(c *ui.Context, col colors) {
 }
 
 func (a *app) searchToolbar(c *ui.Context, col colors) {
-	card(c, col, func() {
+	ui.Column(c).Gap(8).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			searchBox(c, col, &a.query, "搜索歌曲、歌手或专辑",
 				func() { a.doSearch() },
@@ -49,22 +49,15 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 
 func (a *app) searchResults(c *ui.Context, col colors) {
 	if !a.hasSearched {
-		sectionHeader(c, col, "搜索歌曲", "输入关键词，或从热门搜索开始", nil)
-		card(c, col, func() {
-			emptyState(c, col, iconSearch, "还没有搜索", "在上方输入歌曲、歌手或专辑名开始搜索。")
-		})
+		sectionHeader(c, col, "搜索歌曲", nil)
+		emptyState(c, col, iconSearch, "还没有搜索", "在上方输入歌曲、歌手或专辑名开始搜索。")
 		return
 	}
 
-	subtitle := "正在搜索…"
-	if !a.searching {
-		if a.searchErr != "" {
-			subtitle = "搜索失败"
-		} else {
-			subtitle = fmt.Sprintf("找到 %d 首与「%s」相关的歌曲", len(a.results), a.query)
+	sectionHeader(c, col, "搜索结果", func() {
+		if !a.searching && a.searchErr == "" {
+			ui.Textf(c, "%d 首", len(a.results)).FontSize(10).TextColor(col.muted)
 		}
-	}
-	sectionHeader(c, col, "搜索结果", subtitle, func() {
 		if len(a.results) > 0 && !a.searching {
 			secondaryButton(c, col, iconDownload, "全部下载", func() {
 				a.enqueueSongs(a.results)
@@ -73,26 +66,20 @@ func (a *app) searchResults(c *ui.Context, col colors) {
 	})
 
 	if a.searching {
-		card(c, col, func() {
-			ui.Row(c).Gap(9).AlignItems(ui.Center).Padding(6).Children(func() {
-				ui.Spinner(c).Size(18, 18)
-				ui.Column(c).Gap(1).Children(func() {
-					ui.Text(c, "正在搜索 QQ 音乐").FontSize(13).Bold().TextColor(col.text)
-					ui.Text(c, "正在匹配歌曲、歌手和专辑…").FontSize(11).TextColor(col.muted)
-				})
+		softCard(c, col, func() {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Spinner(c).Size(16, 16)
+				ui.Text(c, "正在搜索…").FontSize(11).TextColor(col.muted)
 			})
 		})
 		return
 	}
 
 	if a.searchErr != "" {
-		card(c, col, func() {
+		softCard(c, col, func() {
 			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Icon(c, iconAlert).FontSize(16).TextColor(col.red)
-				ui.Column(c).Gap(1).Grow(1).Children(func() {
-					ui.Text(c, "搜索失败").FontSize(13).Bold().TextColor(col.text)
-					ui.Text(c, a.searchErr).FontSize(11).TextColor(col.muted).MaxLines(2)
-				})
+				ui.Icon(c, iconAlert).FontSize(14).TextColor(col.red)
+				ui.Text(c, a.searchErr).FontSize(11).TextColor(col.muted).Grow(1).MaxLines(2)
 				secondaryButton(c, col, iconRefresh, "重试", func() {
 					a.doSearch()
 				})
@@ -102,9 +89,7 @@ func (a *app) searchResults(c *ui.Context, col colors) {
 	}
 
 	if len(a.results) == 0 {
-		card(c, col, func() {
-			emptyState(c, col, iconSearch, "没有找到相关歌曲", "换一个关键词试试，或点击上方的热门搜索。")
-		})
+		emptyState(c, col, iconSearch, "没有找到相关歌曲", "换一个关键词试试。")
 		return
 	}
 

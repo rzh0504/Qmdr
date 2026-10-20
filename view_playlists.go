@@ -9,7 +9,7 @@ import (
 )
 
 func (a *app) playlistsView(c *ui.Context, col colors) {
-	pageHeader(c, col, "歌单下载", "读取 QQ 音乐歌单，预览后批量加入下载队列", func() {
+	pageHeader(c, col, "歌单下载", func() {
 		secondaryButton(c, col, iconRefresh, "刷新歌单", func() {
 			a.loadPlaylists()
 		})
@@ -24,45 +24,37 @@ func (a *app) playlistsView(c *ui.Context, col colors) {
 }
 
 func (a *app) playlistLoader(c *ui.Context, col colors) {
-	card(c, col, func() {
-		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(34, 34).Radius(7).Background(col.cardAlt).
-				Border(1, col.border).Center().Children(func() {
-				ui.Icon(c, iconLibrary).FontSize(16).TextColor(col.muted)
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(4, 0).Children(func() {
+		ui.Icon(c, iconLibrary).FontSize(14).TextColor(col.muted)
+		ui.Text(c, "读取歌单").FontSize(12).Bold().TextColor(col.text)
+		ui.Spacer(c)
+		ui.TextInput(c, &a.musicID).
+			Placeholder("QQ 号 / 微信 ID").
+			Label("QQ 号或微信 ID").
+			Width(200).Height(30).
+			Background(col.cardAlt).Border(1, col.border).Radius(6)
+		if a.loadingPlaylists {
+			btn := ui.PrimaryButton(c, "").Label("正在加载").Disabled(true).
+				Padding(0, 10).Height(30).Radius(6)
+			btn.Children(func() {
+				ui.Spinner(c).Size(12, 12)
+				ui.Text(c, "正在加载…").FontSize(11).Bold()
 			})
-			ui.Column(c).Gap(1).Grow(1).Children(func() {
-				ui.Text(c, "读取歌单").FontSize(13).Bold().TextColor(col.text)
-				ui.Text(c, "输入 QQ 号或微信 ID，加载歌单列表。").
-					FontSize(11).TextColor(col.muted)
+		} else {
+			primaryButton(c, col, iconRefresh, "加载歌单", func() {
+				a.loadPlaylists()
 			})
-			ui.TextInput(c, &a.musicID).
-				Placeholder("QQ 号 / 微信 ID").
-				Label("QQ 号或微信 ID").
-				Width(200).Height(32).
-				Background(col.cardAlt).Border(1, col.border).Radius(7)
-			if a.loadingPlaylists {
-				btn := ui.PrimaryButton(c, "").Label("正在加载").Disabled(true).
-					Padding(0, 12).Height(32).Radius(7)
-				btn.Children(func() {
-					ui.Spinner(c).Size(14, 14)
-					ui.Text(c, "正在加载…").FontSize(12).Bold()
-				})
-			} else {
-				primaryButton(c, col, iconRefresh, "加载歌单", func() {
-					a.loadPlaylists()
-				})
-			}
-		})
+		}
 	})
+	divider(c, col)
 }
 
 func (a *app) playlistSidebar(c *ui.Context, col colors) {
-	box := ui.Column(c).Width(300).Padding(14).Gap(8).Radius(10).
-		Background(col.card).Border(1, col.border).
-		Shadow(0, 1, 3, 0, col.shadow)
+	box := ui.Column(c).Width(280).Padding(12).Gap(6).Radius(8).
+		Background(col.card).Border(1, col.border)
 	box.Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "我的歌单").FontSize(14).Bold().TextColor(col.text)
+			ui.Text(c, "我的歌单").FontSize(13).Bold().TextColor(col.text)
 			ui.Box(c).Width(6)
 			pill(c, fmt.Sprintf("%d", len(a.playlists)), col.muted, col.cardAlt)
 			ui.Spacer(c)
@@ -79,7 +71,7 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 		for i, playlist := range a.playlists {
 			i, playlist := i, playlist
 			selected := i == a.selectedPlaylist
-			btn := ui.ButtonBase(c).Gap(8).Padding(6).Radius(6).
+			btn := ui.ButtonBase(c).Gap(8).Padding(5).Radius(5).
 				AlignItems(ui.Center).Label(playlist.Name)
 			if selected {
 				btn = btn.Background(col.cardHover)
@@ -92,11 +84,11 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 				a.refresh()
 			}
 			btn.Children(func() {
-				cover(c, col, i+1, 38, iconLibrary)
+				cover(c, col, i+1, 32, iconLibrary)
 				ui.Column(c).Gap(1).Grow(1).Children(func() {
-					ui.Text(c, playlist.Name).FontSize(12).
+					ui.Text(c, playlist.Name).FontSize(11).
 						TextColor(col.text).SingleLine()
-					ui.Textf(c, "%d 首歌曲", playlist.Count).FontSize(10).
+					ui.Textf(c, "%d 首", playlist.Count).FontSize(9).
 						TextColor(col.muted).SingleLine()
 				})
 				if selected {
@@ -108,9 +100,8 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 }
 
 func (a *app) playlistPreview(c *ui.Context, col colors) {
-	box := ui.Column(c).Grow(1).Padding(16).Gap(12).Radius(10).
-		Background(col.card).Border(1, col.border).
-		Shadow(0, 1, 3, 0, col.shadow)
+	box := ui.Column(c).Grow(1).Padding(14).Gap(10).Radius(8).
+		Background(col.card).Border(1, col.border)
 	box.Children(func() {
 		if len(a.playlists) == 0 || a.selectedPlaylist < 0 || a.selectedPlaylist >= len(a.playlists) {
 			emptyState(c, col, iconPlay, "选择一个歌单", "左侧选择歌单后，这里会显示歌曲预览。")
@@ -119,11 +110,11 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 		playlist := a.playlists[a.selectedPlaylist]
 
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			cover(c, col, a.selectedPlaylist+1, 48, iconLibrary)
-			ui.Column(c).Gap(2).Grow(1).Children(func() {
-				ui.Text(c, playlist.Name).FontSize(17).Bold().TextColor(col.text).SingleLine()
-				ui.Textf(c, "共 %d 首 · 已加载 %d 首（演示数据）", playlist.Count, len(playlist.Songs)).
-					FontSize(11).TextColor(col.muted)
+			cover(c, col, a.selectedPlaylist+1, 40, iconLibrary)
+			ui.Column(c).Gap(1).Grow(1).Children(func() {
+				ui.Text(c, playlist.Name).FontSize(15).Bold().TextColor(col.text).SingleLine()
+				ui.Textf(c, "已加载 %d 首（演示数据）", len(playlist.Songs)).
+					FontSize(10).TextColor(col.muted)
 			})
 			primaryButton(c, col, iconDownload, "下载歌单", func() {
 				a.enqueueSongs(playlist.Songs)
@@ -133,7 +124,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 		divider(c, col)
 
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "歌曲预览").FontSize(11).Bold().TextColor(col.text)
+			ui.Text(c, "歌曲").FontSize(10).TextColor(col.muted)
 			ui.Spacer(c)
 			ui.Textf(c, "%d 首", len(playlist.Songs)).FontSize(10).TextColor(col.muted)
 		})

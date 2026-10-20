@@ -9,7 +9,7 @@ import (
 func (a *app) queueView(c *ui.Context, col colors) {
 	_, _, _, active := a.queueCounts()
 
-	pageHeader(c, col, "下载队列", "查看整体进度、当前任务与下载日志", func() {
+	pageHeader(c, col, "下载队列", func() {
 		ghostDangerButton(c, col, iconX, "取消全部", func() {
 			a.cancelQueue()
 		})
@@ -280,7 +280,7 @@ func (a *app) queueStatsCard(c *ui.Context, col colors) {
 		}
 	}
 	card(c, col, func() {
-		sectionHeader(c, col, "下载统计", "", nil)
+		sectionHeader(c, col, "下载统计", nil)
 		a.statLine(c, col, "全部任务", fmt.Sprint(total))
 		a.statLine(c, col, "已完成", fmt.Sprint(done))
 		a.statLine(c, col, "已跳过", fmt.Sprint(skipped))

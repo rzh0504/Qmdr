@@ -10,7 +10,7 @@ import (
 )
 
 func (a *app) settingsView(c *ui.Context, col colors) {
-	pageHeader(c, col, "设置", "管理账号凭证、下载位置与音质偏好", func() {
+	pageHeader(c, col, "设置", func() {
 		secondaryButton(c, col, iconFolder, "打开下载目录", func() {
 			a.openDownloadDir()
 		})
@@ -26,9 +26,8 @@ func (a *app) settingsView(c *ui.Context, col colors) {
 }
 
 func (a *app) accountCard(c *ui.Context, col colors) {
-	box := ui.Column(c).Width(350).Padding(16).Gap(12).Radius(10).
-		Background(col.card).Border(1, col.border).
-		Shadow(0, 1, 3, 0, col.shadow)
+	box := ui.Column(c).Width(350).Padding(14).Gap(10).Radius(8).
+		Background(col.card).Border(1, col.border)
 	box.Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			a.avatar(c, col, 40)
@@ -82,11 +81,10 @@ func (a *app) accountCard(c *ui.Context, col colors) {
 }
 
 func (a *app) downloadSettingsCard(c *ui.Context, col colors) {
-	box := ui.Column(c).Grow(1).Padding(16).Gap(14).Radius(10).
-		Background(col.card).Border(1, col.border).
-		Shadow(0, 1, 3, 0, col.shadow)
+	box := ui.Column(c).Grow(1).Padding(14).Gap(12).Radius(8).
+		Background(col.card).Border(1, col.border)
 	box.Children(func() {
-		sectionHeader(c, col, "下载设置", "应用到后续加入队列的任务", nil)
+		sectionHeader(c, col, "下载设置", nil)
 
 		ui.Column(c).Gap(5).Children(func() {
 			ui.Text(c, "下载目录").FontSize(11).TextColor(col.muted)
@@ -130,7 +128,7 @@ func (a *app) downloadSettingsCard(c *ui.Context, col colors) {
 
 func (a *app) advancedCard(c *ui.Context, col colors) {
 	card(c, col, func() {
-		sectionHeader(c, col, "高级", "外部凭证服务", nil)
+		sectionHeader(c, col, "高级", nil)
 		ui.Row(c).Gap(8).AlignItems(ui.End).Children(func() {
 			ui.Column(c).Gap(5).Grow(1).Children(func() {
 				ui.Text(c, "外部凭证 API").FontSize(11).TextColor(col.muted)
