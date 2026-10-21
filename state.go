@@ -116,6 +116,13 @@ type loginState struct {
 	loggedIn  bool
 	userID    string
 	loginType string
+	nick      string
+	avatar    *ui.Bitmap
+
+	profileSlot    asyncSlot
+	profileFor     string
+	profileLoading bool
+	profileDone    bool
 
 	qrOpen   bool
 	qrFailed bool

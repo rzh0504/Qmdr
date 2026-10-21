@@ -429,7 +429,11 @@ func (a *app) accountChip(c *ui.Context, col colors) {
 				status = "已登录"
 			}
 			ui.Text(c, status).FontSize(12).FontWeight(400).TextColor(col.text).SingleLine()
-			ui.Text(c, a.login.userID).FontSize(11).TextColor(col.muted).SingleLine().Ellipsis("…")
+			name := a.login.userID
+			if a.login.nick != "" {
+				name = a.login.nick
+			}
+			ui.Text(c, name).FontSize(11).TextColor(col.muted).SingleLine().Ellipsis("…")
 		})
 		ui.Icon(c, iconChevronRight).Size(13, 13).TextColor(col.faint)
 	})
@@ -445,12 +449,16 @@ func (a *app) logoMark(c *ui.Context, col colors, size float32) {
 }
 
 func (a *app) avatar(c *ui.Context, col colors, size float32) {
-	ui.Box(c).Size(size, size).Radius(size / 2).Background(col.chip).
-		Children(func() {
-			ui.Row(c).Fill().Center().Children(func() {
-				ui.Text(c, "Q").FontSize(float32(int(size*0.4 + 0.5))).FontWeight(600).TextColor(col.text)
-			})
+	box := ui.Box(c).Size(size, size).Radius(size / 2).Background(col.chip).Clip()
+	box.Children(func() {
+		if a.login.avatar != nil {
+			ui.Image(c, a.login.avatar).Size(size, size).Fit(ui.Cover)
+			return
+		}
+		ui.Row(c).Fill().Center().Children(func() {
+			ui.Text(c, "Q").FontSize(float32(int(size*0.4 + 0.5))).FontWeight(600).TextColor(col.text)
 		})
+	})
 }
 
 func (a *app) openQR(kind string) {
@@ -577,6 +585,62 @@ func (a *app) openQR(kind string) {
 	}()
 }
 
+// resetUserProfile forgets the fetched profile when the account changes.
+func (a *app) resetUserProfile() {
+	a.login.profileSlot.reset()
+	a.login.nick = ""
+	a.login.avatar = nil
+	a.login.profileFor = ""
+	a.login.profileLoading = false
+	a.login.profileDone = false
+}
+
+// loadUserProfile fetches the signed-in user's nickname and avatar once
+// per account, quietly keeping the placeholder if it cannot.
+func (a *app) loadUserProfile() {
+	userID := a.api.UserID()
+	if !a.api.HasCredential() || userID == "" {
+		return
+	}
+	if a.login.profileLoading || (a.login.profileDone && a.login.profileFor == userID) {
+		return
+	}
+	a.login.profileLoading = true
+	a.login.profileFor = userID
+	var nick string
+	var avatar *ui.Bitmap
+	a.async(&a.login.profileSlot, 20*time.Second,
+		func(ctx context.Context) error {
+			profile, err := a.api.UserProfile(ctx)
+			if err != nil {
+				return err
+			}
+			nick = profile.Nick
+			if profile.AvatarURL != "" {
+				data, err := a.api.FetchImage(ctx, profile.AvatarURL)
+				if err == nil {
+					avatar, _ = ui.DecodeBitmap(data)
+				}
+			}
+			return nil
+		},
+		func(err error) {
+			a.login.profileLoading = false
+			a.login.profileDone = true
+			if a.api.UserID() != userID {
+				return
+			}
+			if err != nil {
+				log.Printf("load user profile: %v", err)
+				return
+			}
+			a.login.nick = nick
+			if avatar != nil {
+				a.login.avatar = avatar
+			}
+		})
+}
+
 func (a *app) finishLogin() {
 	a.login.loggedIn = a.api.HasCredential()
 	a.login.userID = a.api.UserID()
@@ -588,6 +652,7 @@ func (a *app) finishLogin() {
 	} else {
 		a.login.loginType = "QQ"
 	}
+	a.resetUserProfile()
 	a.playlists.owner = a.api.UserID()
 	a.playlists.resetFetches()
 	a.playlists.loading = false
@@ -611,6 +676,7 @@ func (a *app) finishLogin() {
 	a.playlists.songs = nil
 	a.resetSongSelection()
 	a.restorePlaylistCache()
+	a.loadUserProfile()
 	if a.api.CredentialSaveError() != nil {
 		a.toast = "登录成功，但凭证保存失败，重启后需重新登录"
 	} else {
@@ -738,6 +804,7 @@ func main() {
 				_ = a.history.store.Close()
 			}
 		})
+		a.loadUserProfile()
 		go a.initHistory()
 	})
 	if err := mygo.App.Run(); err != nil {

@@ -79,7 +79,11 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 		AlignItems(ui.Center).Children(func() {
 		a.avatar(c, col, 34)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-			ui.Text(c, "Qmdr 账号").FontSize(13).FontWeight(400).TextColor(col.text)
+			title := "Qmdr 账号"
+			if a.login.nick != "" {
+				title = a.login.nick
+			}
+			ui.Text(c, title).FontSize(13).FontWeight(400).TextColor(col.text)
 			ui.Textf(c, "%s · %s 登录", a.login.userID, a.login.loginType).
 				FontSize(12).TextColor(col.muted)
 		})
@@ -293,7 +297,9 @@ func (a *app) reloadCredential() {
 	a.playlists.songs = nil
 	a.resetSongSelection()
 	a.restorePlaylistCache()
+	a.resetUserProfile()
 	if ok {
+		a.loadUserProfile()
 		a.setToast("已重新加载本地凭证")
 	} else {
 		a.setToast("未找到有效凭证")
