@@ -229,10 +229,6 @@ func (a *app) songContextMenu(m *ui.Menu, song Song) {
 	if m.Item("加入待下载队列").Chosen() {
 		a.addToPending(song)
 	}
-	m.Separator()
-	if m.Item("下载整个歌单").Chosen() {
-		a.downloadCurrentPlaylist()
-	}
 }
 
 func (a *app) beginSongSelectionWith(song Song) {
