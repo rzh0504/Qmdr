@@ -201,18 +201,18 @@ func textLink(c *ui.Context, col colors, label string, onClick func()) ui.Elemen
 	return chipButton(c, col, nil, label, onClick)
 }
 
-func cover(c *ui.Context, col colors, index int, size float32, icon *ui.SVG) ui.Element {
+func playlistCover(c *ui.Context, col colors, index int, size float32) ui.Element {
 	box := ui.Box(c).Size(size, size).Radius(4).
 		Background(col.cardAlt).Border(1, col.border)
 	box.Children(func() {
 		ui.Row(c).Fill().Center().Children(func() {
-			ui.Icon(c, icon).FontSize(size * 0.38).TextColor(col.muted)
+			ui.Icon(c, iconLibrary).FontSize(size * 0.38).TextColor(col.muted)
 		})
 	})
 	return box
 }
 
-func songRow(c *ui.Context, col colors, song Song, index int, showIndex bool, onDownload func()) ui.Element {
+func (a *app) songRow(c *ui.Context, col colors, song Song, index int, showIndex bool, onDownload func()) ui.Element {
 	row := ui.Row(c).Gap(8).Padding(6, 8).Radius(4).AlignItems(ui.Center)
 	if row.Hovered() {
 		row = row.Background(col.cardHover)
@@ -222,7 +222,7 @@ func songRow(c *ui.Context, col colors, song Song, index int, showIndex bool, on
 			ui.Textf(c, "%02d", index+1).Width(22).FontSize(9).
 				TextColor(col.faint).SingleLine()
 		}
-		cover(c, col, index, 32, iconMusic)
+		a.cover(c, col, song.AlbumMid, 32)
 		ui.Column(c).Gap(1).Grow(1).Children(func() {
 			ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, song.Title).FontSize(12).Bold().TextColor(col.text).SingleLine()

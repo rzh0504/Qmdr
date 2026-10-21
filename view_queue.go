@@ -131,7 +131,7 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem, index int) {
 		})
 
 		ui.Row(c).Gap(8).Grow(1).AlignItems(ui.Center).Children(func() {
-			cover(c, col, item.ID, 28, iconMusic)
+			a.cover(c, col, item.Song.AlbumMid, 28)
 			ui.Column(c).Gap(1).Grow(1).Children(func() {
 				ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, item.Song.Title).FontSize(11).Bold().

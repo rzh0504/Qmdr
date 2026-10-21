@@ -103,7 +103,7 @@ func (a *app) searchResults(c *ui.Context, col colors) {
 		divider(c, col)
 		for i, song := range a.results {
 			song := song
-			songRow(c, col, song, i, true, func() {
+			a.songRow(c, col, song, i, true, func() {
 				a.enqueueSongs([]Song{song})
 			})
 			if i < len(a.results)-1 {

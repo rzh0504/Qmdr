@@ -26,6 +26,11 @@ type app struct {
 	win *mygo.Window
 	api *qqmusic.Client
 
+	covers       map[string]*ui.Bitmap
+	coverLoading map[string]bool
+	coverFailed  map[string]bool
+	coverSem     chan struct{}
+
 	view   viewID
 	closed bool
 
@@ -89,6 +94,10 @@ func newApp() *app {
 	settings := loadSettings()
 	a := &app{
 		api:              api,
+		covers:           make(map[string]*ui.Bitmap),
+		coverLoading:     make(map[string]bool),
+		coverFailed:      make(map[string]bool),
+		coverSem:         make(chan struct{}, coverFetchLimit),
 		view:             viewSearch,
 		quality:          settings.Quality,
 		musicID:          userID,

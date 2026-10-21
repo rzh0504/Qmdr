@@ -92,7 +92,7 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 				a.loadPlaylistSongs(i)
 			}
 			btn.Children(func() {
-				cover(c, col, i+1, 32, iconLibrary)
+				playlistCover(c, col, i+1, 32)
 				ui.Column(c).Gap(1).Grow(1).Children(func() {
 					ui.Text(c, playlist.Name).FontSize(11).
 						TextColor(col.text).SingleLine()
@@ -118,7 +118,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 		playlist := a.playlists[a.selectedPlaylist]
 
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			cover(c, col, a.selectedPlaylist+1, 40, iconLibrary)
+			playlistCover(c, col, a.selectedPlaylist+1, 40)
 			ui.Column(c).Gap(1).Grow(1).Children(func() {
 				ui.Text(c, playlist.Name).FontSize(15).Bold().TextColor(col.text).SingleLine()
 				ui.Textf(c, "%d 首", playlist.Count).FontSize(10).TextColor(col.muted)
@@ -158,7 +158,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 			})
 			ui.Column(c).Gap(0).Children(func() {
 				for i, song := range a.playlistSongs {
-					songRow(c, col, song, i, true, nil)
+					a.songRow(c, col, song, i, true, nil)
 					if i < len(a.playlistSongs)-1 {
 						divider(c, col)
 					}
