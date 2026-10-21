@@ -443,16 +443,11 @@ func (a *app) navItem(c *ui.Context, col colors, key string, icon *ui.SVG, label
 
 func (a *app) accountChip(c *ui.Context, col colors) {
 	account := ui.Row(c).Height(50).Padding(0, 10).Gap(9).Radius(10).
-		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("账号设置")
-	g := glass.Glass{}
+		Background(col.card).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("账号设置")
 	if account.Hovered() {
-		if col.dark {
-			g.Tint = ui.RGBA(255, 255, 255, 0.10)
-		} else {
-			g.Tint = ui.RGBA(255, 255, 255, 0.35)
-		}
+		account.Background(col.controlHover)
 	}
-	account.Material(g)
+	raised(account, col)
 	if account.Clicked() {
 		a.view = viewSettings
 		a.refresh()
