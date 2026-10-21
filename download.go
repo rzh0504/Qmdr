@@ -96,13 +96,20 @@ func (a *app) addToPending(songs ...Song) {
 	switch {
 	case added == 0 && invalid > 0:
 		a.setToast("歌曲缺少 MID，无法加入待下载队列")
+		return
 	case added == 0 && duplicates > 0:
 		a.setToast("歌曲已在待下载队列")
+		return
 	case added == 0:
 		return
-	case added == 1:
+	}
+	if err := a.savePending(); err != nil {
+		a.setToast("待下载队列保存失败：" + friendlyError(err))
+		return
+	}
+	if added == 1 {
 		a.setToast("已加入待下载队列")
-	default:
+	} else {
 		a.setToast(fmt.Sprintf("已将 %d 首歌曲加入待下载队列", added))
 	}
 }
@@ -112,6 +119,10 @@ func (a *app) removePending(index int) {
 		return
 	}
 	a.pending = append(a.pending[:index], a.pending[index+1:]...)
+	if err := a.savePending(); err != nil {
+		a.setToast("待下载队列保存失败：" + friendlyError(err))
+		return
+	}
 	a.refresh()
 }
 
@@ -120,6 +131,10 @@ func (a *app) clearPending() {
 		return
 	}
 	a.pending = nil
+	if err := a.savePending(); err != nil {
+		a.setToast("待下载队列保存失败：" + friendlyError(err))
+		return
+	}
 	a.setToast("已清空待下载队列")
 }
 
@@ -136,6 +151,10 @@ func (a *app) startPendingDownloads() {
 	if !a.enqueueSongs(songs) {
 		a.pending = songs
 		a.refresh()
+		return
+	}
+	if err := a.savePending(); err != nil {
+		a.setToast("待下载队列保存失败：" + friendlyError(err))
 	}
 }
 

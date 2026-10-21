@@ -128,6 +128,7 @@ func newApp() *app {
 		playlistOwner:    userID,
 		selectedPlaylist: -1,
 		selectedSongMids: make(map[string]bool),
+		pending:          loadPending(),
 		downloadDir:      settings.DownloadDir,
 		coverSize:        settings.CoverSize,
 		concurrency:      settings.Concurrency,
