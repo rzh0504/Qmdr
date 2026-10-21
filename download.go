@@ -69,20 +69,20 @@ func (c *downloadClaims) reserve(dir, base, ext string, overwrite bool) (string,
 	return "", claimExhausted
 }
 
-func (a *app) enqueueSongs(songs []Song) {
+func (a *app) enqueueSongs(songs []Song) bool {
 	if len(songs) == 0 {
-		return
+		return false
 	}
 	if a.downloading {
 		a.setToast("已有下载任务在运行，请先等待或取消")
 		a.view = viewQueue
 		a.refresh()
-		return
+		return false
 	}
 	for _, song := range songs {
 		if strings.TrimSpace(song.Mid) == "" {
 			a.setToast("歌曲缺少 MID，无法下载")
-			return
+			return false
 		}
 	}
 
@@ -101,6 +101,7 @@ func (a *app) enqueueSongs(songs []Song) {
 	a.recalcOverallProgress()
 	a.refresh()
 	a.startQueue()
+	return true
 }
 
 func (a *app) startQueue() {

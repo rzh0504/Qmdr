@@ -282,6 +282,7 @@ func (a *app) reloadCredential() {
 	a.playlists = nil
 	a.selectedPlaylist = -1
 	a.playlistSongs = nil
+	a.resetSongSelection()
 	a.restorePlaylistCache()
 	if ok {
 		a.setToast("已重新加载本地凭证")

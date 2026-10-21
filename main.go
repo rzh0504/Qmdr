@@ -60,6 +60,8 @@ type app struct {
 	playlists           []Playlist
 	selectedPlaylist    int
 	playlistSongs       []Song
+	selectingSongs      bool
+	selectedSongMids    map[string]bool
 
 	musicIDOpen  bool
 	musicIDInput string
@@ -120,6 +122,7 @@ func newApp() *app {
 		quality:          settings.Quality,
 		playlistOwner:    userID,
 		selectedPlaylist: -1,
+		selectedSongMids: make(map[string]bool),
 		downloadDir:      settings.DownloadDir,
 		coverSize:        settings.CoverSize,
 		concurrency:      settings.Concurrency,
@@ -651,6 +654,7 @@ func (a *app) finishLogin() {
 	a.playlists = nil
 	a.selectedPlaylist = -1
 	a.playlistSongs = nil
+	a.resetSongSelection()
 	a.restorePlaylistCache()
 	if a.api.CredentialSaveError() != nil {
 		a.toast = "登录成功，但凭证保存失败，重启后需重新登录"

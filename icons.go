@@ -29,6 +29,7 @@ var (
 	iconLogin        = mustIcon(`<path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/><path d="m10 17 5-5-5-5M15 12H3"/>`)
 	iconExternal     = mustIcon(`<path d="M14 3h7v7M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>`)
 	iconCheck        = mustIcon(`<path d="m20 6-11 11-5-5"/>`)
+	iconSelect       = mustIcon(`<rect x="3" y="3" width="18" height="18" rx="5"/><path d="m8 12 3 3 5-5"/>`)
 	iconX            = mustIcon(`<path d="M18 6 6 18M6 6l12 12"/>`)
 	iconClock        = mustIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`)
 	iconAlert        = mustIcon(`<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/>`)

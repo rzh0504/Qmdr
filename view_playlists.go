@@ -122,19 +122,40 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 			return
 		}
 		playlist := a.playlists[a.selectedPlaylist]
+		selectedCount := a.selectedSongCount()
 
 		ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).Children(func() {
 			playlistIcon(c, col, playlist, 44)
 			ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
 				ui.Text(c, playlist.Name).FontSize(16).FontWeight(600).
 					TextColor(col.text).SingleLine()
-				ui.Textf(c, "%d 首", playlist.Count).FontSize(12).TextColor(col.muted)
+				if a.selectingSongs {
+					ui.Textf(c, "已选 %d / %d 首", selectedCount, len(a.playlistSongs)).
+						FontSize(12).TextColor(col.accent)
+				} else {
+					ui.Textf(c, "%d 首", playlist.Count).FontSize(12).TextColor(col.muted)
+				}
 			})
 			if a.loadingSongs {
 				ui.Spinner(c).Size(15, 15)
 			} else if len(a.playlistSongs) > 0 {
-				primaryButton(c, col, iconDownload, "下载歌单", func() {
-					a.enqueueSongs(a.playlistSongs)
+				ui.Row(c).Gap(6).Shrink(0).AlignItems(ui.Center).Children(func() {
+					if a.selectingSongs {
+						allLabel := "全选"
+						if a.allSongsSelected() {
+							allLabel = "取消全选"
+						}
+						ghostButton(c, col, nil, allLabel, a.toggleAllSongs)
+						if selectedCount > 0 {
+							primaryButton(c, col, iconDownload, "下载所选", a.downloadSelectedSongs)
+						} else {
+							primaryButtonDisabled(c, col, iconDownload, "下载所选")
+						}
+						secondaryButton(c, col, nil, "退出", a.endSongSelection)
+					} else {
+						secondaryButton(c, col, iconSelect, "多选", a.beginSongSelection)
+						primaryButton(c, col, iconDownload, "下载歌单", a.downloadCurrentPlaylist)
+					}
 				})
 			}
 		})
@@ -164,11 +185,198 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 		default:
 			listPanel(c, col, "songs-"+a.playlistOwner+"-"+strconv.FormatInt(playlist.TID, 10), func() {
 				for i, song := range a.playlistSongs {
-					a.songRow(c, col, song, i, true, nil)
+					i, song := i, song
+					selected := a.selectingSongs && a.selectedSongMids[song.Mid]
+					row := a.songRow(c, col, song, songRowOptions{
+						index:      i,
+						selected:   selected,
+						selectMode: a.selectingSongs,
+						onSelect:   func() { a.toggleSongSelection(song) },
+					})
+					row.ContextMenu(func(m *ui.Menu) {
+						a.songContextMenu(m, song)
+					})
 				}
 			})
 		}
 	})
+}
+
+func (a *app) songContextMenu(m *ui.Menu, song Song) {
+	if a.selectingSongs {
+		if m.Item("下载这首歌").Chosen() {
+			a.downloadSongNow(song)
+		}
+		if m.Item("下载选中歌曲").Disabled(a.selectedSongCount() == 0).Chosen() {
+			a.downloadSelectedSongs()
+		}
+		m.Separator()
+		if m.Item("全选").Chosen() {
+			a.selectAllSongs()
+		}
+		if m.Item("退出多选").Chosen() {
+			a.endSongSelection()
+		}
+		return
+	}
+	if m.Item("下载这首歌").Chosen() {
+		a.downloadSongNow(song)
+	}
+	if m.Item("多选").Chosen() {
+		a.beginSongSelectionWith(song)
+	}
+	m.Separator()
+	if m.Item("全选歌曲").Chosen() {
+		a.beginSongSelectionAll()
+	}
+	if m.Item("下载整个歌单").Chosen() {
+		a.downloadCurrentPlaylist()
+	}
+}
+
+func (a *app) beginSongSelection() {
+	if a.selectingSongs {
+		return
+	}
+	a.selectingSongs = true
+	a.selectedSongMids = make(map[string]bool)
+	a.refresh()
+}
+
+func (a *app) beginSongSelectionWith(song Song) {
+	if strings.TrimSpace(song.Mid) == "" {
+		a.setToast("歌曲缺少 MID，无法下载")
+		return
+	}
+	if !a.selectingSongs {
+		a.selectingSongs = true
+		a.selectedSongMids = make(map[string]bool)
+	}
+	a.selectedSongMids[song.Mid] = true
+	a.refresh()
+}
+
+func (a *app) beginSongSelectionAll() {
+	a.selectingSongs = true
+	a.selectAllSongs()
+}
+
+func (a *app) endSongSelection() {
+	a.resetSongSelection()
+	a.refresh()
+}
+
+func (a *app) resetSongSelection() {
+	a.selectingSongs = false
+	a.selectedSongMids = make(map[string]bool)
+}
+
+func (a *app) toggleSongSelection(song Song) {
+	if !a.selectingSongs {
+		return
+	}
+	if strings.TrimSpace(song.Mid) == "" {
+		a.setToast("歌曲缺少 MID，无法下载")
+		return
+	}
+	if a.selectedSongMids[song.Mid] {
+		delete(a.selectedSongMids, song.Mid)
+	} else {
+		a.selectedSongMids[song.Mid] = true
+	}
+	a.refresh()
+}
+
+func (a *app) toggleAllSongs() {
+	if a.allSongsSelected() {
+		a.selectedSongMids = make(map[string]bool)
+		a.refresh()
+		return
+	}
+	a.selectAllSongs()
+}
+
+func (a *app) selectAllSongs() {
+	next := make(map[string]bool, len(a.playlistSongs))
+	for _, song := range a.playlistSongs {
+		if strings.TrimSpace(song.Mid) != "" {
+			next[song.Mid] = true
+		}
+	}
+	a.selectedSongMids = next
+	a.refresh()
+}
+
+func (a *app) allSongsSelected() bool {
+	if len(a.playlistSongs) == 0 {
+		return false
+	}
+	for _, song := range a.playlistSongs {
+		if !a.selectedSongMids[song.Mid] {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *app) selectedSongCount() int {
+	count := 0
+	for _, song := range a.playlistSongs {
+		if a.selectedSongMids[song.Mid] {
+			count++
+		}
+	}
+	return count
+}
+
+func (a *app) selectedSongsInOrder() []Song {
+	songs := make([]Song, 0, len(a.selectedSongMids))
+	for _, song := range a.playlistSongs {
+		if a.selectedSongMids[song.Mid] {
+			songs = append(songs, song)
+		}
+	}
+	return songs
+}
+
+func (a *app) downloadSongNow(song Song) {
+	if a.enqueueSongs([]Song{song}) {
+		a.resetSongSelection()
+	}
+}
+
+func (a *app) downloadSelectedSongs() {
+	songs := a.selectedSongsInOrder()
+	if len(songs) == 0 {
+		a.setToast("请先选择要下载的歌曲")
+		return
+	}
+	if a.enqueueSongs(songs) {
+		a.resetSongSelection()
+	}
+}
+
+func (a *app) downloadCurrentPlaylist() {
+	if a.enqueueSongs(a.playlistSongs) {
+		a.resetSongSelection()
+	}
+}
+
+func (a *app) pruneSongSelection() {
+	if !a.selectingSongs {
+		return
+	}
+	if len(a.playlistSongs) == 0 {
+		a.resetSongSelection()
+		return
+	}
+	next := make(map[string]bool, len(a.selectedSongMids))
+	for _, song := range a.playlistSongs {
+		if a.selectedSongMids[song.Mid] {
+			next[song.Mid] = true
+		}
+	}
+	a.selectedSongMids = next
 }
 
 func (a *app) refreshPlaylists() {
@@ -258,6 +466,7 @@ func (a *app) applyPlaylistsQuiet(playlists []Playlist) {
 		a.playlistSongsID++
 		a.loadingSongs = false
 		a.playlistErr = ""
+		a.resetSongSelection()
 	}
 	if !a.viewingOtherPlaylists() {
 		a.savePlaylistCache()
@@ -310,6 +519,7 @@ func (a *app) refreshSelectedSongsQuiet() {
 				return
 			}
 			a.playlistSongs = mapped
+			a.pruneSongSelection()
 			if !a.viewingOtherPlaylists() {
 				a.savePlaylistCache()
 			}
@@ -355,6 +565,7 @@ func (a *app) loadOwnPlaylists() {
 	a.playlists = nil
 	a.selectedPlaylist = -1
 	a.playlistSongs = nil
+	a.resetSongSelection()
 	a.restorePlaylistCache()
 	if len(a.playlists) > 0 {
 		a.refresh()
@@ -387,6 +598,7 @@ func (a *app) loadPlaylistsFor(owner string) {
 	a.playlists = nil
 	a.selectedPlaylist = -1
 	a.playlistSongs = nil
+	a.resetSongSelection()
 	a.musicIDOpen = false
 	a.musicIDErr = ""
 	a.refresh()
@@ -511,6 +723,7 @@ func (a *app) loadPlaylistSongs(index int) {
 	if index < 0 || index >= len(a.playlists) {
 		return
 	}
+	a.resetSongSelection()
 	playlist := a.playlists[index]
 	a.selectedPlaylist = index
 	if playlist.DirID == 201 && a.viewingOtherPlaylists() {

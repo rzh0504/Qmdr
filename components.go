@@ -206,6 +206,19 @@ func primaryButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClic
 	return btn
 }
 
+func primaryButtonDisabled(c *ui.Context, col colors, icon *ui.SVG, label string) ui.Element {
+	btn := ui.ButtonBase(c).Height(30).Padding(0, 14).Gap(6).Radius(8).
+		AlignItems(ui.Center).Label(label).Disabled(true)
+	btn.Background(col.chip)
+	btn.Children(func() {
+		if icon != nil {
+			ui.Icon(c, icon).Size(14, 14).TextColor(col.faint)
+		}
+		ui.Text(c, label).FontSize(13).FontWeight(400).TextColor(col.faint).SingleLine()
+	})
+	return btn
+}
+
 func secondaryButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClick func()) ui.Element {
 	btn := ui.ButtonBase(c).Height(30).Padding(0, 12).Gap(6).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label)
@@ -416,15 +429,51 @@ func playlistIcon(c *ui.Context, col colors, playlist Playlist, size float32) ui
 	return box
 }
 
-func (a *app) songRow(c *ui.Context, col colors, song Song, index int, showIndex bool, onDownload func()) ui.Element {
+type songRowOptions struct {
+	index      int
+	selected   bool
+	selectMode bool
+	onSelect   func()
+	onDownload func()
+}
+
+func songSelectionMark(c *ui.Context, col colors, selected bool) ui.Element {
+	if selected {
+		box := ui.Box(c).Size(16, 16).Radius(5).Background(col.accent).Center()
+		box.Children(func() {
+			ui.Icon(c, iconCheck).Size(10, 10).TextColor(col.accentText)
+		})
+		return box
+	}
+	return ui.Box(c).Size(16, 16).Radius(5).Border(1, col.fieldStroke)
+}
+
+func (a *app) songRow(c *ui.Context, col colors, song Song, opts songRowOptions) ui.Element {
 	row := ui.Row(c).Gap(10).Padding(7, 10).Height(52).Radius(8).AlignItems(ui.Center)
-	if row.Hovered() {
+	switch {
+	case opts.selectMode && opts.selected:
+		row.Background(col.accentSoft).Cursor(ui.CursorPointer)
+		row = chosen(row, col)
+	case opts.selectMode:
+		row.Cursor(ui.CursorPointer)
+		if row.Hovered() {
+			row.Background(col.rowSelected)
+			row = chosen(row, col)
+		}
+	case row.Hovered():
 		row.Background(col.rowSelected)
 		row = chosen(row, col)
 	}
+	if opts.selectMode && opts.onSelect != nil && row.Clicked() {
+		opts.onSelect()
+	}
 	row.Children(func() {
-		if showIndex {
-			ui.Textf(c, "%02d", index+1).Width(24).FontSize(11).
+		if opts.selectMode {
+			ui.Row(c).Width(24).Center().Children(func() {
+				songSelectionMark(c, col, opts.selected)
+			})
+		} else {
+			ui.Textf(c, "%02d", opts.index+1).Width(24).FontSize(11).
 				TextColor(col.faint).SingleLine()
 		}
 		a.cover(c, col, song.AlbumMid, 34)
@@ -442,8 +491,8 @@ func (a *app) songRow(c *ui.Context, col colors, song Song, index int, showIndex
 				TextColor(col.muted).SingleLine()
 		})
 		ui.Text(c, song.Duration).Width(38).FontSize(11).TextColor(col.faint).SingleLine()
-		if onDownload != nil {
-			iconButton(c, col, iconDownload, "下载 "+song.Title, onDownload)
+		if !opts.selectMode && opts.onDownload != nil {
+			iconButton(c, col, iconDownload, "下载 "+song.Title, opts.onDownload)
 		}
 	})
 	return row
