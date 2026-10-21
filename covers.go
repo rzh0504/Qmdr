@@ -93,8 +93,13 @@ func (a *app) coverBitmap(albumMid string) *ui.Bitmap {
 		}
 		delete(a.covers.cache, albumMid)
 	}
-	if a.covers.loading[albumMid] || len(a.covers.cache) >= maxCachedCovers {
+	if a.covers.loading[albumMid] {
 		return nil
+	}
+	// Evict before fetching: waiting for an insertion to make room would
+	// freeze the cache once it is full and nothing is in flight.
+	if len(a.covers.cache) >= maxCachedCovers {
+		a.evictOldestCover()
 	}
 	a.covers.loading[albumMid] = true
 	go a.loadCover(albumMid)

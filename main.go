@@ -725,6 +725,9 @@ func main() {
 			if a.login.qrCancel != nil {
 				a.login.qrCancel()
 			}
+			// Let queued writes finish before the store closes; a.closed
+			// already stops their UI callbacks.
+			a.drainDisk(2 * time.Second)
 			if a.history.store != nil {
 				_ = a.history.store.Close()
 			}

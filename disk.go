@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"runtime/debug"
+	"time"
 )
 
 const diskQueueSize = 128
@@ -43,5 +44,23 @@ func (a *app) dispatchDisk(job func()) {
 	default:
 		log.Printf("disk queue full, running job out of order")
 		go job()
+	}
+}
+
+// drainDisk waits until every job enqueued so far has run, so shutdown can
+// close the store after the last write instead of dropping it.
+func (a *app) drainDisk(timeout time.Duration) {
+	if a.diskJobs == nil {
+		return
+	}
+	done := make(chan struct{})
+	select {
+	case a.diskJobs <- func() { close(done) }:
+	case <-time.After(timeout):
+		return
+	}
+	select {
+	case <-done:
+	case <-time.After(timeout):
 	}
 }
