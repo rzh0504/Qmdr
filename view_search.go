@@ -91,9 +91,7 @@ func (a *app) searchResults(c *ui.Context, col colors) {
 							a.enqueueSongs([]Song{song})
 						},
 					})
-					row.ContextMenu(func(m *ui.Menu) {
-						a.songActionsMenu(m, song)
-					})
+					a.openSongMenu(row, song)
 				}
 			})
 		}

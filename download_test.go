@@ -104,8 +104,8 @@ func TestQueueFilters(t *testing.T) {
 
 	a.queue.filter = 2
 	completed := a.filteredQueue()
-	if len(completed) != 2 || completed[0].ID != 3 || completed[1].ID != 4 {
-		t.Fatalf("filteredQueue(completed) = %+v, want done and skipped", completed)
+	if len(completed) != 2 || completed[0].ID != 4 || completed[1].ID != 3 {
+		t.Fatalf("filteredQueue(completed) = %+v, want skipped then done, newest first", completed)
 	}
 
 	a.queue.filter = 3

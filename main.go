@@ -46,8 +46,9 @@ type app struct {
 	playlists playlistState
 	queue     queueState
 	history   historyState
-	covers    coverState
-	login     loginState
+	covers      coverState
+	login       loginState
+	contextMenu contextMenuState
 
 	quality     string
 	downloadDir string
@@ -156,6 +157,7 @@ func (a *app) viewRoot(c *ui.Context) {
 
 	a.qrModal(c, col)
 	a.musicIDModal(c, col)
+	a.menuView(c, col)
 }
 
 func (a *app) cardHeader(c *ui.Context, col colors) {

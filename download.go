@@ -191,7 +191,8 @@ func (a *app) startQueue() {
 		return
 	}
 	var tasks []downloadTask
-	for _, item := range a.queue.items {
+	for i := len(a.queue.items) - 1; i >= 0; i-- {
+		item := a.queue.items[i]
 		if item.Status != StatusWaiting {
 			continue
 		}
@@ -565,35 +566,28 @@ func (a *app) queueItem(id int) *QueueItem {
 	return nil
 }
 
+// filteredQueue returns the items of the selected filter newest first, so
+// songs added later come first.
 func (a *app) filteredQueue() []QueueItem {
-	switch a.queue.filter {
-	case 1:
-		var out []QueueItem
-		for _, item := range a.queue.items {
-			if item.Status == StatusWaiting || item.Status == StatusDownloading {
-				out = append(out, item)
-			}
+	match := func(item QueueItem) bool {
+		switch a.queue.filter {
+		case 1:
+			return item.Status == StatusWaiting || item.Status == StatusDownloading
+		case 2:
+			return item.Status == StatusDone || item.Status == StatusSkipped
+		case 3:
+			return item.Status == StatusFailed || item.Status == StatusCancelled
+		default:
+			return true
 		}
-		return out
-	case 2:
-		var out []QueueItem
-		for _, item := range a.queue.items {
-			if item.Status == StatusDone || item.Status == StatusSkipped {
-				out = append(out, item)
-			}
-		}
-		return out
-	case 3:
-		var out []QueueItem
-		for _, item := range a.queue.items {
-			if item.Status == StatusFailed || item.Status == StatusCancelled {
-				out = append(out, item)
-			}
-		}
-		return out
-	default:
-		return a.queue.items
 	}
+	out := make([]QueueItem, 0, len(a.queue.items))
+	for i := len(a.queue.items) - 1; i >= 0; i-- {
+		if match(a.queue.items[i]) {
+			out = append(out, a.queue.items[i])
+		}
+	}
+	return out
 }
 
 func (a *app) openDownloadDir() {

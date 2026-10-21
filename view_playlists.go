@@ -206,44 +206,11 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 						onSelect:    func() { a.toggleSongSelection(song) },
 						onLongPress: longPress,
 					})
-					row.ContextMenu(func(m *ui.Menu) {
-						a.songContextMenu(m, song)
-					})
+					a.openSongMenu(row, song)
 				}
 			})
 		}
 	})
-}
-
-func (a *app) songContextMenu(m *ui.Menu, song Song) {
-	if a.playlists.selecting {
-		if m.Item("下载选中歌曲").Disabled(a.selectedSongCount() == 0).Chosen() {
-			a.downloadSelectedSongs()
-		}
-		if m.Item("选中项加入待下载队列").Chosen() {
-			a.addSelectedToPending()
-		}
-		m.Separator()
-		if m.Item("全选").Chosen() {
-			a.selectAllSongs()
-		}
-		if m.Item("退出多选").Chosen() {
-			a.endSongSelection()
-		}
-		return
-	}
-	a.songActionsMenu(m, song)
-}
-
-// songActionsMenu lists the actions for one song, independent of any
-// selection mode in the playlists page.
-func (a *app) songActionsMenu(m *ui.Menu, song Song) {
-	if m.Item("下载这首歌").Chosen() {
-		a.downloadSongNow(song)
-	}
-	if m.Item("加入待下载队列").Chosen() {
-		a.addToPending(song)
-	}
 }
 
 func (a *app) beginSongSelectionWith(song Song) {

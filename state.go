@@ -72,6 +72,21 @@ type queueState struct {
 	taskCancels map[int]context.CancelFunc
 }
 
+// contextMenuState is the app's own context menu, drawn with the smooth
+// corners the system menu cannot take.
+type contextMenuState struct {
+	open  bool
+	x, y  float32
+	items []menuAction
+}
+
+type menuAction struct {
+	label     string
+	disabled  bool
+	separator bool
+	run       func()
+}
+
 // historyState is the download history page and its store handle.
 type historyState struct {
 	store      *history.Store

@@ -81,8 +81,8 @@ func (a *app) pendingSection(c *ui.Context, col colors) {
 		primaryButton(c, col, iconDownload, "全部下载", a.startPendingDownloads)
 	})
 	sheet(c, col, func() {
-		for i, song := range a.queue.pending {
-			i, song := i, song
+		for i := len(a.queue.pending) - 1; i >= 0; i-- {
+			i, song := i, a.queue.pending[i]
 			row := ui.Row(c).Gap(10).Padding(6, 10).Height(50).Radius(8).AlignItems(ui.Center)
 			if row.Hovered() {
 				row.Background(col.rowSelected)
