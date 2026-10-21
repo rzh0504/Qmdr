@@ -367,9 +367,7 @@ func (c *Client) acceptCredential(payload credentialPayload, fallbackType int) e
 		return fmt.Errorf("登录响应缺少凭证字段")
 	}
 	c.Credential = credential
-	if err := c.SaveCredential(); err != nil {
-		return fmt.Errorf("登录成功，但保存凭证失败: %w", err)
-	}
+	_ = c.SaveCredential()
 	return nil
 }
 
