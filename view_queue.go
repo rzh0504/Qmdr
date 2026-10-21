@@ -11,8 +11,7 @@ func (a *app) queueView(c *ui.Context, col colors) {
 		return
 	}
 
-	activeItems := a.filteredQueue()
-	completedItems := a.completedQueue()
+	items := a.filteredQueue()
 
 	ui.Column(c).Gap(10).Children(func() {
 		if len(a.pending) > 0 {
@@ -27,31 +26,18 @@ func (a *app) queueView(c *ui.Context, col colors) {
 			ui.Row(c).Height(32).FillWidth().AlignItems(ui.Center).Children(func() {
 				a.queueFilterTabs(c, col)
 				ui.Spacer(c)
-				ui.Textf(c, "%d 个任务", len(activeItems)).FontSize(12).TextColor(col.faint)
+				ui.Textf(c, "%d 个任务", len(items)).FontSize(12).TextColor(col.faint)
 			})
 
-			if len(activeItems) == 0 {
-				if active+failed > 0 {
-					emptyState(c, col, iconQueue, "没有符合条件的任务", "切换筛选条件查看其他任务。")
-				}
+			if len(items) == 0 {
+				emptyState(c, col, iconQueue, "没有符合条件的任务", "切换筛选条件查看其他任务。")
 			} else {
 				sheet(c, col, func() {
-					for _, item := range activeItems {
+					for _, item := range items {
 						a.queueRow(c, col, item)
 					}
 				})
 			}
-		}
-		if len(completedItems) > 0 {
-			sectionHeader(c, col, "已下载", func() {
-				ui.Textf(c, "%d 首", len(completedItems)).FontSize(12).TextColor(col.faint)
-				ghostButton(c, col, nil, "清理", a.clearCompleted)
-			})
-			sheet(c, col, func() {
-				for _, item := range completedItems {
-					a.queueRow(c, col, item)
-				}
-			})
 		}
 	})
 
@@ -61,7 +47,7 @@ func (a *app) queueView(c *ui.Context, col colors) {
 }
 
 func (a *app) queueFilterTabs(c *ui.Context, col colors) ui.Element {
-	labels := []string{"全部", "进行中", "失败"}
+	labels := []string{"全部", "进行中", "已下载", "失败"}
 	track := ui.Row(c).Height(28).Padding(2).Radius(7).Gap(1).
 		Background(col.chip).AlignItems(ui.Center).Shrink(0)
 	track.Children(func() {

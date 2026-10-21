@@ -254,9 +254,18 @@ func (a *app) headerActions(c *ui.Context, col colors) {
 	case viewSearch, viewHistory, viewSettings:
 		iconButton(c, col, iconFolder, "打开下载目录", a.openDownloadDir)
 	case viewQueue:
-		_, _, _, active := a.queueCounts()
+		_, done, _, active := a.queueCounts()
+		skipped := 0
+		for _, item := range a.queue {
+			if item.Status == StatusSkipped {
+				skipped++
+			}
+		}
 		if a.downloading {
 			ghostDangerButton(c, col, iconX, "取消", a.cancelQueue)
+		}
+		if !a.downloading && done+skipped > 0 {
+			iconButton(c, col, iconTrash, "清理已完成", a.clearCompleted)
 		}
 		if !a.downloading && active > 0 {
 			primaryButton(c, col, iconPlay, "开始", a.startQueue)

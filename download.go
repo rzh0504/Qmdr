@@ -546,31 +546,22 @@ func (a *app) filteredQueue() []QueueItem {
 	case 2:
 		var out []QueueItem
 		for _, item := range a.queue {
+			if item.Status == StatusDone || item.Status == StatusSkipped {
+				out = append(out, item)
+			}
+		}
+		return out
+	case 3:
+		var out []QueueItem
+		for _, item := range a.queue {
 			if item.Status == StatusFailed || item.Status == StatusCancelled {
 				out = append(out, item)
 			}
 		}
 		return out
 	default:
-		var out []QueueItem
-		for _, item := range a.queue {
-			if item.Status == StatusDone || item.Status == StatusSkipped {
-				continue
-			}
-			out = append(out, item)
-		}
-		return out
+		return a.queue
 	}
-}
-
-func (a *app) completedQueue() []QueueItem {
-	var out []QueueItem
-	for _, item := range a.queue {
-		if item.Status == StatusDone || item.Status == StatusSkipped {
-			out = append(out, item)
-		}
-	}
-	return out
 }
 
 func (a *app) openDownloadDir() {

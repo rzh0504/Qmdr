@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestQueueSections(t *testing.T) {
+func TestQueueFilters(t *testing.T) {
 	a := &app{queue: []QueueItem{
 		{ID: 1, Status: StatusWaiting},
 		{ID: 2, Status: StatusDownloading},
@@ -16,19 +16,8 @@ func TestQueueSections(t *testing.T) {
 		{ID: 6, Status: StatusCancelled},
 	}}
 
-	completed := a.completedQueue()
-	if len(completed) != 2 || completed[0].ID != 3 || completed[1].ID != 4 {
-		t.Fatalf("completedQueue = %+v, want done and skipped", completed)
-	}
-
-	all := a.filteredQueue()
-	if len(all) != 4 {
-		t.Fatalf("filteredQueue(all) returned %d items, want 4", len(all))
-	}
-	for _, item := range all {
-		if item.Status == StatusDone || item.Status == StatusSkipped {
-			t.Fatalf("filteredQueue(all) contains completed item %+v", item)
-		}
+	if all := a.filteredQueue(); len(all) != 6 {
+		t.Fatalf("filteredQueue(all) returned %d items, want 6", len(all))
 	}
 
 	a.queueFilter = 1
@@ -37,6 +26,12 @@ func TestQueueSections(t *testing.T) {
 	}
 
 	a.queueFilter = 2
+	completed := a.filteredQueue()
+	if len(completed) != 2 || completed[0].ID != 3 || completed[1].ID != 4 {
+		t.Fatalf("filteredQueue(completed) = %+v, want done and skipped", completed)
+	}
+
+	a.queueFilter = 3
 	if failed := a.filteredQueue(); len(failed) != 2 {
 		t.Fatalf("filteredQueue(failed) returned %d items, want 2", len(failed))
 	}
