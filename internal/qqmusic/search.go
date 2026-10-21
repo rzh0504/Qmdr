@@ -14,21 +14,24 @@ type Song struct {
 	Title           string
 	Artists         []string
 	Album           string
+	AlbumMid        string
 	DurationSeconds int
 	VIP             bool
 	Quality         string
 }
 
-type searchItem struct {
+type songItem struct {
 	ID       int64  `json:"id"`
 	Mid      string `json:"mid"`
 	Title    string `json:"title"`
+	Name     string `json:"name"`
 	Interval int    `json:"interval"`
 	Singer   []struct {
 		Name string `json:"name"`
 	} `json:"singer"`
 	Album struct {
 		Name string `json:"name"`
+		Mid  string `json:"mid"`
 	} `json:"album"`
 	Pay struct {
 		PayPlay int `json:"pay_play"`
@@ -38,6 +41,37 @@ type searchItem struct {
 		Size320MP3 int64 `json:"size_320mp3"`
 		Size128MP3 int64 `json:"size_128mp3"`
 	} `json:"file"`
+}
+
+func (item songItem) song() Song {
+	artists := make([]string, 0, len(item.Singer))
+	for _, singer := range item.Singer {
+		if name := cleanText(singer.Name); name != "" {
+			artists = append(artists, name)
+		}
+	}
+	title := item.Title
+	if title == "" {
+		title = item.Name
+	}
+	quality := "128K"
+	switch {
+	case item.File.SizeFLAC > 0:
+		quality = "无损"
+	case item.File.Size320MP3 > 0:
+		quality = "320K"
+	}
+	return Song{
+		ID:              item.ID,
+		Mid:             item.Mid,
+		Title:           cleanText(title),
+		Artists:         artists,
+		Album:           cleanText(item.Album.Name),
+		AlbumMid:        item.Album.Mid,
+		DurationSeconds: item.Interval,
+		VIP:             item.Pay.PayPlay != 0,
+		Quality:         quality,
+	}
 }
 
 func (c *Client) Search(ctx context.Context, query string, limit int) ([]Song, error) {
@@ -59,7 +93,7 @@ func (c *Client) Search(ctx context.Context, query string, limit int) ([]Song, e
 	}
 	var data struct {
 		Body struct {
-			ItemSong []searchItem `json:"item_song"`
+			ItemSong []songItem `json:"item_song"`
 		} `json:"body"`
 	}
 	module, method := "music.search.SearchCgiService", "DoSearchForQQMusicMobile"
@@ -69,29 +103,7 @@ func (c *Client) Search(ctx context.Context, query string, limit int) ([]Song, e
 
 	songs := make([]Song, 0, len(data.Body.ItemSong))
 	for _, item := range data.Body.ItemSong {
-		artists := make([]string, 0, len(item.Singer))
-		for _, singer := range item.Singer {
-			if name := cleanText(singer.Name); name != "" {
-				artists = append(artists, name)
-			}
-		}
-		quality := "128K"
-		switch {
-		case item.File.SizeFLAC > 0:
-			quality = "无损"
-		case item.File.Size320MP3 > 0:
-			quality = "320K"
-		}
-		songs = append(songs, Song{
-			ID:              item.ID,
-			Mid:             item.Mid,
-			Title:           cleanText(item.Title),
-			Artists:         artists,
-			Album:           cleanText(item.Album.Name),
-			DurationSeconds: item.Interval,
-			VIP:             item.Pay.PayPlay != 0,
-			Quality:         quality,
-		})
+		songs = append(songs, item.song())
 	}
 	return songs, nil
 }

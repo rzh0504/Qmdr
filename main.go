@@ -39,6 +39,9 @@ type app struct {
 
 	musicID          string
 	loadingPlaylists bool
+	loadingSongs     bool
+	playlistErr      string
+	playlistSongsID  int
 	playlists        []Playlist
 	selectedPlaylist int
 	playlistSongs    []Song
@@ -79,23 +82,22 @@ func newApp() *app {
 	if api.Credential.LoginType == 1 {
 		loginType = "微信"
 	}
-	if userID == "" {
-		userID = "未登录"
+	displayUser := userID
+	if displayUser == "" {
+		displayUser = "未登录"
 	}
 	a := &app{
 		api:              api,
 		view:             viewSearch,
 		quality:          "FLAC 无损",
 		musicID:          userID,
-		playlists:        samplePlaylists(),
-		selectedPlaylist: 0,
+		selectedPlaylist: -1,
 		downloadDir:      defaultDownloadDir(),
 		coverSize:        "800 px",
 		loggedIn:         api.HasCredential(),
-		userID:           userID,
+		userID:           displayUser,
 		loginType:        loginType,
 	}
-	a.playlistSongs = a.playlists[0].Songs
 	a.recalcOverallProgress()
 	return a
 }

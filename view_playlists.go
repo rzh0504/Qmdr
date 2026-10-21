@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -64,7 +65,16 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 		})
 
 		if len(a.playlists) == 0 {
-			emptyState(c, col, iconLibrary, "还没有歌单", "输入账号后点击“加载歌单”。")
+			title := "还没有歌单"
+			hint := "登录后点击“加载歌单”。"
+			if !a.loggedIn {
+				title = "未登录"
+				hint = "请先在设置页登录。"
+			}
+			emptyState(c, col, iconLibrary, title, hint)
+			if a.playlistErr != "" {
+				ui.Text(c, a.playlistErr).FontSize(9).TextColor(col.red).MaxLines(2)
+			}
 			return
 		}
 
@@ -79,9 +89,7 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 				btn = btn.Background(col.cardHover)
 			}
 			if btn.Clicked() {
-				a.selectedPlaylist = i
-				a.playlistSongs = playlist.Songs
-				a.refresh()
+				a.loadPlaylistSongs(i)
 			}
 			btn.Children(func() {
 				cover(c, col, i+1, 32, iconLibrary)
@@ -104,7 +112,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 		Background(col.card).Border(1, col.border)
 	box.Children(func() {
 		if len(a.playlists) == 0 || a.selectedPlaylist < 0 || a.selectedPlaylist >= len(a.playlists) {
-			emptyState(c, col, iconPlay, "选择一个歌单", "左侧选择歌单后，这里会显示歌曲预览。")
+			emptyState(c, col, iconPlay, "选择一个歌单", "左侧选择歌单后，这里会显示歌曲。")
 			return
 		}
 		playlist := a.playlists[a.selectedPlaylist]
@@ -113,58 +121,132 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 			cover(c, col, a.selectedPlaylist+1, 40, iconLibrary)
 			ui.Column(c).Gap(1).Grow(1).Children(func() {
 				ui.Text(c, playlist.Name).FontSize(15).Bold().TextColor(col.text).SingleLine()
-				ui.Textf(c, "已加载 %d 首（演示数据）", len(playlist.Songs)).
-					FontSize(10).TextColor(col.muted)
+				ui.Textf(c, "%d 首", playlist.Count).FontSize(10).TextColor(col.muted)
 			})
-			primaryButton(c, col, iconDownload, "下载歌单", func() {
-				a.enqueueSongs(playlist.Songs)
-			})
+			if a.loadingSongs {
+				ui.Spinner(c).Size(14, 14)
+			} else if len(a.playlistSongs) > 0 {
+				primaryButton(c, col, iconDownload, "下载歌单", func() {
+					a.enqueueSongs(a.playlistSongs)
+				})
+			}
 		})
 
 		divider(c, col)
 
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "歌曲").FontSize(10).TextColor(col.muted)
-			ui.Spacer(c)
-			ui.Textf(c, "%d 首", len(playlist.Songs)).FontSize(10).TextColor(col.muted)
-		})
-
-		if len(playlist.Songs) == 0 {
+		switch {
+		case a.loadingSongs:
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Spinner(c).Size(14, 14)
+				ui.Text(c, "正在加载歌曲…").FontSize(10).TextColor(col.muted)
+			})
+		case a.playlistErr != "":
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Icon(c, iconAlert).FontSize(13).TextColor(col.red)
+				ui.Text(c, a.playlistErr).FontSize(10).TextColor(col.red).Grow(1).MaxLines(2)
+				secondaryButton(c, col, iconRefresh, "重试", func() {
+					a.loadPlaylistSongs(a.selectedPlaylist)
+				})
+			})
+		case len(a.playlistSongs) == 0:
 			emptyState(c, col, iconMusic, "歌单为空", "这个歌单暂时没有可下载的歌曲。")
-			return
-		}
-
-		ui.Column(c).Gap(0).Children(func() {
-			for i, song := range playlist.Songs {
-				songRow(c, col, song, i, true, nil)
-				if i < len(playlist.Songs)-1 {
-					divider(c, col)
+		default:
+			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "歌曲").FontSize(10).TextColor(col.muted)
+				ui.Spacer(c)
+				ui.Textf(c, "%d 首", len(a.playlistSongs)).FontSize(10).TextColor(col.muted)
+			})
+			ui.Column(c).Gap(0).Children(func() {
+				for i, song := range a.playlistSongs {
+					songRow(c, col, song, i, true, nil)
+					if i < len(a.playlistSongs)-1 {
+						divider(c, col)
+					}
 				}
-			}
-		})
+			})
+		}
 	})
 }
 
 func (a *app) loadPlaylists() {
-	if strings.TrimSpace(a.musicID) == "" {
-		a.setToast("请输入 QQ 号或微信 ID")
-		return
-	}
 	if a.loadingPlaylists {
 		return
 	}
+	if !a.api.HasCredential() {
+		a.setToast("请先登录后读取歌单")
+		return
+	}
+	uin := strings.TrimSpace(a.musicID)
+	if uin == "" || uin == "未登录" {
+		uin = a.api.UserID()
+	}
 	a.loadingPlaylists = true
+	a.playlistErr = ""
 	a.refresh()
 
 	go func() {
-		time.Sleep(850 * time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		items, err := a.api.UserPlaylists(ctx, uin)
+		mapped := make([]Playlist, 0, len(items))
+		for _, item := range items {
+			mapped = append(mapped, Playlist{
+				DirID: item.DirID,
+				TID:   item.TID,
+				Name:  item.Name,
+				Count: item.SongCount,
+			})
+		}
 		a.update(func() {
 			a.loadingPlaylists = false
-			a.playlists = samplePlaylists()
-			a.selectedPlaylist = 0
-			a.playlistSongs = a.playlists[0].Songs
-			a.appendLog("已加载 5 个歌单（演示数据）", "success")
-			a.toast = "已加载 5 个歌单（演示数据）"
+			if err != nil {
+				a.playlistErr = friendlyError(err)
+				a.toast = "读取歌单失败"
+				return
+			}
+			a.playlists = mapped
+			a.selectedPlaylist = -1
+			a.playlistSongs = nil
+			if len(mapped) == 0 {
+				a.toast = "没有找到歌单"
+				return
+			}
+			a.loadPlaylistSongs(0)
+		})
+	}()
+}
+
+func (a *app) loadPlaylistSongs(index int) {
+	if index < 0 || index >= len(a.playlists) {
+		return
+	}
+	playlist := a.playlists[index]
+	a.selectedPlaylist = index
+	a.loadingSongs = true
+	a.playlistErr = ""
+	a.playlistSongs = nil
+	a.playlistSongsID++
+	requestID := a.playlistSongsID
+	a.refresh()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		songs, err := a.api.PlaylistSongs(ctx, playlist.TID, playlist.DirID)
+		mapped := make([]Song, 0, len(songs))
+		for _, song := range songs {
+			mapped = append(mapped, songFromAPI(song))
+		}
+		a.update(func() {
+			if a.playlistSongsID != requestID {
+				return
+			}
+			a.loadingSongs = false
+			if err != nil {
+				a.playlistErr = friendlyError(err)
+				return
+			}
+			a.playlistSongs = mapped
 		})
 	}()
 }
