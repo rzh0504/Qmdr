@@ -4,7 +4,6 @@ go 1.27.1
 
 require (
 	github.com/egoist/mygo v0.5.5
-	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	golang.org/x/net v0.59.0
 )
 

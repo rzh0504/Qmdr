@@ -6,13 +6,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
-	"github.com/skip2/go-qrcode"
 )
 
 type viewID int
@@ -69,6 +67,7 @@ type app struct {
 	qrType   string
 	qrStatus string
 	qrBitmap *ui.Bitmap
+	qrCancel context.CancelFunc
 
 	toast string
 }
@@ -298,52 +297,141 @@ func (a *app) avatar(c *ui.Context, col colors, size float32) {
 }
 
 func (a *app) openQR(kind string) {
+	if a.qrCancel != nil {
+		a.qrCancel()
+		a.qrCancel = nil
+	}
 	a.qrType = kind
 	a.qrOpen = true
-	a.qrStatus = "请使用手机" + kind + "扫码"
+	a.qrStatus = "正在获取二维码…"
 	a.qrBitmap = nil
-	png, err := qrcode.Encode("Qmdr UI demo · "+strings.ToUpper(kind), qrcode.Medium, 512)
-	if err == nil {
-		if bmp, err := ui.DecodeBitmap(png); err == nil {
-			a.qrBitmap = bmp
+	ctx, cancel := context.WithCancel(context.Background())
+	a.qrCancel = cancel
+	a.refresh()
+
+	go func() {
+		qr, err := a.api.StartQRLogin(ctx, kind)
+		if err != nil {
+			a.update(func() {
+				if a.qrOpen {
+					a.qrStatus = "获取二维码失败：" + friendlyError(err)
+				}
+			})
+			return
 		}
+		var bitmap *ui.Bitmap
+		if bmp, err := ui.DecodeBitmap(qr.Image); err == nil {
+			bitmap = bmp
+		}
+		a.update(func() {
+			if !a.qrOpen {
+				return
+			}
+			a.qrBitmap = bitmap
+			a.qrStatus = "请使用手机扫码"
+		})
+
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			result, err := a.api.PollQRLogin(ctx, qr)
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				a.update(func() {
+					if a.qrOpen {
+						a.qrStatus = "登录检查失败：" + friendlyError(err)
+					}
+				})
+				return
+			}
+			done := result.Event == qqmusic.LoginDone
+			stop := done || result.Event == qqmusic.LoginExpired || result.Event == qqmusic.LoginRefused
+			a.update(func() {
+				if !a.qrOpen {
+					return
+				}
+				a.qrStatus = result.Message
+				if done {
+					a.finishLogin()
+				}
+			})
+			if stop {
+				return
+			}
+		}
+	}()
+}
+
+func (a *app) finishLogin() {
+	a.loggedIn = a.api.HasCredential()
+	a.userID = a.api.UserID()
+	if a.userID == "" {
+		a.userID = "未登录"
 	}
+	if a.api.Credential.LoginType == 1 {
+		a.loginType = "微信"
+	} else {
+		a.loginType = "QQ"
+	}
+	a.musicID = a.userID
+	if a.qrCancel != nil {
+		a.qrCancel()
+		a.qrCancel = nil
+	}
+	a.qrOpen = false
+	a.qrBitmap = nil
+	a.qrStatus = ""
+	a.toast = "登录成功"
+	a.refresh()
+}
+
+func (a *app) closeQR() {
+	if a.qrCancel != nil {
+		a.qrCancel()
+		a.qrCancel = nil
+	}
+	a.qrOpen = false
+	a.qrBitmap = nil
+	a.qrStatus = ""
 	a.refresh()
 }
 
 func (a *app) qrModal(c *ui.Context, col colors) {
 	ui.Modal(c, &a.qrOpen, func() {
-		panel := ui.Column(c).Width(340).Padding(20).Gap(14).Radius(12).
+		panel := ui.Column(c).Width(320).Padding(18).Gap(12).Radius(10).
 			Background(col.card).Border(1, col.border).
 			Shadow(0, 16, 48, 0, ui.RGBA(0, 0, 0, 0.18))
 		panel.Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-				ui.Column(c).Gap(3).Grow(1).Children(func() {
-					ui.Textf(c, "%s登录", a.qrType).FontSize(18).Bold().TextColor(col.text)
-					ui.Text(c, "真实扫码登录将在下一步接入，这里是 UI 演示").FontSize(11).TextColor(col.muted)
-				})
-				iconButton(c, col, iconX, "关闭", func() {
-					a.qrOpen = false
-					a.refresh()
-				})
+				ui.Textf(c, "%s登录", a.qrType).FontSize(16).Bold().TextColor(col.text).Grow(1)
+				iconButton(c, col, iconX, "关闭", a.closeQR)
 			})
 
-			qr := ui.Box(c).Size(204, 204).Radius(8).Padding(10).
+			qr := ui.Box(c).Size(196, 196).Radius(6).Padding(8).
 				Background(ui.RGB(255, 255, 255)).Center().Border(1, col.border)
 			qr.Children(func() {
 				if a.qrBitmap != nil {
-					ui.Image(c, a.qrBitmap).Size(184, 184)
+					ui.Image(c, a.qrBitmap).Size(180, 180)
 				} else {
-					ui.Spinner(c).Size(24, 24)
+					ui.Spinner(c).Size(22, 22)
 				}
 			})
 
-			ui.Text(c, a.qrStatus).FontSize(12).TextColor(col.muted)
-			ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
-				secondaryButton(c, col, nil, "关闭", func() {
-					a.qrOpen = false
-					a.refresh()
-				})
+			ui.Text(c, a.qrStatus).FontSize(11).TextColor(col.muted)
+			ui.Row(c).Gap(6).Justify(ui.End).Children(func() {
+				secondaryButton(c, col, nil, "关闭", a.closeQR)
+				if a.qrBitmap != nil {
+					primaryButton(c, col, iconRefresh, "重新获取", func() {
+						a.openQR(a.qrType)
+					})
+				}
 			})
 		})
 	})
@@ -371,6 +459,9 @@ func main() {
 			a.closed = true
 			if a.cancel != nil {
 				a.cancel()
+			}
+			if a.qrCancel != nil {
+				a.qrCancel()
 			}
 		})
 	})

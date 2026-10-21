@@ -67,19 +67,19 @@ type Client struct {
 }
 
 func New() *Client {
-	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.MaxIdleConnsPerHost = 8
-
 	c := &Client{
-		http: &http.Client{
-			Transport: transport,
-			Jar:       jar,
-		},
+		http:  newHTTPClient(),
 		QIMEI: fallbackQIMEI,
 	}
 	c.Credential = loadCredential()
 	return c
+}
+
+func newHTTPClient() *http.Client {
+	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConnsPerHost = 8
+	return &http.Client{Transport: transport, Jar: jar}
 }
 
 func CredentialPath() string {
@@ -106,6 +106,21 @@ func loadCredential() Credential {
 	return c
 }
 
+func (c *Client) SaveCredential() error {
+	path := CredentialPath()
+	if path == "" {
+		return fmt.Errorf("找不到配置目录")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(c.Credential, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
 func (c *Client) ReloadCredential() bool {
 	c.Credential = loadCredential()
 	return c.Credential.Valid()
@@ -123,6 +138,10 @@ func (c *Client) UserID() string {
 }
 
 func (c *Client) call(ctx context.Context, module, method string, params any, out any) error {
+	return c.callWith(ctx, c.http, module, method, params, nil, out)
+}
+
+func (c *Client) callWith(ctx context.Context, hc *http.Client, module, method string, params any, extraCommon map[string]any, out any) error {
 	comm := map[string]any{
 		"cv":         versionCode,
 		"v":          versionCode,
@@ -138,6 +157,9 @@ func (c *Client) call(ctx context.Context, module, method string, params any, ou
 		comm["qq"] = strconv.FormatInt(c.Credential.MusicID, 10)
 		comm["authst"] = c.Credential.Musickey
 		comm["tmeLoginType"] = strconv.Itoa(c.Credential.LoginType)
+	}
+	for k, v := range extraCommon {
+		comm[k] = v
 	}
 
 	key := module + "." + method
@@ -167,7 +189,7 @@ func (c *Client) call(ctx context.Context, module, method string, params any, ou
 		req.AddCookie(&http.Cookie{Name: "tmeLoginType", Value: strconv.Itoa(c.Credential.LoginType)})
 	}
 
-	resp, err := c.http.Do(req)
+	resp, err := hc.Do(req)
 	if err != nil {
 		return err
 	}
