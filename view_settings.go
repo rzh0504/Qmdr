@@ -182,6 +182,7 @@ func (a *app) pickDir() {
 }
 
 func (a *app) reloadCredential() {
+	previousUser := a.userID
 	ok := a.api.ReloadCredential()
 	a.loggedIn = ok
 	a.userID = a.api.UserID()
@@ -192,6 +193,12 @@ func (a *app) reloadCredential() {
 		a.loginType = "微信"
 	} else {
 		a.loginType = "QQ"
+	}
+	if a.userID != previousUser {
+		a.playlists = nil
+		a.selectedPlaylist = -1
+		a.playlistSongs = nil
+		a.restorePlaylistCache()
 	}
 	if ok {
 		a.setToast("已重新加载本地凭证")

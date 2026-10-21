@@ -111,6 +111,7 @@ func newApp() *app {
 		loginType:        loginType,
 	}
 	a.recalcOverallProgress()
+	a.restorePlaylistCache()
 	return a
 }
 
@@ -402,6 +403,10 @@ func (a *app) finishLogin() {
 	a.qrOpen = false
 	a.qrBitmap = nil
 	a.qrStatus = ""
+	a.playlists = nil
+	a.selectedPlaylist = -1
+	a.playlistSongs = nil
+	a.restorePlaylistCache()
 	a.toast = "登录成功"
 	a.refresh()
 }

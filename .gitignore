@@ -21,6 +21,7 @@ wheels/
 music/
 qqmusic_cred.pkl
 qqmusic_cred.json
+playlists.json
 qqmusic_qrcode.png
 qqmusic_credential_*.json
 OPTIMIZATION_NOTES.md

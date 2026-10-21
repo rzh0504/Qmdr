@@ -180,6 +180,9 @@ func (a *app) loadPlaylists() {
 	if uin == "" || uin == "未登录" {
 		uin = a.api.UserID()
 	}
+	if strings.TrimSpace(a.musicID) == "" || a.musicID == "未登录" {
+		a.musicID = uin
+	}
 	a.loadingPlaylists = true
 	a.playlistErr = ""
 	a.refresh()
@@ -207,6 +210,7 @@ func (a *app) loadPlaylists() {
 			a.playlists = mapped
 			a.selectedPlaylist = -1
 			a.playlistSongs = nil
+			a.savePlaylistCache()
 			if len(mapped) == 0 {
 				a.toast = "没有找到歌单"
 				return
@@ -247,6 +251,7 @@ func (a *app) loadPlaylistSongs(index int) {
 				return
 			}
 			a.playlistSongs = mapped
+			a.savePlaylistCache()
 		})
 	}()
 }

@@ -1,21 +1,21 @@
 package main
 
 type Song struct {
-	Mid      string
-	Title    string
-	Artist   string
-	Album    string
-	AlbumMid string
-	Duration string
-	Quality  string
-	VIP      bool
+	Mid      string `json:"mid"`
+	Title    string `json:"title"`
+	Artist   string `json:"artist"`
+	Album    string `json:"album"`
+	AlbumMid string `json:"album_mid"`
+	Duration string `json:"duration"`
+	Quality  string `json:"quality"`
+	VIP      bool   `json:"vip"`
 }
 
 type Playlist struct {
-	DirID int64
-	TID   int64
-	Name  string
-	Count int
+	DirID int64  `json:"dir_id"`
+	TID   int64  `json:"tid"`
+	Name  string `json:"name"`
+	Count int    `json:"count"`
 }
 
 type QueueStatus int
