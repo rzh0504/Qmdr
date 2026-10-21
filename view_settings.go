@@ -288,6 +288,7 @@ func (a *app) reloadCredential() {
 	a.musicIDInput = ""
 	a.musicIDErr = ""
 	a.playlistErr = ""
+	a.playlistNotice = ""
 	a.playlists = nil
 	a.selectedPlaylist = -1
 	a.playlistSongs = nil

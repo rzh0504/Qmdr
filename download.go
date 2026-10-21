@@ -302,6 +302,22 @@ func (a *app) processDownloadSafely(ctx context.Context, runID int, task downloa
 }
 
 func (a *app) processDownload(ctx context.Context, runID int, task downloadTask, dir string, overwrite bool, coverSize int, claims *downloadClaims) {
+	// Each task carries its own cancel so one row can be cancelled without
+	// touching the rest of the queue; the run-level ctx still cancels all.
+	taskCtx, taskCancel := context.WithCancel(ctx)
+	a.taskCancelsMu.Lock()
+	if a.taskCancels == nil {
+		a.taskCancels = make(map[int]context.CancelFunc)
+	}
+	a.taskCancels[task.ID] = taskCancel
+	a.taskCancelsMu.Unlock()
+	defer func() {
+		a.taskCancelsMu.Lock()
+		delete(a.taskCancels, task.ID)
+		a.taskCancelsMu.Unlock()
+		taskCancel()
+	}()
+
 	a.update(func() {
 		if runID != a.runID || a.closed.Load() {
 			return
@@ -317,11 +333,11 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		a.appendLog("开始下载："+task.Title, "info")
 	})
 
-	resolveCtx, cancelResolve := context.WithTimeout(ctx, 30*time.Second)
+	resolveCtx, cancelResolve := context.WithTimeout(taskCtx, 30*time.Second)
 	resolved, err := a.api.ResolveURL(resolveCtx, task.Mid, task.Quality)
 	cancelResolve()
 	if err != nil {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || taskCtx.Err() != nil {
 			a.markCancelled(runID, task)
 			return
 		}
@@ -340,7 +356,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		return
 	}
 
-	written, err := a.api.Download(ctx, resolved.URL, dest, overwrite, func(received, size int64) {
+	written, err := a.api.Download(taskCtx, resolved.URL, dest, overwrite, func(received, size int64) {
 		progress := 0.0
 		if size > 0 {
 			progress = min(1, float64(received)/float64(size))
@@ -357,7 +373,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		})
 	})
 	if err != nil {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || taskCtx.Err() != nil {
 			a.markCancelled(runID, task)
 			return
 		}
@@ -475,6 +491,16 @@ func (a *app) cancelQueue() {
 	if a.cancel != nil {
 		a.cancel()
 		a.setToast("正在取消下载…")
+	}
+}
+
+// cancelTask stops one downloading item and leaves the queue running.
+func (a *app) cancelTask(id int) {
+	a.taskCancelsMu.Lock()
+	cancel := a.taskCancels[id]
+	a.taskCancelsMu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 }
 

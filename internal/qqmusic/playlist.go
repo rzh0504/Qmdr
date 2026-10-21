@@ -3,7 +3,6 @@ package qqmusic
 import (
 	"context"
 	"errors"
-	"fmt"
 )
 
 type Playlist struct {
@@ -51,17 +50,27 @@ func (c *Client) UserPlaylists(ctx context.Context, uin string) ([]Playlist, err
 	return out, nil
 }
 
-func (c *Client) PlaylistSongs(ctx context.Context, tid, dirID int64) ([]Song, error) {
+// PlaylistPage is the songs of one playlist. Total is the count the
+// server reported; Truncated says the playlist holds more songs than the
+// read cap, so Songs is only a prefix of it.
+type PlaylistPage struct {
+	Songs     []Song
+	Total     int
+	Truncated bool
+}
+
+func (c *Client) PlaylistSongs(ctx context.Context, tid, dirID int64) (PlaylistPage, error) {
 	if !c.HasCredential() {
-		return nil, errors.New("需要登录后才能读取歌单")
+		return PlaylistPage{}, errors.New("需要登录后才能读取歌单")
 	}
 	if tid == 0 {
-		return nil, errors.New("歌单缺少 TID")
+		return PlaylistPage{}, errors.New("歌单缺少 TID")
 	}
 	const pageSize = 100
 	const maxSongs = 2000
 
 	var songs []Song
+	var total int
 	for offset := 0; offset < maxSongs; offset += pageSize {
 		var data struct {
 			Total    int        `json:"total_song_num"`
@@ -78,17 +87,25 @@ func (c *Client) PlaylistSongs(ctx context.Context, tid, dirID int64) ([]Song, e
 			"onlysonglist": true,
 		}
 		if err := c.call(ctx, "music.srfDissInfo.DissInfo", "CgiGetDiss", params, &data); err != nil {
-			return nil, err
+			return PlaylistPage{}, err
 		}
+		total = data.Total
 		for _, item := range data.Songlist {
 			songs = append(songs, item.song())
 		}
-		if len(data.Songlist) < pageSize || len(songs) >= data.Total {
+		if len(data.Songlist) < pageSize {
 			break
 		}
-		if data.Total > maxSongs {
-			return songs, fmt.Errorf("歌单歌曲超过 %d 首，已截断", maxSongs)
+		if total > 0 && len(songs) >= total {
+			break
 		}
 	}
-	return songs, nil
+	if len(songs) > maxSongs {
+		songs = songs[:maxSongs]
+	}
+	return PlaylistPage{
+		Songs:     songs,
+		Total:     total,
+		Truncated: len(songs) >= maxSongs && (total <= 0 || total > maxSongs),
+	}, nil
 }

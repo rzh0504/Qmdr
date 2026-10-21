@@ -168,8 +168,8 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem) {
 
 		switch item.Status {
 		case StatusDownloading:
-			iconButton(c, col, iconX, "取消当前任务", func() {
-				a.cancelQueue()
+			iconButton(c, col, iconX, "取消下载 "+item.Song.Title, func() {
+				a.cancelTask(item.ID)
 			})
 		case StatusFailed, StatusCancelled:
 			iconButton(c, col, iconRefresh, "重试 "+item.Song.Title, func() {

@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/rzh0504/qmdr/internal/qqmusic"
 )
 
 func (a *app) playlistsView(c *ui.Context, col colors) {
@@ -182,6 +184,13 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 				emptyState(c, col, iconMusic, "歌单为空", "这个歌单暂时没有可下载的歌曲。")
 			})
 		default:
+			if a.playlistNotice != "" {
+				ui.Row(c).FillWidth().Gap(7).AlignItems(ui.Center).Padding(0, 4).Children(func() {
+					ui.Icon(c, iconAlert).Size(14, 14).TextColor(col.gold)
+					ui.Text(c, a.playlistNotice).FontSize(12).TextColor(col.muted).
+						Grow(1).MaxLines(2)
+				})
+			}
 			listPanel(c, col, "songs-"+a.playlistOwner+"-"+strconv.FormatInt(playlist.TID, 10), func() {
 				for i, song := range a.playlistSongs {
 					i, song := i, song
@@ -473,6 +482,7 @@ func (a *app) applyPlaylistsQuiet(playlists []Playlist) {
 		a.playlistSongsID++
 		a.loadingSongs = false
 		a.playlistErr = ""
+		a.playlistNotice = ""
 		a.resetSongSelection()
 	}
 	if !a.viewingOtherPlaylists() {
@@ -500,12 +510,12 @@ func (a *app) refreshSelectedSongsQuiet() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		songs, err := a.api.PlaylistSongs(ctx, tid, dirID)
+		page, err := a.api.PlaylistSongs(ctx, tid, dirID)
 		if err != nil {
 			return
 		}
-		mapped := make([]Song, 0, len(songs))
-		for _, song := range songs {
+		mapped := make([]Song, 0, len(page.Songs))
+		for _, song := range page.Songs {
 			mapped = append(mapped, songFromAPI(song))
 		}
 		a.update(func() {
@@ -522,6 +532,10 @@ func (a *app) refreshSelectedSongsQuiet() {
 			if a.playlistErr != "" {
 				a.playlistErr = ""
 			}
+			a.playlistNotice = truncationNotice(page)
+			if songsEqual(a.playlistSongs, mapped) {
+				return
+			}
 			if songsEqual(a.playlistSongs, mapped) {
 				return
 			}
@@ -532,6 +546,16 @@ func (a *app) refreshSelectedSongsQuiet() {
 			}
 		})
 	}()
+}
+
+func truncationNotice(page qqmusic.PlaylistPage) string {
+	if !page.Truncated {
+		return ""
+	}
+	if page.Total > 0 {
+		return fmt.Sprintf("歌单共 %d 首，已加载前 %d 首", page.Total, len(page.Songs))
+	}
+	return fmt.Sprintf("歌单较大，已加载前 %d 首", len(page.Songs))
 }
 
 func playlistsEqual(a, b []Playlist) bool {
@@ -569,6 +593,7 @@ func (a *app) loadOwnPlaylists() {
 	a.loadingSongs = false
 	a.playlistOwner = owner
 	a.playlistErr = ""
+	a.playlistNotice = ""
 	a.playlists = nil
 	a.selectedPlaylist = -1
 	a.playlistSongs = nil
@@ -602,6 +627,7 @@ func (a *app) loadPlaylistsFor(owner string) {
 	a.refreshingPlaylists = false
 	a.loadingSongs = false
 	a.playlistErr = ""
+	a.playlistNotice = ""
 	a.playlists = nil
 	a.selectedPlaylist = -1
 	a.playlistSongs = nil
@@ -737,12 +763,14 @@ func (a *app) loadPlaylistSongs(index int) {
 		a.playlistSongsID++
 		a.loadingSongs = false
 		a.playlistErr = "其他用户的「我喜欢」不公开"
+		a.playlistNotice = ""
 		a.playlistSongs = nil
 		a.refresh()
 		return
 	}
 	a.loadingSongs = true
 	a.playlistErr = ""
+	a.playlistNotice = ""
 	a.playlistSongs = nil
 	a.playlistSongsID++
 	requestID := a.playlistSongsID
@@ -751,9 +779,9 @@ func (a *app) loadPlaylistSongs(index int) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		songs, err := a.api.PlaylistSongs(ctx, playlist.TID, playlist.DirID)
-		mapped := make([]Song, 0, len(songs))
-		for _, song := range songs {
+		page, err := a.api.PlaylistSongs(ctx, playlist.TID, playlist.DirID)
+		mapped := make([]Song, 0, len(page.Songs))
+		for _, song := range page.Songs {
 			mapped = append(mapped, songFromAPI(song))
 		}
 		a.update(func() {
@@ -766,6 +794,7 @@ func (a *app) loadPlaylistSongs(index int) {
 				return
 			}
 			a.playlistSongs = mapped
+			a.playlistNotice = truncationNotice(page)
 			a.savePlaylistCache()
 		})
 	}()

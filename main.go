@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -57,6 +58,7 @@ type app struct {
 	refreshingPlaylists bool
 	loadingSongs        bool
 	playlistErr         string
+	playlistNotice      string
 	playlistReq         int
 	playlistSongsID     int
 	playlists           []Playlist
@@ -81,6 +83,11 @@ type app struct {
 	runID       int
 	cancel      context.CancelFunc
 	logBacklog  []LogEntry
+
+	// taskCancels cancels one running download; the run-level cancel above
+	// still cancels every task at once.
+	taskCancelsMu sync.Mutex
+	taskCancels   map[int]context.CancelFunc
 
 	historyStore   *history.Store
 	historyItems   []history.Record
@@ -662,6 +669,7 @@ func (a *app) finishLogin() {
 	a.qrBitmap = nil
 	a.qrStatus = ""
 	a.playlistErr = ""
+	a.playlistNotice = ""
 	a.playlists = nil
 	a.selectedPlaylist = -1
 	a.playlistSongs = nil

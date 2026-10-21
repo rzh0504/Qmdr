@@ -43,43 +43,75 @@ func fileTypesForQuality(quality string) []FileType {
 	}
 }
 
+type vkeyEntry struct {
+	Songmid  string `json:"songmid"`
+	Filename string `json:"filename"`
+	Wifiurl  string `json:"wifiurl"`
+	Purl     string `json:"purl"`
+}
+
+// resolveFromEntries picks the highest-priority candidate that the vkey
+// response can serve. Entries echo the requested filename when the server
+// names them, and otherwise line up with the request order.
+func resolveFromEntries(mid string, candidates []FileType, entries []vkeyEntry) (ResolvedURL, bool) {
+	indexed := make(map[string]int, len(entries))
+	named := false
+	for i, entry := range entries {
+		if entry.Filename != "" {
+			indexed[entry.Filename] = i
+			named = true
+		}
+	}
+	for i, ft := range candidates {
+		index, ok := indexed[ft.Code+mid+mid+ft.Ext]
+		if !ok && !named && i < len(entries) {
+			index, ok = i, true
+		}
+		if !ok {
+			continue
+		}
+		entry := entries[index]
+		if entry.Songmid != "" && entry.Songmid != mid {
+			continue
+		}
+		raw := entry.Wifiurl
+		if raw == "" {
+			raw = entry.Purl
+		}
+		if raw == "" {
+			continue
+		}
+		if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
+			raw = cdnBase + strings.TrimPrefix(raw, "/")
+		}
+		return ResolvedURL{URL: raw, Ext: ft.Ext, Quality: ft.Name}, true
+	}
+	return ResolvedURL{}, false
+}
+
 func (c *Client) ResolveURL(ctx context.Context, mid, quality string) (ResolvedURL, error) {
 	if mid == "" {
 		return ResolvedURL{}, errors.New("歌曲缺少 MID")
 	}
-	for _, ft := range fileTypesForQuality(quality) {
-		params := map[string]any{
-			"filename": []string{ft.Code + mid + mid + ft.Ext},
-			"guid":     randomHex(16),
-			"songmid":  []string{mid},
-			"songtype": []int{0},
-		}
-		var data struct {
-			Midurlinfo []struct {
-				Songmid string `json:"songmid"`
-				Wifiurl string `json:"wifiurl"`
-				Purl    string `json:"purl"`
-			} `json:"midurlinfo"`
-		}
-		if err := c.call(ctx, "music.vkey.GetVkey", "UrlGetVkey", params, &data); err != nil {
-			return ResolvedURL{}, err
-		}
-		for _, info := range data.Midurlinfo {
-			if info.Songmid != "" && info.Songmid != mid {
-				continue
-			}
-			raw := info.Wifiurl
-			if raw == "" {
-				raw = info.Purl
-			}
-			if raw == "" {
-				continue
-			}
-			if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
-				return ResolvedURL{URL: raw, Ext: ft.Ext, Quality: ft.Name}, nil
-			}
-			return ResolvedURL{URL: cdnBase + strings.TrimPrefix(raw, "/"), Ext: ft.Ext, Quality: ft.Name}, nil
-		}
+	candidates := fileTypesForQuality(quality)
+	filenames := make([]string, 0, len(candidates))
+	for _, ft := range candidates {
+		filenames = append(filenames, ft.Code+mid+mid+ft.Ext)
+	}
+	params := map[string]any{
+		"filename": filenames,
+		"guid":     randomHex(16),
+		"songmid":  []string{mid},
+		"songtype": []int{0},
+	}
+	var data struct {
+		Midurlinfo []vkeyEntry `json:"midurlinfo"`
+	}
+	if err := c.call(ctx, "music.vkey.GetVkey", "UrlGetVkey", params, &data); err != nil {
+		return ResolvedURL{}, err
+	}
+	if resolved, ok := resolveFromEntries(mid, candidates, data.Midurlinfo); ok {
+		return resolved, nil
 	}
 	if !c.HasCredential() {
 		return ResolvedURL{}, errors.New("需要登录后才能获取该歌曲的下载链接")
