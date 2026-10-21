@@ -100,7 +100,7 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 					a.loadPlaylistSongs(i)
 				}
 				btn.Children(func() {
-					playlistCover(c, col, playlist, 30)
+					playlistIcon(c, col, playlist, 30)
 					ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
 						ui.Text(c, playlist.Name).FontSize(13).FontWeight(400).
 							TextColor(col.text).SingleLine()
@@ -124,7 +124,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 		playlist := a.playlists[a.selectedPlaylist]
 
 		ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).Children(func() {
-			playlistCover(c, col, playlist, 44)
+			playlistIcon(c, col, playlist, 44)
 			ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
 				ui.Text(c, playlist.Name).FontSize(16).FontWeight(600).
 					TextColor(col.text).SingleLine()
