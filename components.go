@@ -80,8 +80,7 @@ func sectionHeader(c *ui.Context, col colors, title string, trailing func()) ui.
 }
 
 func searchBox(c *ui.Context, col colors, query *string, placeholder string, onSubmit, onClear func()) ui.Element {
-	row := ui.Row(c).Gap(7).Padding(0, 11).Height(34).Radius(8).
-		Background(col.control).AlignItems(ui.Center)
+	row := ui.Row(c).Gap(7).Padding(0, 11).Height(34).AlignItems(ui.Center)
 	var input ui.Element
 	row.Children(func() {
 		ui.Icon(c, iconSearch).Size(15, 15).TextColor(col.faint)
@@ -89,7 +88,7 @@ func searchBox(c *ui.Context, col colors, query *string, placeholder string, onS
 			Placeholder(placeholder).
 			Label(placeholder).
 			FontSize(13).
-			Grow(1).MinWidth(0).Height(26)
+			Grow(1).MinWidth(0).Height(26).FocusRing(false)
 		if input.Submitted() && onSubmit != nil {
 			onSubmit()
 		}
@@ -98,11 +97,7 @@ func searchBox(c *ui.Context, col colors, query *string, placeholder string, onS
 		}
 	})
 	glow := row.Animate("focus", b2f(input.Focused()), 120*time.Millisecond)
-	row.InsetShadow(0, 0, 0, 1, col.fieldStroke)
-	if glow > 0 {
-		row.Shadow(0, 0, 0, 3.5*glow, col.accent.Alpha(0.32*glow)).
-			InsetShadow(0, 0, 0, 1, col.accent.Alpha(0.75*glow))
-	}
+	smoothField(row, col, 8, col.control, col.fieldStroke, col.accent, glow)
 	return row
 }
 
@@ -210,7 +205,7 @@ func primaryButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClic
 }
 
 func secondaryButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClick func()) ui.Element {
-	btn := ui.ButtonBase(c).Height(30).Padding(0, 12).Gap(6).Radius(8).
+	btn := ui.ButtonBase(c).Height(30).Padding(0, 12).Gap(6).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label)
 	bg := col.control
 	if btn.Pressed() {
@@ -218,7 +213,7 @@ func secondaryButton(c *ui.Context, col colors, icon *ui.SVG, label string, onCl
 	} else if btn.Hovered() {
 		bg = col.controlHover
 	}
-	face(btn, col, bg)
+	smoothFace(btn, col, 8, bg)
 	if btn.Clicked() && onClick != nil {
 		onClick()
 	}
@@ -349,9 +344,8 @@ func stringSegmented(c *ui.Context, col colors, value *string, values, labels []
 }
 
 func stepperControl(c *ui.Context, col colors, value *float64, lo, hi, step float64, onChange func()) ui.Element {
-	box := ui.Row(c).Height(30).Padding(2, 3).Radius(7).Background(col.control).
-		AlignItems(ui.Center)
-	face(box, col, col.control)
+	box := ui.Row(c).Height(30).Padding(2, 3).AlignItems(ui.Center)
+	smoothFace(box, col, 7, col.control)
 	change := func(next float64) {
 		*value = min(hi, max(lo, next))
 		if onChange != nil {

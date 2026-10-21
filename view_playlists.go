@@ -20,12 +20,7 @@ func (a *app) playlistsView(c *ui.Context, col colors) {
 func (a *app) playlistLoader(c *ui.Context, col colors) {
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Wrap().Children(func() {
 		ui.Text(c, "QQ 号 / 微信 ID").FontSize(12).TextColor(col.muted)
-		ui.TextInput(c, &a.musicID).
-			Placeholder("QQ 号 / 微信 ID").
-			Label("QQ 号或微信 ID").
-			Width(190).Height(34).FontSize(13).
-			Background(col.control).InsetShadow(0, 0, 0, 1, col.fieldStroke).
-			Radius(8)
+		a.textField(c, col, &a.musicID, "QQ 号 / 微信 ID", 190, 34, nil)
 		if a.loadingPlaylists {
 			secondaryButton(c, col, nil, "正在加载…", nil).Disabled(true)
 		} else {

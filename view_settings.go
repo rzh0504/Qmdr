@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -52,13 +53,22 @@ func (a *app) settingRow(c *ui.Context, col colors, label, detail string, first 
 	})
 }
 
-func (a *app) textField(c *ui.Context, col colors, value *string, placeholder string, width float32) ui.Element {
-	return ui.TextInput(c, value).
-		Placeholder(placeholder).
-		Label(placeholder).
-		Width(width).Height(30).FontSize(13).
-		Background(col.control).InsetShadow(0, 0, 0, 1, col.fieldStroke).
-		Radius(7)
+func (a *app) textField(c *ui.Context, col colors, value *string, placeholder string, width, height float32, onChange func()) ui.Element {
+	frame := ui.Row(c).Width(width).Height(height).AlignItems(ui.Center)
+	var input ui.Element
+	frame.Children(func() {
+		input = ui.TextInputBase(c, value).
+			Placeholder(placeholder).
+			Label(placeholder).
+			FontSize(13).Grow(1).MinWidth(0).Height(height - 4).
+			FocusRing(false)
+	})
+	if input.Changed() && onChange != nil {
+		onChange()
+	}
+	glow := frame.Animate("focus", b2f(input.Focused()), 120*time.Millisecond)
+	smoothField(frame, col, 7, col.control, col.fieldStroke, col.accent, glow)
+	return frame
 }
 
 func (a *app) accountSettings(c *ui.Context, col colors) {
@@ -161,10 +171,9 @@ func (a *app) backgroundTile(c *ui.Context, col colors, w wash) {
 
 func (a *app) downloadSettings(c *ui.Context, col colors) {
 	a.settingRow(c, col, "下载目录", "", true, func() {
-		input := a.textField(c, col, &a.downloadDir, "选择下载目录", 300)
-		if input.Changed() {
+		a.textField(c, col, &a.downloadDir, "选择下载目录", 300, 30, func() {
 			a.saveSettings()
-		}
+		})
 		secondaryButton(c, col, iconFolder, "选择…", func() {
 			a.pickDir()
 		})

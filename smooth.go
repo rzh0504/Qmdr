@@ -121,6 +121,47 @@ func smoothGradientTile(e ui.Element, col colors, radius float32, base, glow ui.
 	return e
 }
 
+// smoothFace fills and lifts a control's face in a continuous rounded
+// rectangle, with the shadow of its secondary buttons.
+func smoothFace(e ui.Element, col colors, radius float32, fill ui.Color) ui.Element {
+	e.Radius(radius)
+	if runtime.GOOS == "darwin" {
+		return face(e, col, fill)
+	}
+	if col.dark {
+		e = lift(e, col)
+	} else {
+		e = e.Shadow(0, 0.5, 1.5, 0, ui.RGBA(0, 0, 0, 0.13)).
+			Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.05))
+	}
+	e.Draw(func(p *ui.Painter, r ui.Rect) {
+		path := smoothRectPath(r, radius)
+		p.FillPath(&path, fill)
+		if col.dark {
+			p.StrokePath(&path, 1, col.edge)
+		}
+	})
+	return e
+}
+
+// smoothField fills a text field's frame in a continuous rounded
+// rectangle, with its inside stroke and the glow of a focus.
+func smoothField(e ui.Element, col colors, radius float32, fill, stroke, focus ui.Color, glow float32) ui.Element {
+	e.Radius(radius)
+	if glow > 0 {
+		e.Shadow(0, 0, 0, 3.5*glow, focus.Alpha(0.32*glow))
+	}
+	e.Draw(func(p *ui.Painter, r ui.Rect) {
+		path := smoothRectPath(r, radius)
+		p.FillPath(&path, fill)
+		p.StrokePath(&path, 1, stroke)
+		if glow > 0 {
+			p.StrokePath(&path, 1, focus.Alpha(0.75*glow))
+		}
+	})
+	return e
+}
+
 // smoothPanel fills e's surface with a continuous rounded rectangle on
 // platforms whose renderer rounds corners circularly; on macOS MyGo draws
 // it continuously already, and e keeps its background, border and clip.
