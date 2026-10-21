@@ -11,8 +11,13 @@ import (
 )
 
 func (a *app) searchView(c *ui.Context, col colors) {
+	a.loadExplore(false)
 	a.searchToolbar(c, col)
-	a.searchResults(c, col)
+	if a.search.searched {
+		a.searchResults(c, col)
+		return
+	}
+	a.exploreView(c, col)
 }
 
 func (a *app) searchToolbar(c *ui.Context, col colors) {
@@ -28,9 +33,13 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 			})
 		})
 
+		tags := a.search.hotSearches
+		if len(tags) == 0 {
+			tags = []string{"周杰伦", "华语流行", "深夜电台", "G.E.M. 邓紫棋", "陈奕迅"}
+		}
 		ui.Row(c).Gap(2).AlignItems(ui.Center).Wrap().Children(func() {
 			ui.Text(c, "试试").FontSize(12).TextColor(col.faint).Padding(0, 6, 0, 0)
-			for _, tag := range []string{"周杰伦", "华语流行", "深夜电台", "G.E.M. 邓紫棋", "陈奕迅"} {
+			for _, tag := range tags {
 				tag := tag
 				textLink(c, col, tag, func() {
 					a.search.query = tag
@@ -44,15 +53,160 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 const (
 	searchPageSize          = 20
 	searchLoadMoreThreshold = 120
+	hotSearchCount          = 8
+	exploreChartLimit       = 20
 )
 
-func (a *app) searchResults(c *ui.Context, col colors) {
-	if !a.search.searched {
-		ui.Column(c).Grow(1).FillWidth().Center().Children(func() {
-			emptyState(c, col, iconSearch, "搜索", "支持歌曲、歌手、专辑搜索")
+// exploreChartSpecs are the toplists on the search page, in order.
+var exploreChartSpecs = []struct {
+	id   int
+	name string
+}{
+	{26, "热歌榜"},
+	{62, "飙升榜"},
+	{427, "新歌榜"},
+}
+
+// loadExplore fills the page shown before a search with hot terms and the
+// three toplist cards. It fetches once per session, and again when asked.
+func (a *app) loadExplore(force bool) {
+	if a.search.exploreLoading || (a.search.exploreLoaded && !force) {
+		return
+	}
+	previous := append([]chartPreview(nil), a.search.charts...)
+	a.search.exploreLoading = true
+	var hot []string
+	var charts []chartPreview
+	a.async(&a.search.exploreSlot, 30*time.Second,
+		func(ctx context.Context) error {
+			hot, _ = a.api.HotSearches(ctx, hotSearchCount)
+			charts = make([]chartPreview, 0, len(exploreChartSpecs))
+			for _, spec := range exploreChartSpecs {
+				chart, err := a.api.Chart(ctx, spec.id, exploreChartLimit)
+				if err != nil {
+					charts = append(charts, chartPreview{id: spec.id, name: spec.name, err: friendlyError(err)})
+					continue
+				}
+				name := chart.Title
+				if name == "" {
+					name = spec.name
+				}
+				charts = append(charts, chartPreview{
+					id:    spec.id,
+					name:  name,
+					songs: mapSearchSongs(chart.Songs),
+				})
+			}
+			return nil
+		},
+		func(err error) {
+			a.search.exploreLoading = false
+			a.search.exploreLoaded = true
+			if err != nil {
+				return
+			}
+			if len(hot) > 0 {
+				a.search.hotSearches = hot
+			}
+			old := make(map[int]chartPreview, len(previous))
+			for _, chart := range previous {
+				old[chart.id] = chart
+			}
+			failed := 0
+			for i := range charts {
+				if charts[i].err == "" {
+					continue
+				}
+				if prev, ok := old[charts[i].id]; ok && len(prev.songs) > 0 {
+					charts[i] = prev
+					continue
+				}
+				failed++
+			}
+			a.search.charts = charts
+			if failed > 0 && len(previous) > 0 {
+				if failed == len(charts) {
+					a.toast = "榜单刷新失败"
+				} else {
+					a.toast = "部分榜单刷新失败"
+				}
+			}
+		})
+}
+
+func (a *app) exploreView(c *ui.Context, col colors) {
+	if len(a.search.charts) == 0 {
+		if a.search.exploreLoading {
+			softCard(c, col, func() {
+				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
+					ui.Spinner(c).Size(15, 15)
+					ui.Text(c, "正在加载热门榜单…").FontSize(12).TextColor(col.muted)
+				})
+			})
+			return
+		}
+		softCard(c, col, func() {
+			ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
+				ui.Icon(c, iconAlert).Size(15, 15).TextColor(col.red)
+				ui.Text(c, "热门内容暂时不可用").FontSize(12).TextColor(col.muted).Grow(1).MaxLines(2)
+				secondaryButton(c, col, iconRefresh, "重试", func() {
+					a.loadExplore(true)
+				})
+			})
 		})
 		return
 	}
+
+	sectionHeader(c, col, "热门榜单", nil)
+	ui.Row(c).Gap(14).AlignItems(ui.Start).Children(func() {
+		for _, chart := range a.search.charts {
+			chart := chart
+			a.chartCard(c, col, chart)
+		}
+	})
+}
+
+func (a *app) chartCard(c *ui.Context, col colors, chart chartPreview) {
+	ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
+		ui.Text(c, chart.name).FontSize(13).FontWeight(600).TextColor(col.text).SingleLine()
+		if chart.err != "" {
+			ui.Text(c, chart.err).FontSize(11).TextColor(col.muted).MaxLines(2)
+			textLink(c, col, "重试", func() {
+				a.loadExplore(true)
+			})
+			return
+		}
+		if len(chart.songs) == 0 {
+			ui.Text(c, "暂无内容").FontSize(11).TextColor(col.faint)
+			return
+		}
+		sheet(c, col, func() {
+			for i, song := range chart.songs {
+				song := song
+				a.chartSongRow(c, col, song, i)
+			}
+		})
+	})
+}
+
+func (a *app) chartSongRow(c *ui.Context, col colors, song Song, index int) {
+	row := ui.Row(c).Gap(7).Padding(4, 6).Height(42).Radius(7).AlignItems(ui.Center)
+	if row.Hovered() {
+		row.Background(col.rowSelected)
+		row = chosen(row, col)
+	}
+	row.Children(func() {
+		ui.Textf(c, "%02d", index+1).Width(17).FontSize(10).TextColor(col.faint)
+		a.cover(c, col, song.AlbumMid, 26)
+		ui.Column(c).Gap(1).Grow(1).MinWidth(0).Children(func() {
+			ui.Text(c, song.Title).FontSize(12).FontWeight(400).TextColor(col.text).SingleLine().Ellipsis("…")
+			ui.Text(c, song.Artist).FontSize(10).TextColor(col.muted).SingleLine().Ellipsis("…")
+		})
+	})
+	a.openSongMenu(row, song, false)
+}
+
+func (a *app) searchResults(c *ui.Context, col colors) {
 	if a.search.hasMore && !a.search.loading && !a.search.loadingMore &&
 		a.search.scroll.MaxY > 0 &&
 		a.search.scroll.Y >= a.search.scroll.MaxY-searchLoadMoreThreshold {

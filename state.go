@@ -10,7 +10,8 @@ import (
 )
 
 // searchState is the search page: the query, whether a fetch is running,
-// and its result or error.
+// and its result or error. The explore fields hold what the page shows
+// before a search.
 type searchState struct {
 	slot asyncSlot
 
@@ -24,6 +25,20 @@ type searchState struct {
 	hasMore     bool
 	loadingMore bool
 	scroll      ui.ScrollState
+
+	hotSearches    []string
+	charts         []chartPreview
+	exploreSlot    asyncSlot
+	exploreLoading bool
+	exploreLoaded  bool
+}
+
+// chartPreview is one toplist card on the search page.
+type chartPreview struct {
+	id    int
+	name  string
+	songs []Song
+	err   string
 }
 
 // playlistState is the playlists page: the list on the left, the songs of
