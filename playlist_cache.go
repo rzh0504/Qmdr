@@ -48,6 +48,7 @@ func (a *app) restorePlaylistCache() {
 	if !ok || !a.api.HasCredential() || cache.UserID != a.api.UserID() || len(cache.Playlists) == 0 {
 		return
 	}
+	a.playlistOwner = a.api.UserID()
 	a.playlists = cache.Playlists
 	a.selectedPlaylist = cache.Selected
 	a.playlistSongs = cache.Songs
@@ -62,11 +63,11 @@ func (a *app) savePlaylistCache() {
 	if path == "" {
 		return
 	}
-	userID := strings.TrimSpace(a.musicID)
-	if userID == "" || userID == "未登录" {
-		userID = a.api.UserID()
+	owner := strings.TrimSpace(a.playlistOwner)
+	if owner == "" {
+		owner = a.api.UserID()
 	}
-	if userID == "" {
+	if owner == "" || owner == "未登录" || owner != a.api.UserID() {
 		return
 	}
 	selected := a.selectedPlaylist
@@ -75,7 +76,7 @@ func (a *app) savePlaylistCache() {
 	}
 	cache := playlistCache{
 		Version:   playlistCacheVersion,
-		UserID:    userID,
+		UserID:    owner,
 		Playlists: a.playlists,
 		Selected:  selected,
 		Songs:     a.playlistSongs,

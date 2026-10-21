@@ -6,18 +6,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 )
 
 func (a *app) playlistsView(c *ui.Context, col colors) {
-	ui.Column(c).Fill().Gap(12).Children(func() {
-		a.playlistLoader(c, col)
-
-		ui.Row(c).Grow(1).MinHeight(0).FillWidth().AlignItems(ui.Stretch).Gap(16).Children(func() {
-			a.playlistSidebar(c, col)
-			a.playlistPreview(c, col)
-		})
+	ui.Row(c).Fill().AlignItems(ui.Stretch).Gap(16).Children(func() {
+		a.playlistSidebar(c, col)
+		a.playlistPreview(c, col)
 	})
+}
+
+func (a *app) viewingOtherPlaylists() bool {
+	owner := strings.TrimSpace(a.playlistOwner)
+	return owner != "" && owner != a.api.UserID()
 }
 
 func listPanel(c *ui.Context, col colors, key string, fn func()) ui.Element {
@@ -29,28 +31,20 @@ func listPanel(c *ui.Context, col colors, key string, fn func()) ui.Element {
 	return panel
 }
 
-func (a *app) playlistLoader(c *ui.Context, col colors) {
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Wrap().Children(func() {
-		ui.Text(c, "QQ 号 / 微信 ID").FontSize(12).TextColor(col.muted)
-		a.textField(c, col, &a.musicID, "QQ 号 / 微信 ID", 190, 34, nil)
-		if a.loadingPlaylists {
-			secondaryButton(c, col, nil, "正在加载…", nil).Disabled(true)
-		} else {
-			secondaryButton(c, col, iconRefresh, "加载歌单", func() {
-				a.loadPlaylists()
-			})
-		}
-		ui.Spacer(c)
-		if len(a.playlists) > 0 {
-			ui.Textf(c, "%d 个歌单", len(a.playlists)).FontSize(12).TextColor(col.faint)
-		}
-	})
-}
-
 func (a *app) playlistSidebar(c *ui.Context, col colors) {
 	ui.Column(c).Width(264).FillHeight().MinHeight(0).Gap(12).Children(func() {
+		title := "我的歌单"
+		if a.viewingOtherPlaylists() {
+			title = "其他用户的歌单"
+		}
 		ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).Padding(0, 4).Children(func() {
-			ui.Text(c, "我的歌单").FontSize(12).FontWeight(600).TextColor(col.muted).Grow(1)
+			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+				ui.Text(c, title).FontSize(12).FontWeight(600).TextColor(col.muted)
+				if a.viewingOtherPlaylists() {
+					ui.Text(c, a.playlistOwner).FontSize(11).TextColor(col.faint).
+						SingleLine().Ellipsis("…")
+				}
+			})
 			if len(a.playlists) > 0 {
 				ui.Textf(c, "%d", len(a.playlists)).FontSize(12).TextColor(col.faint)
 			}
@@ -59,10 +53,14 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 		if len(a.playlists) == 0 {
 			sheet(c, col, func() {
 				title := "还没有歌单"
-				hint := "登录后点击“加载歌单”。"
-				if !a.loggedIn {
+				hint := "点击右上角刷新读取歌单。"
+				switch {
+				case !a.loggedIn:
 					title = "未登录"
 					hint = "请先在设置页登录。"
+				case a.viewingOtherPlaylists():
+					title = "没有公开歌单"
+					hint = "该用户没有可读取的公开歌单，或 ID 无效。"
 				}
 				emptyState(c, col, iconLibrary, title, hint)
 			})
@@ -72,7 +70,7 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 			return
 		}
 
-		listPanel(c, col, "playlists", func() {
+		listPanel(c, col, "playlists-"+a.playlistOwner, func() {
 			for i, playlist := range a.playlists {
 				i, playlist := i, playlist
 				selected := i == a.selectedPlaylist
@@ -150,7 +148,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 				emptyState(c, col, iconMusic, "歌单为空", "这个歌单暂时没有可下载的歌曲。")
 			})
 		default:
-			listPanel(c, col, "songs-"+strconv.Itoa(a.selectedPlaylist), func() {
+			listPanel(c, col, "songs-"+a.playlistOwner+"-"+strconv.Itoa(a.selectedPlaylist), func() {
 				for i, song := range a.playlistSongs {
 					a.songRow(c, col, song, i, true, nil)
 				}
@@ -160,28 +158,65 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 }
 
 func (a *app) loadPlaylists() {
-	if a.loadingPlaylists {
+	owner := strings.TrimSpace(a.playlistOwner)
+	if owner == "" || owner == "未登录" {
+		owner = a.api.UserID()
+	}
+	a.loadPlaylistsFor(owner)
+}
+
+func (a *app) loadOwnPlaylists() {
+	a.musicIDOpen = false
+	a.musicIDErr = ""
+	owner := a.api.UserID()
+	a.playlistReq++
+	a.playlistSongsID++
+	a.loadingPlaylists = false
+	a.loadingSongs = false
+	a.playlistOwner = owner
+	a.playlistErr = ""
+	a.playlists = nil
+	a.selectedPlaylist = -1
+	a.playlistSongs = nil
+	a.restorePlaylistCache()
+	if len(a.playlists) > 0 {
+		a.refresh()
 		return
 	}
+	a.loadPlaylistsFor(owner)
+}
+
+func (a *app) loadPlaylistsFor(owner string) {
 	if !a.api.HasCredential() {
 		a.setToast("请先登录后读取歌单")
 		return
 	}
-	uin := strings.TrimSpace(a.musicID)
-	if uin == "" || uin == "未登录" {
-		uin = a.api.UserID()
+	owner = strings.TrimSpace(owner)
+	if owner == "" || owner == "未登录" {
+		owner = a.api.UserID()
 	}
-	if strings.TrimSpace(a.musicID) == "" || a.musicID == "未登录" {
-		a.musicID = uin
+	if owner == "" {
+		a.setToast("缺少 music ID")
+		return
 	}
+	a.playlistReq++
+	requestID := a.playlistReq
+	a.playlistSongsID++
+	a.playlistOwner = owner
 	a.loadingPlaylists = true
+	a.loadingSongs = false
 	a.playlistErr = ""
+	a.playlists = nil
+	a.selectedPlaylist = -1
+	a.playlistSongs = nil
+	a.musicIDOpen = false
+	a.musicIDErr = ""
 	a.refresh()
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 		defer cancel()
-		items, err := a.api.UserPlaylists(ctx, uin)
+		items, err := a.api.UserPlaylists(ctx, owner)
 		mapped := make([]Playlist, 0, len(items))
 		for _, item := range items {
 			mapped = append(mapped, Playlist{
@@ -192,6 +227,9 @@ func (a *app) loadPlaylists() {
 			})
 		}
 		a.update(func() {
+			if requestID != a.playlistReq {
+				return
+			}
 			a.loadingPlaylists = false
 			if err != nil {
 				a.playlistErr = friendlyError(err)
@@ -201,14 +239,92 @@ func (a *app) loadPlaylists() {
 			a.playlists = mapped
 			a.selectedPlaylist = -1
 			a.playlistSongs = nil
-			a.savePlaylistCache()
+			if !a.viewingOtherPlaylists() {
+				a.savePlaylistCache()
+			}
 			if len(mapped) == 0 {
-				a.toast = "没有找到歌单"
+				if a.viewingOtherPlaylists() {
+					a.toast = "该用户没有公开歌单"
+				} else {
+					a.toast = "没有找到歌单"
+				}
 				return
 			}
 			a.loadPlaylistSongs(0)
 		})
 	}()
+}
+
+func (a *app) openMusicIDModal() {
+	a.musicIDInput = ""
+	a.musicIDErr = ""
+	a.musicIDOpen = true
+	a.refresh()
+}
+
+func (a *app) closeMusicIDModal() {
+	a.musicIDOpen = false
+	a.musicIDErr = ""
+	a.refresh()
+}
+
+func (a *app) submitMusicID() {
+	id := strings.TrimSpace(a.musicIDInput)
+	if !validMusicID(id) {
+		a.musicIDErr = "请输入数字 music ID"
+		a.refresh()
+		return
+	}
+	if !a.api.HasCredential() {
+		a.musicIDErr = "请先登录后再查看歌单"
+		a.refresh()
+		return
+	}
+	a.musicIDOpen = false
+	a.musicIDErr = ""
+	if id == a.api.UserID() {
+		a.loadOwnPlaylists()
+		return
+	}
+	a.loadPlaylistsFor(id)
+}
+
+func validMusicID(id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, r := range id {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *app) musicIDModal(c *ui.Context, col colors) {
+	ui.Modal(c, &a.musicIDOpen, func() {
+		panel := ui.Column(c).Width(376).Padding(18).Gap(14).Radius(16).
+			Material(glass.Glass{}).
+			Shadow(0, 1, 3, 0, col.shadow).
+			Shadow(0, 16, 40, 0, col.floatShadow)
+		panel.Children(func() {
+			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+				ui.Text(c, "查看用户歌单").FontSize(15).FontWeight(600).
+					TextColor(col.text).Grow(1)
+				iconButton(c, col, iconX, "关闭", a.closeMusicIDModal)
+			})
+			ui.Text(c, "输入 QQ 音乐的数字 music ID，查看该用户公开的歌单。其他用户的「我喜欢」不可读取。").
+				FontSize(12).TextColor(col.muted).MaxWidth(340).LineHeight(1.45)
+			a.textField(c, col, &a.musicIDInput, "QQ 音乐数字 ID", 340, 34, nil, a.submitMusicID)
+			if a.musicIDErr != "" {
+				ui.Text(c, a.musicIDErr).FontSize(12).TextColor(col.red)
+			}
+			ui.Row(c).Gap(6).Justify(ui.End).Children(func() {
+				secondaryButton(c, col, nil, "取消", a.closeMusicIDModal)
+				primaryButton(c, col, iconUser, "查看", a.submitMusicID)
+			})
+		})
+	})
 }
 
 func (a *app) loadPlaylistSongs(index int) {
@@ -217,6 +333,14 @@ func (a *app) loadPlaylistSongs(index int) {
 	}
 	playlist := a.playlists[index]
 	a.selectedPlaylist = index
+	if playlist.DirID == 201 && a.viewingOtherPlaylists() {
+		a.playlistSongsID++
+		a.loadingSongs = false
+		a.playlistErr = "其他用户的「我喜欢」不公开"
+		a.playlistSongs = nil
+		a.refresh()
+		return
+	}
 	a.loadingSongs = true
 	a.playlistErr = ""
 	a.playlistSongs = nil

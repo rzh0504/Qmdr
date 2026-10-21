@@ -50,14 +50,19 @@ type app struct {
 	searchID    int
 	results     []Song
 
-	musicID          string
+	playlistOwner    string
 	loadingPlaylists bool
 	loadingSongs     bool
 	playlistErr      string
+	playlistReq      int
 	playlistSongsID  int
 	playlists        []Playlist
 	selectedPlaylist int
 	playlistSongs    []Song
+
+	musicIDOpen  bool
+	musicIDInput string
+	musicIDErr   string
 
 	queue           []QueueItem
 	queueFilter     int
@@ -110,7 +115,7 @@ func newApp() *app {
 		coverSem:         make(chan struct{}, coverFetchLimit),
 		view:             viewSearch,
 		quality:          settings.Quality,
-		musicID:          userID,
+		playlistOwner:    userID,
 		selectedPlaylist: -1,
 		downloadDir:      settings.DownloadDir,
 		coverSize:        settings.CoverSize,
@@ -187,6 +192,7 @@ func (a *app) viewRoot(c *ui.Context) {
 	})
 
 	a.qrModal(c, col)
+	a.musicIDModal(c, col)
 }
 
 func (a *app) cardHeader(c *ui.Context, col colors) {
@@ -220,6 +226,11 @@ func (a *app) headerActions(c *ui.Context, col colors) {
 	case viewSearch, viewSettings:
 		iconButton(c, col, iconFolder, "打开下载目录", a.openDownloadDir)
 	case viewPlaylists:
+		if a.viewingOtherPlaylists() {
+			secondaryButton(c, col, iconChevronLeft, "返回我的", a.loadOwnPlaylists)
+		} else {
+			secondaryButton(c, col, iconUser, "按 ID 查看", a.openMusicIDModal)
+		}
 		if a.loadingPlaylists {
 			ui.Spinner(c).Size(14, 14).Margin(4, 0, 4, 0)
 		} else {
@@ -576,7 +587,12 @@ func (a *app) finishLogin() {
 	} else {
 		a.loginType = "QQ"
 	}
-	a.musicID = a.userID
+	a.playlistOwner = a.api.UserID()
+	a.playlistReq++
+	a.loadingPlaylists = false
+	a.musicIDOpen = false
+	a.musicIDInput = ""
+	a.musicIDErr = ""
 	if a.qrCancel != nil {
 		a.qrCancel()
 		a.qrCancel = nil
@@ -584,6 +600,7 @@ func (a *app) finishLogin() {
 	a.qrOpen = false
 	a.qrBitmap = nil
 	a.qrStatus = ""
+	a.playlistErr = ""
 	a.playlists = nil
 	a.selectedPlaylist = -1
 	a.playlistSongs = nil

@@ -53,7 +53,7 @@ func (a *app) settingRow(c *ui.Context, col colors, label, detail string, first 
 	})
 }
 
-func (a *app) textField(c *ui.Context, col colors, value *string, placeholder string, width, height float32, onChange func()) ui.Element {
+func (a *app) textField(c *ui.Context, col colors, value *string, placeholder string, width, height float32, onChange, onSubmit func()) ui.Element {
 	frame := ui.Row(c).Width(width).Height(height).AlignItems(ui.Center)
 	var input ui.Element
 	frame.Children(func() {
@@ -65,6 +65,9 @@ func (a *app) textField(c *ui.Context, col colors, value *string, placeholder st
 	})
 	if input.Changed() && onChange != nil {
 		onChange()
+	}
+	if input.Submitted() && onSubmit != nil {
+		onSubmit()
 	}
 	glow := frame.Animate("focus", b2f(input.Focused()), 120*time.Millisecond)
 	smoothField(frame, col, 7, col.control, col.fieldStroke, col.accent, glow)
@@ -173,7 +176,7 @@ func (a *app) downloadSettings(c *ui.Context, col colors) {
 	a.settingRow(c, col, "下载目录", "", true, func() {
 		a.textField(c, col, &a.downloadDir, "选择下载目录", 300, 30, func() {
 			a.saveSettings()
-		})
+		}, nil)
 		secondaryButton(c, col, iconFolder, "选择…", func() {
 			a.pickDir()
 		})
@@ -250,7 +253,6 @@ func (a *app) pickDir() {
 }
 
 func (a *app) reloadCredential() {
-	previousUser := a.userID
 	ok := a.api.ReloadCredential()
 	a.loggedIn = ok
 	a.userID = a.api.UserID()
@@ -262,12 +264,19 @@ func (a *app) reloadCredential() {
 	} else {
 		a.loginType = "QQ"
 	}
-	if a.userID != previousUser {
-		a.playlists = nil
-		a.selectedPlaylist = -1
-		a.playlistSongs = nil
-		a.restorePlaylistCache()
-	}
+	a.playlistReq++
+	a.playlistSongsID++
+	a.loadingPlaylists = false
+	a.loadingSongs = false
+	a.playlistOwner = a.api.UserID()
+	a.musicIDOpen = false
+	a.musicIDInput = ""
+	a.musicIDErr = ""
+	a.playlistErr = ""
+	a.playlists = nil
+	a.selectedPlaylist = -1
+	a.playlistSongs = nil
+	a.restorePlaylistCache()
 	if ok {
 		a.setToast("已重新加载本地凭证")
 	} else {
