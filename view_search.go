@@ -174,6 +174,7 @@ func songFromAPI(song qqmusic.Song) Song {
 		Title:    title,
 		Artist:   artist,
 		Album:    album,
+		AlbumMid: song.AlbumMid,
 		Duration: duration,
 		Quality:  song.Quality,
 		VIP:      song.VIP,
