@@ -209,7 +209,7 @@ func (a *app) aboutSettings(c *ui.Context, col colors) {
 		a.logoMark(c, col, 24)
 		ui.Column(c).Gap(2).Padding(0, 0, 0, 10).Children(func() {
 			ui.Text(c, "Qmdr").FontSize(13).FontWeight(400).TextColor(col.text)
-			ui.Textf(c, "版本 %s · GPL-3.0 · MyGo 原生 UI", appVersion).
+			ui.Textf(c, "版本 %s · GPL-3.0", appVersion).
 				FontSize(12).TextColor(col.muted)
 		})
 		ui.Spacer(c)
@@ -221,6 +221,11 @@ func (a *app) aboutSettings(c *ui.Context, col colors) {
 			return
 		}
 		secondaryButton(c, col, iconRefresh, "检查更新", a.checkUpdates)
+	})
+	a.settingRow(c, col, "开源仓库", "github.com/rzh0504/Qmdr", false, func() {
+		secondaryButton(c, col, iconExternal, "打开", func() {
+			a.openProjectPage()
+		})
 	})
 }
 
