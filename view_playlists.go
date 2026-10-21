@@ -308,25 +308,28 @@ func validMusicID(id string) bool {
 }
 
 func (a *app) musicIDModal(c *ui.Context, col colors) {
-	ui.Modal(c, &a.musicIDOpen, func() {
-		panel := ui.Column(c).Width(376).Padding(18).Gap(14).Radius(16).
-			Background(col.card)
-		raised(panel, col).Shadow(0, 16, 40, 0, col.floatShadow)
+	ui.DialogBase(c, &a.musicIDOpen, func(backdrop, panel ui.Element) {
+		backdrop.Background(ui.RGBA(0, 0, 0, 0.4))
+		panel.Width(376).Padding(18)
+		smoothPanel(panel, col, 16, col.card, false)
+		panel.Shadow(0, 16, 40, 0, col.floatShadow)
 		panel.Children(func() {
-			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "查看用户歌单").FontSize(15).FontWeight(600).
-					TextColor(col.text).Grow(1)
-				iconButton(c, col, iconX, "关闭", a.closeMusicIDModal)
-			})
-			ui.Text(c, "输入 QQ 音乐的数字 music ID，查看该用户公开的歌单。其他用户的「我喜欢」不可读取。").
-				FontSize(12).TextColor(col.muted).MaxWidth(340).LineHeight(1.45)
-			a.textField(c, col, &a.musicIDInput, "QQ 音乐数字 ID", 340, 34, nil, a.submitMusicID)
-			if a.musicIDErr != "" {
-				ui.Text(c, a.musicIDErr).FontSize(12).TextColor(col.red)
-			}
-			ui.Row(c).Gap(6).Justify(ui.End).Children(func() {
-				secondaryButton(c, col, nil, "取消", a.closeMusicIDModal)
-				primaryButton(c, col, iconUser, "查看", a.submitMusicID)
+			ui.Column(c).FillWidth().Gap(14).Children(func() {
+				ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+					ui.Text(c, "查看用户歌单").FontSize(15).FontWeight(600).
+						TextColor(col.text).Grow(1)
+					iconButton(c, col, iconX, "关闭", a.closeMusicIDModal)
+				})
+				ui.Text(c, "输入 QQ 音乐的数字 music ID，查看该用户公开的歌单。其他用户的「我喜欢」不可读取。").
+					FontSize(12).TextColor(col.muted).MaxWidth(340).LineHeight(1.45)
+				a.textField(c, col, &a.musicIDInput, "QQ 音乐数字 ID", 340, 34, nil, a.submitMusicID)
+				if a.musicIDErr != "" {
+					ui.Text(c, a.musicIDErr).FontSize(12).TextColor(col.red)
+				}
+				ui.Row(c).Gap(6).Justify(ui.End).Children(func() {
+					secondaryButton(c, col, nil, "取消", a.closeMusicIDModal)
+					primaryButton(c, col, iconUser, "查看", a.submitMusicID)
+				})
 			})
 		})
 	})

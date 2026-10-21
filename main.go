@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
 )
@@ -616,36 +615,41 @@ func (a *app) closeQR() {
 }
 
 func (a *app) qrModal(c *ui.Context, col colors) {
-	ui.Modal(c, &a.qrOpen, func() {
-		panel := ui.Column(c).Width(336).Padding(18).Gap(14).Radius(16).
-			Material(glass.Glass{}).
-			Shadow(0, 1, 3, 0, col.shadow).
-			Shadow(0, 16, 40, 0, col.floatShadow)
+	ui.DialogBase(c, &a.qrOpen, func(backdrop, panel ui.Element) {
+		backdrop.Background(ui.RGBA(0, 0, 0, 0.4))
+		panel.Width(336).Padding(18)
+		smoothPanel(panel, col, 16, col.card, false)
+		panel.Shadow(0, 16, 40, 0, col.floatShadow)
 		panel.Children(func() {
-			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-				ui.Textf(c, "%s登录", a.qrType).FontSize(15).FontWeight(600).
-					TextColor(col.text).Grow(1)
-				iconButton(c, col, iconX, "关闭", a.closeQR)
-			})
+			ui.Column(c).FillWidth().Gap(14).Children(func() {
+				ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+					ui.Textf(c, "%s登录", a.qrType).FontSize(15).FontWeight(600).
+						TextColor(col.text).Grow(1)
+					iconButton(c, col, iconX, "关闭", a.closeQR)
+				})
 
-			qr := ui.Box(c).Size(208, 208).Radius(10).Padding(10).
-				Background(ui.RGB(255, 255, 255)).Center()
-			qr.Children(func() {
-				if a.qrBitmap != nil {
-					ui.Image(c, a.qrBitmap).Size(188, 188)
-				} else {
-					ui.Spinner(c).Size(22, 22)
-				}
-			})
-
-			ui.Text(c, a.qrStatus).FontSize(12).TextColor(col.muted)
-			ui.Row(c).Gap(6).Justify(ui.End).Children(func() {
-				secondaryButton(c, col, nil, "关闭", a.closeQR)
-				if a.qrBitmap != nil {
-					primaryButton(c, col, iconRefresh, "重新获取", func() {
-						a.openQR(a.qrType)
+				ui.Row(c).FillWidth().Justify(ui.Center).Children(func() {
+					qr := ui.Box(c).Size(208, 208).Radius(10).Padding(10).
+						Background(ui.RGB(255, 255, 255)).Center().
+						Border(1, col.border)
+					qr.Children(func() {
+						if a.qrBitmap != nil {
+							ui.Image(c, a.qrBitmap).Size(188, 188)
+						} else {
+							ui.Spinner(c).Size(22, 22)
+						}
 					})
-				}
+				})
+
+				ui.Text(c, a.qrStatus).FontSize(12).TextColor(col.muted)
+				ui.Row(c).Gap(6).Justify(ui.End).Children(func() {
+					secondaryButton(c, col, nil, "关闭", a.closeQR)
+					if a.qrBitmap != nil {
+						primaryButton(c, col, iconRefresh, "重新获取", func() {
+							a.openQR(a.qrType)
+						})
+					}
+				})
 			})
 		})
 	})
