@@ -11,6 +11,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/rzh0504/qmdr/internal/history"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
 )
 
@@ -20,6 +21,7 @@ const (
 	viewSearch viewID = iota
 	viewPlaylists
 	viewQueue
+	viewHistory
 	viewSettings
 )
 
@@ -82,6 +84,14 @@ type app struct {
 	cancel          context.CancelFunc
 	logs            []LogEntry
 
+	historyStore   *history.Store
+	historyItems   []history.Record
+	historyBacklog []history.Record
+	historyCount   int
+	historyBytes   int64
+	historyErr     string
+	historyLoading bool
+
 	downloadDir string
 	coverSize   string
 	concurrency float64
@@ -129,6 +139,7 @@ func newApp() *app {
 		selectedPlaylist: -1,
 		selectedSongMids: make(map[string]bool),
 		pending:          loadPending(),
+		historyLoading:   true,
 		downloadDir:      settings.DownloadDir,
 		coverSize:        settings.CoverSize,
 		concurrency:      settings.Concurrency,
@@ -194,6 +205,8 @@ func (a *app) viewRoot(c *ui.Context) {
 							a.playlistsView(c, col)
 						case viewQueue:
 							a.queueView(c, col)
+						case viewHistory:
+							a.historyView(c, col)
 						case viewSettings:
 							a.settingsView(c, col)
 						}
@@ -226,6 +239,8 @@ func (a *app) pageTitle() string {
 		return "歌单"
 	case viewQueue:
 		return "队列"
+	case viewHistory:
+		return "历史"
 	case viewSettings:
 		return "设置"
 	default:
@@ -235,7 +250,7 @@ func (a *app) pageTitle() string {
 
 func (a *app) headerActions(c *ui.Context, col colors) {
 	switch a.view {
-	case viewSearch, viewSettings:
+	case viewSearch, viewHistory, viewSettings:
 		iconButton(c, col, iconFolder, "打开下载目录", a.openDownloadDir)
 	case viewQueue:
 		_, done, _, active := a.queueCounts()
@@ -385,6 +400,8 @@ func (a *app) pageKey() string {
 		return "playlists"
 	case viewQueue:
 		return "queue"
+	case viewHistory:
+		return "history"
 	case viewSettings:
 		return "settings"
 	default:
@@ -398,6 +415,8 @@ func (a *app) setPage(page string) {
 		a.view = viewPlaylists
 	case "queue":
 		a.view = viewQueue
+	case "history":
+		a.view = viewHistory
 	case "settings":
 		a.view = viewSettings
 	default:
@@ -422,6 +441,7 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 			a.navItem(c, col, "search", iconSearch, "搜索下载")
 			a.navItem(c, col, "playlists", iconLibrary, "歌单下载")
 			a.navItem(c, col, "queue", iconQueue, "下载队列")
+			a.navItem(c, col, "history", iconClock, "下载历史")
 			a.navItem(c, col, "settings", iconSettings, "设置")
 		})
 
@@ -782,7 +802,11 @@ func main() {
 			if a.qrCancel != nil {
 				a.qrCancel()
 			}
+			if a.historyStore != nil {
+				_ = a.historyStore.Close()
+			}
 		})
+		go a.initHistory()
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)

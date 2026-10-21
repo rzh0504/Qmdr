@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/rzh0504/qmdr/internal/history"
 	"github.com/rzh0504/qmdr/internal/tag"
 )
 
@@ -379,6 +380,18 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 	if size == 0 {
 		size = written
 	}
+	record := history.Record{
+		SongMID:     task.Mid,
+		Title:       task.Title,
+		Artist:      task.Artist,
+		Album:       task.Album,
+		AlbumMID:    task.AlbumMid,
+		Quality:     resolved.Quality,
+		FilePath:    dest,
+		FileSize:    size,
+		Status:      history.StatusDone,
+		CompletedAt: time.Now(),
+	}
 
 	a.update(func() {
 		if runID != a.runID {
@@ -394,6 +407,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		item.Quality = resolved.Quality
 		item.FilePath = dest
 		item.FileSize = size
+		a.recordHistory(record)
 		a.appendLog("下载成功："+task.Title+"（"+resolved.Quality+"）", "success")
 		if metaErr != nil {
 			a.appendLog("元数据写入失败："+task.Title+"（"+friendlyError(metaErr)+"）", "warning")
@@ -434,6 +448,18 @@ func (a *app) markFailed(runID int, task downloadTask, err error) {
 
 func (a *app) markSkipped(runID int, task downloadTask, dest, quality string) {
 	size := fileSize(dest)
+	record := history.Record{
+		SongMID:     task.Mid,
+		Title:       task.Title,
+		Artist:      task.Artist,
+		Album:       task.Album,
+		AlbumMID:    task.AlbumMid,
+		Quality:     quality,
+		FilePath:    dest,
+		FileSize:    size,
+		Status:      history.StatusSkipped,
+		CompletedAt: time.Now(),
+	}
 	a.update(func() {
 		if runID != a.runID {
 			return
@@ -446,6 +472,7 @@ func (a *app) markSkipped(runID int, task downloadTask, dest, quality string) {
 			item.FilePath = dest
 			item.FileSize = size
 		}
+		a.recordHistory(record)
 		a.appendLog("文件已存在，跳过："+task.Title, "muted")
 		a.recalcOverallProgress()
 	})
