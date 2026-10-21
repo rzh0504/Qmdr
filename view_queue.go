@@ -5,48 +5,66 @@ import (
 )
 
 func (a *app) queueView(c *ui.Context, col colors) {
-	total, done, failed, active := a.queueCounts()
-	skipped := 0
-	for _, item := range a.queue {
-		if item.Status == StatusSkipped {
-			skipped++
-		}
-	}
-
+	total, _, failed, active := a.queueCounts()
 	if total == 0 && len(a.pending) == 0 {
 		emptyState(c, col, iconQueue, "队列为空", "在歌单中右键歌曲加入待下载队列，或直接下载歌曲。")
 		return
 	}
 
-	items := a.filteredQueue()
+	activeItems := a.filteredQueue()
+	completedItems := a.completedQueue()
 
 	ui.Column(c).Gap(10).Children(func() {
 		if len(a.pending) > 0 {
 			a.pendingSection(c, col)
 		}
-		if total == 0 {
-			return
-		}
-		a.queueSummary(c, col, total, done, failed, skipped, active)
-
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			filter := segmentedControl(c, col, &a.queueFilter, "全部", "进行中", "已完成", "失败")
-			if filter.Changed() {
-				a.refresh()
+		if active+failed > 0 {
+			activeDownloads := 0
+			speed := 0.0
+			for _, item := range a.queue {
+				if item.Status == StatusDownloading {
+					activeDownloads++
+					speed += item.Speed
+				}
 			}
-			ui.Spacer(c)
-			ui.Textf(c, "%d 个任务", len(items)).FontSize(12).TextColor(col.faint)
-		})
+			sectionHeader(c, col, "下载队列", func() {
+				ui.Textf(c, "进行中 %d · 失败 %d", active, failed).FontSize(12).
+					TextColor(col.faint)
+				if activeDownloads > 0 {
+					ui.Textf(c, "· %.1f MB/s", speed).FontSize(12).TextColor(col.muted)
+				}
+			})
 
-		if len(items) == 0 {
-			emptyState(c, col, iconQueue, "没有符合条件的任务", "切换筛选条件查看其他任务。")
-			return
-		}
-		sheet(c, col, func() {
-			for _, item := range items {
-				a.queueRow(c, col, item)
+			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+				filter := segmentedControl(c, col, &a.queueFilter, "全部", "进行中", "失败")
+				if filter.Changed() {
+					a.refresh()
+				}
+				ui.Spacer(c)
+				ui.Textf(c, "%d 个任务", len(activeItems)).FontSize(12).TextColor(col.faint)
+			})
+
+			if len(activeItems) == 0 {
+				emptyState(c, col, iconQueue, "没有符合条件的任务", "切换筛选条件查看其他任务。")
+			} else {
+				sheet(c, col, func() {
+					for _, item := range activeItems {
+						a.queueRow(c, col, item)
+					}
+				})
 			}
-		})
+		}
+		if len(completedItems) > 0 {
+			sectionHeader(c, col, "已下载", func() {
+				ui.Textf(c, "%d 首", len(completedItems)).FontSize(12).TextColor(col.faint)
+				ghostButton(c, col, nil, "清理", a.clearCompleted)
+			})
+			sheet(c, col, func() {
+				for _, item := range completedItems {
+					a.queueRow(c, col, item)
+				}
+			})
+		}
 	})
 
 	if total > 0 || len(a.logs) > 0 {
@@ -80,42 +98,6 @@ func (a *app) pendingSection(c *ui.Context, col colors) {
 					a.removePending(i)
 				})
 			})
-		}
-	})
-}
-
-func (a *app) queueSummary(c *ui.Context, col colors, total, done, failed, skipped, active int) {
-	processed := done + failed + skipped
-	percent := a.overallProgress * 100
-	activeDownloads := 0
-	speed := 0.0
-	for _, item := range a.queue {
-		if item.Status == StatusDownloading {
-			activeDownloads++
-			speed += item.Speed
-		}
-	}
-
-	ui.Row(c).FillWidth().AlignItems(ui.End).Children(func() {
-		ui.Column(c).Gap(2).Grow(1).Children(func() {
-			ui.Row(c).Gap(9).AlignItems(ui.End).Children(func() {
-				ui.Textf(c, "%.0f%%", percent).FontSize(24).FontWeight(600).TextColor(col.text)
-				ui.Textf(c, "%d / %d", processed, total).FontSize(11).TextColor(col.faint)
-			})
-			ui.Textf(c, "完成 %d · 跳过 %d · 失败 %d · 进行中 %d", done, skipped, failed, active).
-				FontSize(12).TextColor(col.muted)
-		})
-		if activeDownloads > 0 {
-			ui.Textf(c, "%d 个下载中 · %.1f MB/s", activeDownloads, speed).
-				FontSize(12).TextColor(col.muted)
-		}
-	})
-
-	track := ui.Box(c).Height(4).FillWidth().Radius(2).Background(col.chip)
-	track.Children(func() {
-		if percent > 0 {
-			ui.Box(c).Height(4).WidthPercent(float32(percent)).Radius(2).
-				Background(col.accent)
 		}
 	})
 }

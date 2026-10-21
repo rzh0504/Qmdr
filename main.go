@@ -73,16 +73,15 @@ type app struct {
 	musicIDInput string
 	musicIDErr   string
 
-	pending         []Song
-	queue           []QueueItem
-	queueFilter     int
-	queueSeq        int
-	showLogs        bool
-	downloading     bool
-	overallProgress float64
-	runID           int
-	cancel          context.CancelFunc
-	logs            []LogEntry
+	pending     []Song
+	queue       []QueueItem
+	queueFilter int
+	queueSeq    int
+	showLogs    bool
+	downloading bool
+	runID       int
+	cancel      context.CancelFunc
+	logs        []LogEntry
 
 	historyStore   *history.Store
 	historyItems   []history.Record
@@ -150,7 +149,6 @@ func newApp() *app {
 		userID:           displayUser,
 		loginType:        loginType,
 	}
-	a.recalcOverallProgress()
 	a.restorePlaylistCache()
 	return a
 }
@@ -253,18 +251,9 @@ func (a *app) headerActions(c *ui.Context, col colors) {
 	case viewSearch, viewHistory, viewSettings:
 		iconButton(c, col, iconFolder, "打开下载目录", a.openDownloadDir)
 	case viewQueue:
-		_, done, _, active := a.queueCounts()
-		skipped := 0
-		for _, item := range a.queue {
-			if item.Status == StatusSkipped {
-				skipped++
-			}
-		}
+		_, _, _, active := a.queueCounts()
 		if a.downloading {
 			ghostDangerButton(c, col, iconX, "取消", a.cancelQueue)
-		}
-		if done+skipped > 0 && !a.downloading {
-			iconButton(c, col, iconTrash, "清理已完成", a.clearCompleted)
 		}
 		if !a.downloading && active > 0 {
 			primaryButton(c, col, iconPlay, "开始", a.startQueue)
@@ -359,24 +348,6 @@ func (a *app) appendLog(message, level string) {
 	if len(a.logs) > 120 {
 		a.logs = a.logs[len(a.logs)-120:]
 	}
-}
-
-func (a *app) recalcOverallProgress() {
-	total := len(a.queue)
-	if total == 0 {
-		a.overallProgress = 0
-		return
-	}
-	sum := 0.0
-	for _, item := range a.queue {
-		switch item.Status {
-		case StatusDone, StatusSkipped, StatusFailed, StatusCancelled:
-			sum++
-		case StatusDownloading:
-			sum += item.Progress
-		}
-	}
-	a.overallProgress = sum / float64(total)
 }
 
 func (a *app) queueCounts() (total, done, failed, active int) {

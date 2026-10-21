@@ -188,7 +188,6 @@ func (a *app) enqueueSongs(songs []Song) bool {
 	}
 	a.appendLog(fmt.Sprintf("已添加 %d 首歌曲到下载队列", len(songs)), "info")
 	a.view = viewQueue
-	a.recalcOverallProgress()
 	a.refresh()
 	a.startQueue()
 	return true
@@ -256,7 +255,6 @@ func (a *app) startQueue() {
 				a.appendLog("队列处理完成", "success")
 				a.toast = "队列处理完成"
 			}
-			a.recalcOverallProgress()
 		})
 	}()
 }
@@ -313,7 +311,6 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		item.Speed = 0
 		item.Error = ""
 		a.appendLog("开始下载："+task.Title, "info")
-		a.recalcOverallProgress()
 	})
 
 	resolveCtx, cancelResolve := context.WithTimeout(ctx, 30*time.Second)
@@ -360,7 +357,6 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 			}
 			item.Progress = progress
 			item.Speed = speed
-			a.recalcOverallProgress()
 		})
 	})
 	if err != nil {
@@ -412,7 +408,6 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		if metaErr != nil {
 			a.appendLog("元数据写入失败："+task.Title+"（"+friendlyError(metaErr)+"）", "warning")
 		}
-		a.recalcOverallProgress()
 	})
 }
 
@@ -426,7 +421,6 @@ func (a *app) markCancelled(runID int, task downloadTask) {
 			item.Speed = 0
 		}
 		a.appendLog("已取消："+task.Title, "warning")
-		a.recalcOverallProgress()
 	})
 }
 
@@ -442,7 +436,6 @@ func (a *app) markFailed(runID int, task downloadTask, err error) {
 			item.Error = message
 		}
 		a.appendLog("下载失败："+task.Title+"（"+message+"）", "error")
-		a.recalcOverallProgress()
 	})
 }
 
@@ -474,7 +467,6 @@ func (a *app) markSkipped(runID int, task downloadTask, dest, quality string) {
 		}
 		a.recordHistory(record)
 		a.appendLog("文件已存在，跳过："+task.Title, "muted")
-		a.recalcOverallProgress()
 	})
 }
 
@@ -504,7 +496,6 @@ func (a *app) clearCompleted() {
 		a.setToast("没有已完成的任务")
 		return
 	}
-	a.recalcOverallProgress()
 	a.appendLog(fmt.Sprintf("已清理 %d 个已完成任务", removed), "info")
 	a.setToast(fmt.Sprintf("已清理 %d 个已完成任务", removed))
 }
@@ -523,7 +514,6 @@ func (a *app) retryItem(id int) {
 	item.Speed = 0
 	item.Error = ""
 	item.FileSize = 0
-	a.recalcOverallProgress()
 	a.appendLog("重新加入队列："+item.Song.Title, "info")
 	a.startQueue()
 }
@@ -544,7 +534,6 @@ func (a *app) removeItem(id int) {
 		return
 	}
 	a.queue = append(a.queue[:index], a.queue[index+1:]...)
-	a.recalcOverallProgress()
 	a.refresh()
 }
 
@@ -570,22 +559,31 @@ func (a *app) filteredQueue() []QueueItem {
 	case 2:
 		var out []QueueItem
 		for _, item := range a.queue {
-			if item.Status == StatusDone || item.Status == StatusSkipped {
-				out = append(out, item)
-			}
-		}
-		return out
-	case 3:
-		var out []QueueItem
-		for _, item := range a.queue {
 			if item.Status == StatusFailed || item.Status == StatusCancelled {
 				out = append(out, item)
 			}
 		}
 		return out
 	default:
-		return a.queue
+		var out []QueueItem
+		for _, item := range a.queue {
+			if item.Status == StatusDone || item.Status == StatusSkipped {
+				continue
+			}
+			out = append(out, item)
+		}
+		return out
 	}
+}
+
+func (a *app) completedQueue() []QueueItem {
+	var out []QueueItem
+	for _, item := range a.queue {
+		if item.Status == StatusDone || item.Status == StatusSkipped {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func (a *app) openDownloadDir() {
