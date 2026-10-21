@@ -6,18 +6,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/rzh0504/qmdr/internal/tag"
 )
 
 type downloadTask struct {
-	ID      int
-	Mid     string
-	Title   string
-	Artist  string
-	Quality string
+	ID       int
+	Mid      string
+	Title    string
+	Artist   string
+	Album    string
+	AlbumMid string
+	Quality  string
 }
 
 func (a *app) enqueueSongs(songs []Song) {
@@ -67,11 +71,13 @@ func (a *app) startQueue() {
 			continue
 		}
 		tasks = append(tasks, downloadTask{
-			ID:      item.ID,
-			Mid:     item.Song.Mid,
-			Title:   item.Song.Title,
-			Artist:  item.Song.Artist,
-			Quality: item.Quality,
+			ID:       item.ID,
+			Mid:      item.Song.Mid,
+			Title:    item.Song.Title,
+			Artist:   item.Song.Artist,
+			Album:    item.Song.Album,
+			AlbumMid: item.Song.AlbumMid,
+			Quality:  item.Quality,
 		})
 	}
 	if len(tasks) == 0 {
@@ -86,12 +92,13 @@ func (a *app) startQueue() {
 	runID := a.runID
 	dir := a.downloadDir
 	overwrite := a.overwrite
+	coverSize := coverSizeValue(a.coverSize)
 	a.appendLog("开始处理下载队列", "info")
 	a.refresh()
-	go a.downloadLoop(ctx, runID, tasks, dir, overwrite)
+	go a.downloadLoop(ctx, runID, tasks, dir, overwrite, coverSize)
 }
 
-func (a *app) downloadLoop(ctx context.Context, runID int, tasks []downloadTask, dir string, overwrite bool) {
+func (a *app) downloadLoop(ctx context.Context, runID int, tasks []downloadTask, dir string, overwrite bool, coverSize int) {
 	total := len(tasks)
 	for index, task := range tasks {
 		if ctx.Err() != nil {
@@ -202,6 +209,10 @@ func (a *app) downloadLoop(ctx context.Context, runID int, tasks []downloadTask,
 			continue
 		}
 
+		metaCtx, metaCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		metaErr := a.writeMetadata(metaCtx, task, dest, coverSize)
+		metaCancel()
+
 		a.update(func() {
 			if runID != a.runID {
 				return
@@ -216,6 +227,9 @@ func (a *app) downloadLoop(ctx context.Context, runID int, tasks []downloadTask,
 			item.Quality = resolved.Quality
 			item.FilePath = dest
 			a.appendLog("下载成功："+task.Title+"（"+resolved.Quality+"）", "success")
+			if metaErr != nil {
+				a.appendLog("元数据写入失败："+task.Title+"（"+friendlyError(metaErr)+"）", "warning")
+			}
 			a.currentTaskID = 0
 			a.recalcOverallProgress()
 			if index == total-1 {
@@ -403,6 +417,37 @@ func (a *app) openDownloadDir() {
 	}
 	if err := mygo.Shell.OpenPath(dir); err != nil {
 		a.setToast("打开下载目录失败：" + err.Error())
+	}
+}
+
+func (a *app) writeMetadata(ctx context.Context, task downloadTask, dest string, coverSize int) error {
+	lyrics, _ := a.api.Lyric(ctx, task.Mid)
+	var cover []byte
+	var coverMIME string
+	if task.AlbumMid != "" {
+		cover, coverMIME, _ = a.api.Cover(ctx, task.AlbumMid, coverSize)
+	}
+	return tag.Write(dest, tag.Info{
+		Title:     task.Title,
+		Artist:    task.Artist,
+		Album:     task.Album,
+		Lyrics:    lyrics,
+		Cover:     cover,
+		CoverMIME: coverMIME,
+	})
+}
+
+func coverSizeValue(value string) int {
+	value = strings.TrimSpace(strings.TrimSuffix(strings.ToLower(value), "px"))
+	size, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil {
+		return 800
+	}
+	switch size {
+	case 150, 300, 500, 800:
+		return size
+	default:
+		return 800
 	}
 }
 
