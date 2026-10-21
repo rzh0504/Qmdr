@@ -62,11 +62,16 @@ type app struct {
 	playlistSongs       []Song
 	selectingSongs      bool
 	selectedSongMids    map[string]bool
+	songPressKey        string
+	songPressSeq        int
+	songPressTimer      *time.Timer
+	suppressSongClick   bool
 
 	musicIDOpen  bool
 	musicIDInput string
 	musicIDErr   string
 
+	pending         []Song
 	queue           []QueueItem
 	queueFilter     int
 	queueSeq        int
@@ -447,8 +452,9 @@ func (a *app) navItem(c *ui.Context, col colors, key string, icon *ui.SVG, label
 		ui.Icon(c, icon).Size(15, 15).TextColor(fg)
 		ui.Text(c, label).FontSize(13).FontWeight(400).TextColor(fg).Grow(1)
 		if key == "queue" {
-			if _, _, _, active := a.queueCounts(); active > 0 {
-				ui.Textf(c, "%d", active).FontSize(11).TextColor(col.muted)
+			_, _, _, active := a.queueCounts()
+			if count := active + len(a.pending); count > 0 {
+				ui.Textf(c, "%d", count).FontSize(11).TextColor(col.muted)
 			}
 		}
 	})
@@ -768,6 +774,7 @@ func main() {
 		a.win = mygo.NewWindow(options)
 		a.win.OnClosed(func() {
 			a.closed.Store(true)
+			a.stopSongPress()
 			if a.cancel != nil {
 				a.cancel()
 			}

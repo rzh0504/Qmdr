@@ -69,6 +69,76 @@ func (c *downloadClaims) reserve(dir, base, ext string, overwrite bool) (string,
 	return "", claimExhausted
 }
 
+func (a *app) addToPending(songs ...Song) {
+	if len(songs) == 0 {
+		return
+	}
+	added, duplicates, invalid := 0, 0, 0
+	for _, song := range songs {
+		if strings.TrimSpace(song.Mid) == "" {
+			invalid++
+			continue
+		}
+		exists := false
+		for _, pending := range a.pending {
+			if pending.Mid == song.Mid {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			duplicates++
+			continue
+		}
+		a.pending = append(a.pending, song)
+		added++
+	}
+	switch {
+	case added == 0 && invalid > 0:
+		a.setToast("歌曲缺少 MID，无法加入待下载队列")
+	case added == 0 && duplicates > 0:
+		a.setToast("歌曲已在待下载队列")
+	case added == 0:
+		return
+	case added == 1:
+		a.setToast("已加入待下载队列")
+	default:
+		a.setToast(fmt.Sprintf("已将 %d 首歌曲加入待下载队列", added))
+	}
+}
+
+func (a *app) removePending(index int) {
+	if index < 0 || index >= len(a.pending) {
+		return
+	}
+	a.pending = append(a.pending[:index], a.pending[index+1:]...)
+	a.refresh()
+}
+
+func (a *app) clearPending() {
+	if len(a.pending) == 0 {
+		return
+	}
+	a.pending = nil
+	a.setToast("已清空待下载队列")
+}
+
+func (a *app) startPendingDownloads() {
+	if len(a.pending) == 0 {
+		return
+	}
+	if a.downloading {
+		a.setToast("已有下载任务在运行，请先等待或取消")
+		return
+	}
+	songs := append([]Song(nil), a.pending...)
+	a.pending = nil
+	if !a.enqueueSongs(songs) {
+		a.pending = songs
+		a.refresh()
+	}
+}
+
 func (a *app) enqueueSongs(songs []Song) bool {
 	if len(songs) == 0 {
 		return false

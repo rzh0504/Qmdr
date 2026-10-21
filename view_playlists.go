@@ -153,7 +153,6 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 						}
 						secondaryButton(c, col, nil, "退出", a.endSongSelection)
 					} else {
-						secondaryButton(c, col, iconSelect, "多选", a.beginSongSelection)
 						primaryButton(c, col, iconDownload, "下载歌单", a.downloadCurrentPlaylist)
 					}
 				})
@@ -187,11 +186,16 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 				for i, song := range a.playlistSongs {
 					i, song := i, song
 					selected := a.selectingSongs && a.selectedSongMids[song.Mid]
+					var longPress func()
+					if !a.selectingSongs {
+						longPress = func() { a.beginSongSelectionWith(song) }
+					}
 					row := a.songRow(c, col, song, songRowOptions{
-						index:      i,
-						selected:   selected,
-						selectMode: a.selectingSongs,
-						onSelect:   func() { a.toggleSongSelection(song) },
+						index:       i,
+						selected:    selected,
+						selectMode:  a.selectingSongs,
+						onSelect:    func() { a.toggleSongSelection(song) },
+						onLongPress: longPress,
 					})
 					row.ContextMenu(func(m *ui.Menu) {
 						a.songContextMenu(m, song)
@@ -204,11 +208,11 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 
 func (a *app) songContextMenu(m *ui.Menu, song Song) {
 	if a.selectingSongs {
-		if m.Item("下载这首歌").Chosen() {
-			a.downloadSongNow(song)
-		}
 		if m.Item("下载选中歌曲").Disabled(a.selectedSongCount() == 0).Chosen() {
 			a.downloadSelectedSongs()
+		}
+		if m.Item("选中项加入待下载队列").Chosen() {
+			a.addSelectedToPending()
 		}
 		m.Separator()
 		if m.Item("全选").Chosen() {
@@ -222,25 +226,13 @@ func (a *app) songContextMenu(m *ui.Menu, song Song) {
 	if m.Item("下载这首歌").Chosen() {
 		a.downloadSongNow(song)
 	}
-	if m.Item("多选").Chosen() {
-		a.beginSongSelectionWith(song)
+	if m.Item("加入待下载队列").Chosen() {
+		a.addToPending(song)
 	}
 	m.Separator()
-	if m.Item("全选歌曲").Chosen() {
-		a.beginSongSelectionAll()
-	}
 	if m.Item("下载整个歌单").Chosen() {
 		a.downloadCurrentPlaylist()
 	}
-}
-
-func (a *app) beginSongSelection() {
-	if a.selectingSongs {
-		return
-	}
-	a.selectingSongs = true
-	a.selectedSongMids = make(map[string]bool)
-	a.refresh()
 }
 
 func (a *app) beginSongSelectionWith(song Song) {
@@ -253,12 +245,10 @@ func (a *app) beginSongSelectionWith(song Song) {
 		a.selectedSongMids = make(map[string]bool)
 	}
 	a.selectedSongMids[song.Mid] = true
+	if a.selectedSongCount() == 0 {
+		a.resetSongSelection()
+	}
 	a.refresh()
-}
-
-func (a *app) beginSongSelectionAll() {
-	a.selectingSongs = true
-	a.selectAllSongs()
 }
 
 func (a *app) endSongSelection() {
@@ -267,8 +257,10 @@ func (a *app) endSongSelection() {
 }
 
 func (a *app) resetSongSelection() {
+	a.stopSongPress()
 	a.selectingSongs = false
 	a.selectedSongMids = make(map[string]bool)
+	a.suppressSongClick = false
 }
 
 func (a *app) toggleSongSelection(song Song) {
@@ -281,6 +273,9 @@ func (a *app) toggleSongSelection(song Song) {
 	}
 	if a.selectedSongMids[song.Mid] {
 		delete(a.selectedSongMids, song.Mid)
+		if a.selectedSongCount() == 0 {
+			a.resetSongSelection()
+		}
 	} else {
 		a.selectedSongMids[song.Mid] = true
 	}
@@ -289,11 +284,12 @@ func (a *app) toggleSongSelection(song Song) {
 
 func (a *app) toggleAllSongs() {
 	if a.allSongsSelected() {
-		a.selectedSongMids = make(map[string]bool)
-		a.refresh()
+		a.resetSongSelection()
+	} else {
+		a.selectAllSongs()
 		return
 	}
-	a.selectAllSongs()
+	a.refresh()
 }
 
 func (a *app) selectAllSongs() {
@@ -304,6 +300,9 @@ func (a *app) selectAllSongs() {
 		}
 	}
 	a.selectedSongMids = next
+	if len(next) == 0 {
+		a.resetSongSelection()
+	}
 	a.refresh()
 }
 
@@ -337,6 +336,15 @@ func (a *app) selectedSongsInOrder() []Song {
 		}
 	}
 	return songs
+}
+
+func (a *app) addSelectedToPending() {
+	songs := a.selectedSongsInOrder()
+	if len(songs) == 0 {
+		a.setToast("请先选择歌曲")
+		return
+	}
+	a.addToPending(songs...)
 }
 
 func (a *app) downloadSongNow(song Song) {
@@ -377,6 +385,9 @@ func (a *app) pruneSongSelection() {
 		}
 	}
 	a.selectedSongMids = next
+	if a.selectedSongCount() == 0 {
+		a.resetSongSelection()
+	}
 }
 
 func (a *app) refreshPlaylists() {

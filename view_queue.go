@@ -13,14 +13,20 @@ func (a *app) queueView(c *ui.Context, col colors) {
 		}
 	}
 
-	if total == 0 {
-		emptyState(c, col, iconQueue, "队列为空", "从搜索结果或歌单下载歌曲后，任务会显示在这里。")
+	if total == 0 && len(a.pending) == 0 {
+		emptyState(c, col, iconQueue, "队列为空", "在歌单中右键歌曲加入待下载队列，或直接下载歌曲。")
 		return
 	}
 
 	items := a.filteredQueue()
 
 	ui.Column(c).Gap(10).Children(func() {
+		if len(a.pending) > 0 {
+			a.pendingSection(c, col)
+		}
+		if total == 0 {
+			return
+		}
 		a.queueSummary(c, col, total, done, failed, skipped, active)
 
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
@@ -43,7 +49,39 @@ func (a *app) queueView(c *ui.Context, col colors) {
 		})
 	})
 
-	a.queueLogs(c, col)
+	if total > 0 || len(a.logs) > 0 {
+		a.queueLogs(c, col)
+	}
+}
+
+func (a *app) pendingSection(c *ui.Context, col colors) {
+	sectionHeader(c, col, "待下载队列", func() {
+		ui.Textf(c, "%d 首", len(a.pending)).FontSize(12).TextColor(col.faint)
+		ghostButton(c, col, nil, "清空", a.clearPending)
+		primaryButton(c, col, iconDownload, "全部下载", a.startPendingDownloads)
+	})
+	sheet(c, col, func() {
+		for i, song := range a.pending {
+			i, song := i, song
+			row := ui.Row(c).Gap(10).Padding(6, 10).Height(50).Radius(8).AlignItems(ui.Center)
+			if row.Hovered() {
+				row.Background(col.rowSelected)
+				row = chosen(row, col)
+			}
+			row.Children(func() {
+				a.cover(c, col, song.AlbumMid, 30)
+				ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
+					ui.Text(c, song.Title).FontSize(13).TextColor(col.text).SingleLine()
+					ui.Textf(c, "%s · %s", song.Artist, song.Album).FontSize(11).
+						TextColor(col.muted).SingleLine()
+				})
+				ui.Text(c, song.Duration).Width(38).FontSize(11).TextColor(col.faint).SingleLine()
+				iconButton(c, col, iconTrash, "从待下载队列移除 "+song.Title, func() {
+					a.removePending(i)
+				})
+			})
+		}
+	})
 }
 
 func (a *app) queueSummary(c *ui.Context, col colors, total, done, failed, skipped, active int) {

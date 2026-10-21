@@ -430,11 +430,53 @@ func playlistIcon(c *ui.Context, col colors, playlist Playlist, size float32) ui
 }
 
 type songRowOptions struct {
-	index      int
-	selected   bool
-	selectMode bool
-	onSelect   func()
-	onDownload func()
+	index       int
+	selected    bool
+	selectMode  bool
+	onSelect    func()
+	onLongPress func()
+	onDownload  func()
+}
+
+const songLongPressDelay = 500 * time.Millisecond
+
+func (a *app) trackSongPress(row ui.Element, song Song, onLongPress func()) {
+	key := song.Mid
+	if key == "" {
+		return
+	}
+	if row.Pressed() {
+		if a.songPressKey == key {
+			return
+		}
+		a.stopSongPress()
+		a.songPressKey = key
+		a.songPressSeq++
+		seq := a.songPressSeq
+		a.suppressSongClick = false
+		a.songPressTimer = time.AfterFunc(songLongPressDelay, func() {
+			a.update(func() {
+				if a.songPressKey != key || a.songPressSeq != seq {
+					return
+				}
+				a.songPressTimer = nil
+				a.suppressSongClick = true
+				onLongPress()
+			})
+		})
+		return
+	}
+	if a.songPressKey == key {
+		a.stopSongPress()
+	}
+}
+
+func (a *app) stopSongPress() {
+	if a.songPressTimer != nil {
+		a.songPressTimer.Stop()
+		a.songPressTimer = nil
+	}
+	a.songPressKey = ""
 }
 
 func songSelectionMark(c *ui.Context, col colors, selected bool) ui.Element {
@@ -464,8 +506,18 @@ func (a *app) songRow(c *ui.Context, col colors, song Song, opts songRowOptions)
 		row.Background(col.rowSelected)
 		row = chosen(row, col)
 	}
+	if opts.onLongPress != nil {
+		a.trackSongPress(row, song, opts.onLongPress)
+	}
 	if opts.selectMode && opts.onSelect != nil && row.Clicked() {
-		opts.onSelect()
+		if a.suppressSongClick && song.Mid == a.songPressKey {
+			a.suppressSongClick = false
+			a.songPressKey = ""
+		} else {
+			a.suppressSongClick = false
+			a.songPressKey = ""
+			opts.onSelect()
+		}
 	}
 	row.Children(func() {
 		if opts.selectMode {
