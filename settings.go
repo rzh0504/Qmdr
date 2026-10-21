@@ -9,14 +9,15 @@ import (
 )
 
 type appSettings struct {
-	DownloadDir string  `json:"download_dir"`
-	Quality     string  `json:"quality"`
-	CoverSize   string  `json:"cover_size"`
-	Overwrite   bool    `json:"overwrite"`
-	Concurrency float64 `json:"concurrency"`
-	Appearance  string  `json:"appearance"`
-	Background  string  `json:"background"`
-	HistoryKeep string  `json:"history_keep"`
+	DownloadDir  string  `json:"download_dir"`
+	Quality      string  `json:"quality"`
+	CoverSize    string  `json:"cover_size"`
+	Overwrite    bool    `json:"overwrite"`
+	Concurrency  float64 `json:"concurrency"`
+	Appearance   string  `json:"appearance"`
+	Background   string  `json:"background"`
+	HistoryKeep  string  `json:"history_keep"`
+	SidebarWidth float64 `json:"sidebar_width"`
 }
 
 func settingsPath() string {
@@ -36,6 +37,7 @@ func defaultSettings() appSettings {
 		Appearance:  "light",
 		Background:  "rex",
 		HistoryKeep: "90 天",
+		SidebarWidth: defaultSidebarWidth,
 	}
 }
 
@@ -73,6 +75,9 @@ func loadSettings() appSettings {
 	if !validHistoryKeep(settings.HistoryKeep) {
 		settings.HistoryKeep = "90 天"
 	}
+	if settings.SidebarWidth < float64(minSidebarWidth) || settings.SidebarWidth > float64(maxSidebarWidth) {
+		settings.SidebarWidth = defaultSidebarWidth
+	}
 	return settings
 }
 
@@ -90,6 +95,7 @@ func (a *app) saveSettings() {
 		Appearance:  a.appearance,
 		Background:  a.background,
 		HistoryKeep: a.historyKeep,
+		SidebarWidth: float64(a.sidebarWidth),
 	}
 	a.dispatchDisk(func() {
 		data, err := json.MarshalIndent(settings, "", "  ")

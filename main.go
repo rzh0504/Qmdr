@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -58,7 +59,16 @@ type app struct {
 	appearance  string
 	background  string
 	historyKeep string
+
+	sidebarWidth    float32
+	sidebarDragging bool
 }
+
+const (
+	defaultSidebarWidth = 216
+	minSidebarWidth     = 168
+	maxSidebarWidth     = 360
+)
 
 func newApp() *app {
 	api := qqmusic.New()
@@ -88,6 +98,7 @@ func newApp() *app {
 		appearance:  settings.Appearance,
 		background:  settings.Background,
 		historyKeep: settings.HistoryKeep,
+		sidebarWidth: float32(settings.SidebarWidth),
 	}
 	a.startDiskWorker()
 	a.restorePlaylistCache()
@@ -354,7 +365,7 @@ func (a *app) setPage(page string) {
 
 func (a *app) sidebar(c *ui.Context, col colors) {
 	bar := c.TitleBar()
-	side := ui.Column(c).Width(216).Shrink(0).FillHeight().Padding(0, 10, 10, 10)
+	side := ui.Column(c).Width(a.sidebarWidth).Shrink(0).FillHeight().Padding(0, 10, 10, 10)
 
 	side.Children(func() {
 		ui.Row(c).Height(topBar).Shrink(0).AlignItems(ui.Center).
@@ -376,6 +387,28 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 		ui.Spacer(c)
 
 		a.accountChip(c, col)
+
+		handle := ui.Box(c).Absolute().Top(0).Bottom(0).Right(0).Width(6).
+			Cursor(ui.CursorResizeEW).Label("调整侧边栏宽度")
+		dx, _, held := handle.Dragged()
+		if held && dx != 0 {
+			width := float32(math.Round(float64(a.sidebarWidth + dx)))
+			width = min(max(width, minSidebarWidth), maxSidebarWidth)
+			if width != a.sidebarWidth {
+				a.sidebarWidth = width
+				a.sidebarDragging = true
+				a.refresh()
+			}
+		}
+		if !held && a.sidebarDragging {
+			a.sidebarDragging = false
+			a.saveSettings()
+		}
+		handle.Draw(func(p *ui.Painter, r ui.Rect) {
+			if held || a.sidebarDragging || handle.Hovered() {
+				p.Fill(ui.Rect{X: r.X + r.W - 1, Y: r.Y + 8, W: 1, H: r.H - 16}, col.accent, 0)
+			}
+		})
 	})
 }
 
