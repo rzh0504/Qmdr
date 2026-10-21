@@ -55,13 +55,15 @@ func face(e ui.Element, col colors, bg ui.Color) ui.Element {
 
 // sheet is a list on the card's face: a soft group that rows sit on.
 func sheet(c *ui.Context, col colors, fn func()) ui.Element {
-	return ui.Column(c).FillWidth().Padding(4).Gap(1).Radius(12).
-		Background(col.chip).Children(fn)
+	e := ui.Column(c).FillWidth().Padding(4).Gap(1)
+	smoothFlat(e, col, 12, col.chip)
+	return e.Children(fn)
 }
 
 func softCard(c *ui.Context, col colors, fn func()) ui.Element {
-	return ui.Column(c).FillWidth().Padding(12, 14).Gap(8).Radius(10).
-		Background(col.chip).Children(fn)
+	e := ui.Column(c).FillWidth().Padding(12, 14).Gap(8)
+	smoothFlat(e, col, 10, col.chip)
+	return e.Children(fn)
 }
 
 func groupTitle(c *ui.Context, col colors, title string) ui.Element {

@@ -89,6 +89,38 @@ func smoothRectPath(r ui.Rect, radius float32) ui.Path {
 	return p
 }
 
+// smoothFlat fills a flat surface, with no shadow, in a continuous
+// rounded rectangle on platforms whose renderer rounds corners
+// circularly.
+func smoothFlat(e ui.Element, col colors, radius float32, fill ui.Color) ui.Element {
+	e.Radius(radius)
+	if runtime.GOOS == "darwin" {
+		e.Background(fill)
+		return e
+	}
+	e.Draw(func(p *ui.Painter, r ui.Rect) {
+		path := smoothRectPath(r, radius)
+		p.FillPath(&path, fill)
+	})
+	return e
+}
+
+// smoothGradientTile fills a tile with its base and glow gradients in a
+// continuous rounded rectangle, with its shadow and dark edge.
+func smoothGradientTile(e ui.Element, col colors, radius float32, base, glow ui.LinearGradient) ui.Element {
+	e.Radius(radius)
+	e = lift(e, col)
+	e.Draw(func(p *ui.Painter, r ui.Rect) {
+		path := smoothRectPath(r, radius)
+		p.FillPathGradient(&path, base)
+		p.FillPathGradient(&path, glow)
+		if col.dark {
+			p.StrokePath(&path, 1, col.edge)
+		}
+	})
+	return e
+}
+
 // smoothPanel fills e's surface with a continuous rounded rectangle on
 // platforms whose renderer rounds corners circularly; on macOS MyGo draws
 // it continuously already, and e keeps its background, border and clip.

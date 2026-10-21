@@ -30,8 +30,9 @@ func (a *app) settingsView(c *ui.Context, col colors) {
 func (a *app) settingsGroup(c *ui.Context, col colors, title string, fn func()) {
 	ui.Column(c).FillWidth().Gap(8).Children(func() {
 		groupTitle(c, col, title)
-		ui.Column(c).FillWidth().Radius(12).Background(col.chip).Padding(2, 16).
-			Children(fn)
+		group := ui.Column(c).FillWidth().Padding(2, 16)
+		smoothFlat(group, col, 12, col.chip)
+		group.Children(fn)
 	})
 }
 
@@ -135,12 +136,11 @@ func (a *app) backgroundTile(c *ui.Context, col colors, w wash) {
 		a.refresh()
 	}
 	tile.Children(func() {
-		swatch := raised(ui.Box(c).Size(104, 68).Radius(12), col).Clip()
+		swatch := ui.Box(c).Size(104, 68)
 		base, glow := w.gradients(col.dark)
-		swatch.LinearGradient(base)
+		smoothGradientTile(swatch, col, 12, base, glow)
 		swatch.Children(func() {
-			ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).LinearGradient(glow)
-			ui.Box(c).Absolute().Top(12).Left(26).Right(8).Bottom(-6).Radius(7).
+			ui.Box(c).Absolute().Top(12).Left(26).Right(8).Bottom(8).Radius(7).
 				Background(col.card)
 			ui.Box(c).Absolute().Top(20).Left(8).Width(12).Height(4).Radius(2).
 				Background(col.faint.Alpha(0.5))
