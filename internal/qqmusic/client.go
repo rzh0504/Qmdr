@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"golang.org/x/net/publicsuffix"
@@ -62,7 +63,8 @@ func (c Credential) Valid() bool {
 type Client struct {
 	http *http.Client
 
-	Credential Credential
+	mu         sync.RWMutex
+	credential Credential
 	QIMEI      string
 }
 
@@ -71,8 +73,20 @@ func New() *Client {
 		http:  newHTTPClient(),
 		QIMEI: fallbackQIMEI,
 	}
-	c.Credential = loadCredential()
+	c.credential = loadCredential()
 	return c
+}
+
+func (c *Client) Credential() Credential {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.credential
+}
+
+func (c *Client) setCredential(credential Credential) {
+	c.mu.Lock()
+	c.credential = credential
+	c.mu.Unlock()
 }
 
 func newHTTPClient() *http.Client {
@@ -114,7 +128,7 @@ func (c *Client) SaveCredential() error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(c.Credential, "", "  ")
+	data, err := json.MarshalIndent(c.Credential(), "", "  ")
 	if err != nil {
 		return err
 	}
@@ -122,19 +136,21 @@ func (c *Client) SaveCredential() error {
 }
 
 func (c *Client) ReloadCredential() bool {
-	c.Credential = loadCredential()
-	return c.Credential.Valid()
+	credential := loadCredential()
+	c.setCredential(credential)
+	return credential.Valid()
 }
 
 func (c *Client) HasCredential() bool {
-	return c.Credential.Valid()
+	return c.Credential().Valid()
 }
 
 func (c *Client) UserID() string {
-	if c.Credential.MusicID == 0 {
+	credential := c.Credential()
+	if credential.MusicID == 0 {
 		return ""
 	}
-	return strconv.FormatInt(c.Credential.MusicID, 10)
+	return strconv.FormatInt(credential.MusicID, 10)
 }
 
 func (c *Client) call(ctx context.Context, module, method string, params any, out any) error {
@@ -153,10 +169,12 @@ func (c *Client) callWith(ctx context.Context, hc *http.Client, module, method s
 		"outCharset": "utf-8",
 		"uid":        "3931641530",
 	}
-	if c.HasCredential() {
-		comm["qq"] = strconv.FormatInt(c.Credential.MusicID, 10)
-		comm["authst"] = c.Credential.Musickey
-		comm["tmeLoginType"] = strconv.Itoa(c.Credential.LoginType)
+	credential := c.Credential()
+	hasCredential := credential.Valid()
+	if hasCredential {
+		comm["qq"] = strconv.FormatInt(credential.MusicID, 10)
+		comm["authst"] = credential.Musickey
+		comm["tmeLoginType"] = strconv.Itoa(credential.LoginType)
 	}
 	for k, v := range extraCommon {
 		comm[k] = v
@@ -182,11 +200,11 @@ func (c *Client) callWith(ctx context.Context, hc *http.Client, module, method s
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", defaultUA)
 	req.Header.Set("Referer", "https://y.qq.com/")
-	if c.HasCredential() {
-		req.AddCookie(&http.Cookie{Name: "uin", Value: strconv.FormatInt(c.Credential.MusicID, 10)})
-		req.AddCookie(&http.Cookie{Name: "qqmusic_key", Value: c.Credential.Musickey})
-		req.AddCookie(&http.Cookie{Name: "qm_keyst", Value: c.Credential.Musickey})
-		req.AddCookie(&http.Cookie{Name: "tmeLoginType", Value: strconv.Itoa(c.Credential.LoginType)})
+	if hasCredential {
+		req.AddCookie(&http.Cookie{Name: "uin", Value: strconv.FormatInt(credential.MusicID, 10)})
+		req.AddCookie(&http.Cookie{Name: "qqmusic_key", Value: credential.Musickey})
+		req.AddCookie(&http.Cookie{Name: "qm_keyst", Value: credential.Musickey})
+		req.AddCookie(&http.Cookie{Name: "tmeLoginType", Value: strconv.Itoa(credential.LoginType)})
 	}
 
 	resp, err := hc.Do(req)

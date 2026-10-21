@@ -111,6 +111,12 @@ func (a *app) downloadSettings(c *ui.Context, col colors) {
 			a.saveSettings()
 		}
 	})
+	a.settingsRow(c, col, "下载并发", func() {
+		input := ui.NumberInput(c, &a.concurrency, 1, 8, 1).Label("下载并发").Width(100)
+		if input.Changed() {
+			a.saveSettings()
+		}
+	})
 	a.settingsRow(c, col, "覆盖文件", func() {
 		checkbox := ui.Checkbox(c, &a.overwrite, "覆盖已存在的文件")
 		if checkbox.Changed() {
@@ -182,7 +188,7 @@ func (a *app) reloadCredential() {
 	if a.userID == "" {
 		a.userID = "未登录"
 	}
-	if a.api.Credential.LoginType == 1 {
+	if a.api.Credential().LoginType == 1 {
 		a.loginType = "微信"
 	} else {
 		a.loginType = "QQ"

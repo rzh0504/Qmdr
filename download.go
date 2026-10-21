@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -36,7 +37,7 @@ func (a *app) enqueueSongs(songs []Song) {
 	}
 	for _, song := range songs {
 		if strings.TrimSpace(song.Mid) == "" {
-			a.setToast("歌单下载接口待接入，当前请使用搜索下载")
+			a.setToast("歌曲缺少 MID，无法下载")
 			return
 		}
 	}
@@ -85,6 +86,14 @@ func (a *app) startQueue() {
 		return
 	}
 
+	workers := int(a.concurrency)
+	if workers < 1 {
+		workers = 1
+	}
+	if workers > 8 {
+		workers = 8
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
 	a.downloading = true
@@ -93,126 +102,109 @@ func (a *app) startQueue() {
 	dir := a.downloadDir
 	overwrite := a.overwrite
 	coverSize := coverSizeValue(a.coverSize)
-	a.appendLog("开始处理下载队列", "info")
+	a.appendLog(fmt.Sprintf("开始处理下载队列（并发 %d）", workers), "info")
 	a.refresh()
-	go a.downloadLoop(ctx, runID, tasks, dir, overwrite, coverSize)
-}
 
-func (a *app) downloadLoop(ctx context.Context, runID int, tasks []downloadTask, dir string, overwrite bool, coverSize int) {
-	total := len(tasks)
-	for index, task := range tasks {
-		if ctx.Err() != nil {
-			a.update(func() {
-				if runID != a.runID {
-					return
-				}
-				a.downloading = false
-				a.cancel = nil
-				a.currentTaskID = 0
-				a.appendLog("下载已取消", "warning")
-				a.recalcOverallProgress()
-				a.toast = "下载已取消"
-			})
-			return
-		}
-
+	go func() {
+		a.runWorkers(ctx, runID, tasks, workers, dir, overwrite, coverSize)
 		a.update(func() {
-			if runID != a.runID || a.closed {
+			if runID != a.runID {
 				return
 			}
-			item := a.queueItem(task.ID)
-			if item == nil {
-				return
+			a.downloading = false
+			a.cancel = nil
+			if ctx.Err() != nil {
+				a.appendLog("下载已取消", "warning")
+				a.toast = "下载已取消"
+			} else {
+				a.appendLog("队列处理完成", "success")
+				a.toast = "队列处理完成"
 			}
-			item.Status = StatusDownloading
-			item.Progress = 0
-			item.Speed = 0
-			item.Error = ""
-			a.currentTaskID = task.ID
-			a.appendLog("开始下载："+task.Title, "info")
 			a.recalcOverallProgress()
 		})
+	}()
+}
 
-		resolveCtx, cancelResolve := context.WithTimeout(ctx, 30*time.Second)
-		resolved, err := a.api.ResolveURL(resolveCtx, task.Mid, task.Quality)
-		cancelResolve()
-		if err != nil {
-			if ctx.Err() != nil {
-				a.finishCancelled(runID, task.ID)
-				return
-			}
-			a.finishFailed(runID, task.ID, task.Title, err, index == total-1)
-			continue
-		}
-
-		name := sanitizeFilename(task.Artist + " - " + task.Title)
-		dest, err := safeDownloadPath(dir, name+resolved.Ext)
-		if err != nil {
-			a.finishFailed(runID, task.ID, task.Title, err, index == total-1)
-			continue
-		}
-
-		if _, statErr := os.Stat(dest); statErr == nil && !overwrite {
-			a.update(func() {
-				if runID != a.runID {
+func (a *app) runWorkers(ctx context.Context, runID int, tasks []downloadTask, workers int, dir string, overwrite bool, coverSize int) {
+	jobs := make(chan downloadTask)
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range jobs {
+				if ctx.Err() != nil {
 					return
 				}
-				item := a.queueItem(task.ID)
-				if item == nil {
-					return
-				}
-				item.Status = StatusSkipped
-				item.Progress = 1
-				item.Speed = 0
-				item.Quality = resolved.Quality
-				item.FilePath = dest
-				a.appendLog("文件已存在，跳过："+task.Title, "muted")
-				a.currentTaskID = 0
-				a.recalcOverallProgress()
-				if index == total-1 {
-					a.finishQueueRun()
-				}
-			})
-			continue
+				a.processDownload(ctx, runID, task, dir, overwrite, coverSize)
+			}
+		}()
+	}
+
+feed:
+	for _, task := range tasks {
+		select {
+		case <-ctx.Done():
+			break feed
+		case jobs <- task:
 		}
+	}
+	close(jobs)
+	wg.Wait()
+}
 
-		started := time.Now()
-		_, err = a.api.Download(ctx, resolved.URL, dest, overwrite, func(received, size int64) {
-			progress := 0.0
-			if size > 0 {
-				progress = min(1, float64(received)/float64(size))
-			}
-			elapsed := time.Since(started).Seconds()
-			speed := 0.0
-			if elapsed > 0 {
-				speed = float64(received) / (1 << 20) / elapsed
-			}
-			a.update(func() {
-				if runID != a.runID {
-					return
-				}
-				item := a.queueItem(task.ID)
-				if item == nil {
-					return
-				}
-				item.Progress = progress
-				item.Speed = speed
-				a.recalcOverallProgress()
-			})
-		})
-		if err != nil {
-			if ctx.Err() != nil {
-				a.finishCancelled(runID, task.ID)
-				return
-			}
-			a.finishFailed(runID, task.ID, task.Title, err, index == total-1)
-			continue
+func (a *app) processDownload(ctx context.Context, runID int, task downloadTask, dir string, overwrite bool, coverSize int) {
+	a.update(func() {
+		if runID != a.runID || a.closed {
+			return
 		}
+		item := a.queueItem(task.ID)
+		if item == nil {
+			return
+		}
+		item.Status = StatusDownloading
+		item.Progress = 0
+		item.Speed = 0
+		item.Error = ""
+		a.appendLog("开始下载："+task.Title, "info")
+		a.recalcOverallProgress()
+	})
 
-		metaCtx, metaCancel := context.WithTimeout(context.Background(), 30*time.Second)
-		metaErr := a.writeMetadata(metaCtx, task, dest, coverSize)
-		metaCancel()
+	resolveCtx, cancelResolve := context.WithTimeout(ctx, 30*time.Second)
+	resolved, err := a.api.ResolveURL(resolveCtx, task.Mid, task.Quality)
+	cancelResolve()
+	if err != nil {
+		if ctx.Err() != nil {
+			a.markCancelled(runID, task)
+			return
+		}
+		a.markFailed(runID, task, err)
+		return
+	}
 
+	name := sanitizeFilename(task.Artist + " - " + task.Title)
+	dest, err := safeDownloadPath(dir, name+resolved.Ext)
+	if err != nil {
+		a.markFailed(runID, task, err)
+		return
+	}
+
+	if _, statErr := os.Stat(dest); statErr == nil && !overwrite {
+		a.markSkipped(runID, task, dest, resolved.Quality)
+		return
+	}
+
+	started := time.Now()
+	_, err = a.api.Download(ctx, resolved.URL, dest, overwrite, func(received, size int64) {
+		progress := 0.0
+		if size > 0 {
+			progress = min(1, float64(received)/float64(size))
+		}
+		elapsed := time.Since(started).Seconds()
+		speed := 0.0
+		if elapsed > 0 {
+			speed = float64(received) / (1 << 20) / elapsed
+		}
 		a.update(func() {
 			if runID != a.runID {
 				return
@@ -221,68 +213,90 @@ func (a *app) downloadLoop(ctx context.Context, runID int, tasks []downloadTask,
 			if item == nil {
 				return
 			}
-			item.Status = StatusDone
-			item.Progress = 1
-			item.Speed = 0
-			item.Quality = resolved.Quality
-			item.FilePath = dest
-			a.appendLog("下载成功："+task.Title+"（"+resolved.Quality+"）", "success")
-			if metaErr != nil {
-				a.appendLog("元数据写入失败："+task.Title+"（"+friendlyError(metaErr)+"）", "warning")
-			}
-			a.currentTaskID = 0
+			item.Progress = progress
+			item.Speed = speed
 			a.recalcOverallProgress()
-			if index == total-1 {
-				a.finishQueueRun()
-			}
 		})
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			a.markCancelled(runID, task)
+			return
+		}
+		a.markFailed(runID, task, err)
+		return
 	}
-}
 
-func (a *app) finishCancelled(runID, taskID int) {
+	metaCtx, metaCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	metaErr := a.writeMetadata(metaCtx, task, dest, coverSize)
+	metaCancel()
+
 	a.update(func() {
 		if runID != a.runID {
 			return
 		}
-		if item := a.queueItem(taskID); item != nil {
-			item.Status = StatusCancelled
-			item.Speed = 0
+		item := a.queueItem(task.ID)
+		if item == nil {
+			return
 		}
-		a.currentTaskID = 0
-		a.downloading = false
-		a.cancel = nil
-		a.appendLog("下载已取消", "warning")
+		item.Status = StatusDone
+		item.Progress = 1
+		item.Speed = 0
+		item.Quality = resolved.Quality
+		item.FilePath = dest
+		a.appendLog("下载成功："+task.Title+"（"+resolved.Quality+"）", "success")
+		if metaErr != nil {
+			a.appendLog("元数据写入失败："+task.Title+"（"+friendlyError(metaErr)+"）", "warning")
+		}
 		a.recalcOverallProgress()
-		a.toast = "下载已取消"
 	})
 }
 
-func (a *app) finishFailed(runID, taskID int, title string, err error, last bool) {
+func (a *app) markCancelled(runID int, task downloadTask) {
+	a.update(func() {
+		if runID != a.runID {
+			return
+		}
+		if item := a.queueItem(task.ID); item != nil {
+			item.Status = StatusCancelled
+			item.Speed = 0
+		}
+		a.appendLog("已取消："+task.Title, "warning")
+		a.recalcOverallProgress()
+	})
+}
+
+func (a *app) markFailed(runID int, task downloadTask, err error) {
 	message := friendlyError(err)
 	a.update(func() {
 		if runID != a.runID {
 			return
 		}
-		if item := a.queueItem(taskID); item != nil {
+		if item := a.queueItem(task.ID); item != nil {
 			item.Status = StatusFailed
 			item.Speed = 0
 			item.Error = message
 		}
-		a.appendLog("下载失败："+title+"（"+message+"）", "error")
-		a.currentTaskID = 0
+		a.appendLog("下载失败："+task.Title+"（"+message+"）", "error")
 		a.recalcOverallProgress()
-		if last {
-			a.finishQueueRun()
-		}
 	})
 }
 
-func (a *app) finishQueueRun() {
-	a.downloading = false
-	a.cancel = nil
-	a.currentTaskID = 0
-	a.appendLog("队列处理完成", "success")
-	a.toast = "队列处理完成"
+func (a *app) markSkipped(runID int, task downloadTask, dest, quality string) {
+	a.update(func() {
+		if runID != a.runID {
+			return
+		}
+		if item := a.queueItem(task.ID); item != nil {
+			item.Status = StatusSkipped
+			item.Progress = 1
+			item.Speed = 0
+			item.Quality = quality
+			item.FilePath = dest
+		}
+		a.appendLog("文件已存在，跳过："+task.Title, "muted")
+		a.recalcOverallProgress()
+	})
 }
 
 func (a *app) cancelQueue() {
@@ -335,6 +349,10 @@ func (a *app) retryItem(id int) {
 }
 
 func (a *app) removeItem(id int) {
+	if a.downloading {
+		a.setToast("请先取消当前下载")
+		return
+	}
 	index := -1
 	for i := range a.queue {
 		if a.queue[i].ID == id {
@@ -345,10 +363,6 @@ func (a *app) removeItem(id int) {
 	if index < 0 {
 		return
 	}
-	if a.queue[index].Status == StatusDownloading {
-		a.setToast("请先取消当前任务")
-		return
-	}
 	a.queue = append(a.queue[:index], a.queue[index+1:]...)
 	a.recalcOverallProgress()
 	a.refresh()
@@ -357,18 +371,6 @@ func (a *app) removeItem(id int) {
 func (a *app) queueItem(id int) *QueueItem {
 	for i := range a.queue {
 		if a.queue[i].ID == id {
-			return &a.queue[i]
-		}
-	}
-	return nil
-}
-
-func (a *app) currentQueueItem() *QueueItem {
-	if item := a.queueItem(a.currentTaskID); item != nil {
-		return item
-	}
-	for i := range a.queue {
-		if a.queue[i].Status == StatusDownloading {
 			return &a.queue[i]
 		}
 	}

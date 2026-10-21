@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/egoist/mygo/ui"
 )
 
@@ -77,9 +75,13 @@ func (a *app) queueView(c *ui.Context, col colors) {
 func (a *app) queueSummary(c *ui.Context, col colors, total, done, failed, skipped, active int) {
 	processed := done + failed + skipped
 	percent := a.overallProgress * 100
-	speed := ""
-	if current := a.currentQueueItem(); current != nil && current.Status == StatusDownloading {
-		speed = fmt.Sprintf("%.1f MB/s", current.Speed)
+	activeDownloads := 0
+	speed := 0.0
+	for _, item := range a.queue {
+		if item.Status == StatusDownloading {
+			activeDownloads++
+			speed += item.Speed
+		}
 	}
 
 	ui.Row(c).FillWidth().AlignItems(ui.End).Children(func() {
@@ -91,8 +93,9 @@ func (a *app) queueSummary(c *ui.Context, col colors, total, done, failed, skipp
 			ui.Textf(c, "完成 %d · 跳过 %d · 失败 %d · 进行中 %d", done, skipped, failed, active).
 				FontSize(9).TextColor(col.muted)
 		})
-		if speed != "" {
-			ui.Text(c, speed).FontSize(9).TextColor(col.muted)
+		if activeDownloads > 0 {
+			ui.Textf(c, "%d 个下载中 · %.1f MB/s", activeDownloads, speed).
+				FontSize(9).TextColor(col.muted)
 		}
 	})
 

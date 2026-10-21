@@ -52,13 +52,13 @@ type app struct {
 	showLogs        bool
 	downloading     bool
 	overallProgress float64
-	currentTaskID   int
 	runID           int
 	cancel          context.CancelFunc
 	logs            []LogEntry
 
 	downloadDir string
 	coverSize   string
+	concurrency float64
 	overwrite   bool
 	externalAPI string
 
@@ -79,7 +79,7 @@ func newApp() *app {
 	api := qqmusic.New()
 	userID := api.UserID()
 	loginType := "QQ"
-	if api.Credential.LoginType == 1 {
+	if api.Credential().LoginType == 1 {
 		loginType = "微信"
 	}
 	displayUser := userID
@@ -95,6 +95,7 @@ func newApp() *app {
 		selectedPlaylist: -1,
 		downloadDir:      settings.DownloadDir,
 		coverSize:        settings.CoverSize,
+		concurrency:      settings.Concurrency,
 		overwrite:        settings.Overwrite,
 		loggedIn:         api.HasCredential(),
 		userID:           displayUser,
@@ -379,7 +380,7 @@ func (a *app) finishLogin() {
 	if a.userID == "" {
 		a.userID = "未登录"
 	}
-	if a.api.Credential.LoginType == 1 {
+	if a.api.Credential().LoginType == 1 {
 		a.loginType = "微信"
 	} else {
 		a.loginType = "QQ"
