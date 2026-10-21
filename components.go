@@ -446,37 +446,37 @@ func (a *app) trackSongPress(row ui.Element, song Song, onLongPress func()) {
 		return
 	}
 	if row.Pressed() {
-		if a.songPressKey == key {
+		if a.playlists.pressKey == key {
 			return
 		}
 		a.stopSongPress()
-		a.songPressKey = key
-		a.songPressSeq++
-		seq := a.songPressSeq
-		a.suppressSongClick = false
-		a.songPressTimer = time.AfterFunc(songLongPressDelay, func() {
+		a.playlists.pressKey = key
+		a.playlists.pressSeq++
+		seq := a.playlists.pressSeq
+		a.playlists.suppressClick = false
+		a.playlists.pressTimer = time.AfterFunc(songLongPressDelay, func() {
 			a.update(func() {
-				if a.songPressKey != key || a.songPressSeq != seq {
+				if a.playlists.pressKey != key || a.playlists.pressSeq != seq {
 					return
 				}
-				a.songPressTimer = nil
-				a.suppressSongClick = true
+				a.playlists.pressTimer = nil
+				a.playlists.suppressClick = true
 				onLongPress()
 			})
 		})
 		return
 	}
-	if a.songPressKey == key {
+	if a.playlists.pressKey == key {
 		a.stopSongPress()
 	}
 }
 
 func (a *app) stopSongPress() {
-	if a.songPressTimer != nil {
-		a.songPressTimer.Stop()
-		a.songPressTimer = nil
+	if a.playlists.pressTimer != nil {
+		a.playlists.pressTimer.Stop()
+		a.playlists.pressTimer = nil
 	}
-	a.songPressKey = ""
+	a.playlists.pressKey = ""
 }
 
 func songSelectionMark(c *ui.Context, col colors, selected bool) ui.Element {
@@ -513,12 +513,12 @@ func (a *app) songRow(c *ui.Context, col colors, song Song, opts songRowOptions)
 		a.trackSongPress(row, song, opts.onLongPress)
 	}
 	if opts.selectMode && opts.onSelect != nil && row.Clicked() {
-		if a.suppressSongClick && song.Mid == a.songPressKey {
-			a.suppressSongClick = false
-			a.songPressKey = ""
+		if a.playlists.suppressClick && song.Mid == a.playlists.pressKey {
+			a.playlists.suppressClick = false
+			a.playlists.pressKey = ""
 		} else {
-			a.suppressSongClick = false
-			a.songPressKey = ""
+			a.playlists.suppressClick = false
+			a.playlists.pressKey = ""
 			opts.onSelect()
 		}
 	}

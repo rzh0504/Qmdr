@@ -19,7 +19,7 @@ func (a *app) playlistsView(c *ui.Context, col colors) {
 }
 
 func (a *app) viewingOtherPlaylists() bool {
-	owner := strings.TrimSpace(a.playlistOwner)
+	owner := strings.TrimSpace(a.playlists.owner)
 	return owner != "" && owner != a.api.UserID()
 }
 
@@ -42,16 +42,16 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, title).FontSize(12).FontWeight(600).TextColor(col.muted)
-					if len(a.playlists) > 0 {
-						ui.Textf(c, "%d", len(a.playlists)).FontSize(12).TextColor(col.faint)
+					if len(a.playlists.items) > 0 {
+						ui.Textf(c, "%d", len(a.playlists.items)).FontSize(12).TextColor(col.faint)
 					}
 				})
 				if a.viewingOtherPlaylists() {
-					ui.Text(c, a.playlistOwner).FontSize(11).TextColor(col.faint).
+					ui.Text(c, a.playlists.owner).FontSize(11).TextColor(col.faint).
 						SingleLine().Ellipsis("…")
 				}
 			})
-			if a.loadingPlaylists || a.refreshingPlaylists {
+			if a.playlists.loading || a.playlists.refreshing {
 				ui.Row(c).Gap(4).AlignItems(ui.Center).Padding(2, 6).Children(func() {
 					ui.Spinner(c).Size(12, 12)
 					ui.Text(c, "刷新").FontSize(12).TextColor(col.faint)
@@ -66,12 +66,12 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 			}
 		})
 
-		if len(a.playlists) == 0 {
+		if len(a.playlists.items) == 0 {
 			sheet(c, col, func() {
 				title := "还没有歌单"
 				hint := "点击刷新按钮读取歌单。"
 				switch {
-				case !a.loggedIn:
+				case !a.login.loggedIn:
 					title = "未登录"
 					hint = "请先在设置页登录。"
 				case a.viewingOtherPlaylists():
@@ -80,16 +80,16 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 				}
 				emptyState(c, col, iconLibrary, title, hint)
 			})
-			if a.playlistErr != "" {
-				ui.Text(c, a.playlistErr).FontSize(11).TextColor(col.red).MaxLines(2).Padding(0, 4)
+			if a.playlists.err != "" {
+				ui.Text(c, a.playlists.err).FontSize(11).TextColor(col.red).MaxLines(2).Padding(0, 4)
 			}
 			return
 		}
 
-		listPanel(c, col, "playlists-"+a.playlistOwner, func() {
-			for i, playlist := range a.playlists {
+		listPanel(c, col, "playlists-"+a.playlists.owner, func() {
+			for i, playlist := range a.playlists.items {
 				i, playlist := i, playlist
-				selected := i == a.selectedPlaylist
+				selected := i == a.playlists.selected
 				btn := ui.ButtonBase(c).Gap(9).Padding(6, 8).Height(46).Radius(8).
 					AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(playlist.Name)
 				if selected {
@@ -117,13 +117,13 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 
 func (a *app) playlistPreview(c *ui.Context, col colors) {
 	ui.Column(c).Grow(1).MinWidth(0).FillHeight().MinHeight(0).Gap(12).Children(func() {
-		if len(a.playlists) == 0 || a.selectedPlaylist < 0 || a.selectedPlaylist >= len(a.playlists) {
+		if len(a.playlists.items) == 0 || a.playlists.selected < 0 || a.playlists.selected >= len(a.playlists.items) {
 			sheet(c, col, func() {
 				emptyState(c, col, iconPlay, "选择一个歌单", "左侧选择歌单后，这里会显示歌曲。")
 			})
 			return
 		}
-		playlist := a.playlists[a.selectedPlaylist]
+		playlist := a.playlists.items[a.playlists.selected]
 		selectedCount := a.selectedSongCount()
 
 		ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).Children(func() {
@@ -131,18 +131,18 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 			ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
 				ui.Text(c, playlist.Name).FontSize(16).FontWeight(600).
 					TextColor(col.text).SingleLine()
-				if a.selectingSongs {
-					ui.Textf(c, "已选 %d / %d 首", selectedCount, len(a.playlistSongs)).
+				if a.playlists.selecting {
+					ui.Textf(c, "已选 %d / %d 首", selectedCount, len(a.playlists.songs)).
 						FontSize(12).TextColor(col.accent)
 				} else {
 					ui.Textf(c, "%d 首", playlist.Count).FontSize(12).TextColor(col.muted)
 				}
 			})
-			if a.loadingSongs {
+			if a.playlists.loadingSongs {
 				ui.Spinner(c).Size(15, 15)
-			} else if len(a.playlistSongs) > 0 {
+			} else if len(a.playlists.songs) > 0 {
 				ui.Row(c).Gap(6).Shrink(0).AlignItems(ui.Center).Children(func() {
-					if a.selectingSongs {
+					if a.playlists.selecting {
 						allLabel := "全选"
 						if a.allSongsSelected() {
 							allLabel = "取消全选"
@@ -162,47 +162,47 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 		})
 
 		switch {
-		case a.loadingSongs:
+		case a.playlists.loadingSongs:
 			softCard(c, col, func() {
 				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
 					ui.Spinner(c).Size(15, 15)
 					ui.Text(c, "正在加载歌曲…").FontSize(12).TextColor(col.muted)
 				})
 			})
-		case a.playlistErr != "":
+		case a.playlists.err != "":
 			softCard(c, col, func() {
 				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
 					ui.Icon(c, iconAlert).Size(15, 15).TextColor(col.red)
-					ui.Text(c, a.playlistErr).FontSize(12).TextColor(col.red).Grow(1).MaxLines(2)
+					ui.Text(c, a.playlists.err).FontSize(12).TextColor(col.red).Grow(1).MaxLines(2)
 					secondaryButton(c, col, iconRefresh, "重试", func() {
-						a.loadPlaylistSongs(a.selectedPlaylist)
+						a.loadPlaylistSongs(a.playlists.selected)
 					})
 				})
 			})
-		case len(a.playlistSongs) == 0:
+		case len(a.playlists.songs) == 0:
 			sheet(c, col, func() {
 				emptyState(c, col, iconMusic, "歌单为空", "这个歌单暂时没有可下载的歌曲。")
 			})
 		default:
-			if a.playlistNotice != "" {
+			if a.playlists.notice != "" {
 				ui.Row(c).FillWidth().Gap(7).AlignItems(ui.Center).Padding(0, 4).Children(func() {
 					ui.Icon(c, iconAlert).Size(14, 14).TextColor(col.gold)
-					ui.Text(c, a.playlistNotice).FontSize(12).TextColor(col.muted).
+					ui.Text(c, a.playlists.notice).FontSize(12).TextColor(col.muted).
 						Grow(1).MaxLines(2)
 				})
 			}
-			listPanel(c, col, "songs-"+a.playlistOwner+"-"+strconv.FormatInt(playlist.TID, 10), func() {
-				for i, song := range a.playlistSongs {
+			listPanel(c, col, "songs-"+a.playlists.owner+"-"+strconv.FormatInt(playlist.TID, 10), func() {
+				for i, song := range a.playlists.songs {
 					i, song := i, song
-					selected := a.selectingSongs && a.selectedSongMids[song.Mid]
+					selected := a.playlists.selecting && a.playlists.selectedMids[song.Mid]
 					var longPress func()
-					if !a.selectingSongs {
+					if !a.playlists.selecting {
 						longPress = func() { a.beginSongSelectionWith(song) }
 					}
 					row := a.songRow(c, col, song, songRowOptions{
 						index:       i,
 						selected:    selected,
-						selectMode:  a.selectingSongs,
+						selectMode:  a.playlists.selecting,
 						onSelect:    func() { a.toggleSongSelection(song) },
 						onLongPress: longPress,
 					})
@@ -216,7 +216,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 }
 
 func (a *app) songContextMenu(m *ui.Menu, song Song) {
-	if a.selectingSongs {
+	if a.playlists.selecting {
 		if m.Item("下载选中歌曲").Disabled(a.selectedSongCount() == 0).Chosen() {
 			a.downloadSelectedSongs()
 		}
@@ -245,11 +245,11 @@ func (a *app) beginSongSelectionWith(song Song) {
 		a.setToast("歌曲缺少 MID，无法下载")
 		return
 	}
-	if !a.selectingSongs {
-		a.selectingSongs = true
-		a.selectedSongMids = make(map[string]bool)
+	if !a.playlists.selecting {
+		a.playlists.selecting = true
+		a.playlists.selectedMids = make(map[string]bool)
 	}
-	a.selectedSongMids[song.Mid] = true
+	a.playlists.selectedMids[song.Mid] = true
 	if a.selectedSongCount() == 0 {
 		a.resetSongSelection()
 	}
@@ -263,26 +263,26 @@ func (a *app) endSongSelection() {
 
 func (a *app) resetSongSelection() {
 	a.stopSongPress()
-	a.selectingSongs = false
-	a.selectedSongMids = make(map[string]bool)
-	a.suppressSongClick = false
+	a.playlists.selecting = false
+	a.playlists.selectedMids = make(map[string]bool)
+	a.playlists.suppressClick = false
 }
 
 func (a *app) toggleSongSelection(song Song) {
-	if !a.selectingSongs {
+	if !a.playlists.selecting {
 		return
 	}
 	if strings.TrimSpace(song.Mid) == "" {
 		a.setToast("歌曲缺少 MID，无法下载")
 		return
 	}
-	if a.selectedSongMids[song.Mid] {
-		delete(a.selectedSongMids, song.Mid)
+	if a.playlists.selectedMids[song.Mid] {
+		delete(a.playlists.selectedMids, song.Mid)
 		if a.selectedSongCount() == 0 {
 			a.resetSongSelection()
 		}
 	} else {
-		a.selectedSongMids[song.Mid] = true
+		a.playlists.selectedMids[song.Mid] = true
 	}
 	a.refresh()
 }
@@ -298,13 +298,13 @@ func (a *app) toggleAllSongs() {
 }
 
 func (a *app) selectAllSongs() {
-	next := make(map[string]bool, len(a.playlistSongs))
-	for _, song := range a.playlistSongs {
+	next := make(map[string]bool, len(a.playlists.songs))
+	for _, song := range a.playlists.songs {
 		if strings.TrimSpace(song.Mid) != "" {
 			next[song.Mid] = true
 		}
 	}
-	a.selectedSongMids = next
+	a.playlists.selectedMids = next
 	if len(next) == 0 {
 		a.resetSongSelection()
 	}
@@ -312,11 +312,11 @@ func (a *app) selectAllSongs() {
 }
 
 func (a *app) allSongsSelected() bool {
-	if len(a.playlistSongs) == 0 {
+	if len(a.playlists.songs) == 0 {
 		return false
 	}
-	for _, song := range a.playlistSongs {
-		if !a.selectedSongMids[song.Mid] {
+	for _, song := range a.playlists.songs {
+		if !a.playlists.selectedMids[song.Mid] {
 			return false
 		}
 	}
@@ -325,8 +325,8 @@ func (a *app) allSongsSelected() bool {
 
 func (a *app) selectedSongCount() int {
 	count := 0
-	for _, song := range a.playlistSongs {
-		if a.selectedSongMids[song.Mid] {
+	for _, song := range a.playlists.songs {
+		if a.playlists.selectedMids[song.Mid] {
 			count++
 		}
 	}
@@ -334,9 +334,9 @@ func (a *app) selectedSongCount() int {
 }
 
 func (a *app) selectedSongsInOrder() []Song {
-	songs := make([]Song, 0, len(a.selectedSongMids))
-	for _, song := range a.playlistSongs {
-		if a.selectedSongMids[song.Mid] {
+	songs := make([]Song, 0, len(a.playlists.selectedMids))
+	for _, song := range a.playlists.songs {
+		if a.playlists.selectedMids[song.Mid] {
 			songs = append(songs, song)
 		}
 	}
@@ -370,37 +370,37 @@ func (a *app) downloadSelectedSongs() {
 }
 
 func (a *app) downloadCurrentPlaylist() {
-	if a.enqueueSongs(a.playlistSongs) {
+	if a.enqueueSongs(a.playlists.songs) {
 		a.resetSongSelection()
 	}
 }
 
 func (a *app) pruneSongSelection() {
-	if !a.selectingSongs {
+	if !a.playlists.selecting {
 		return
 	}
-	if len(a.playlistSongs) == 0 {
+	if len(a.playlists.songs) == 0 {
 		a.resetSongSelection()
 		return
 	}
-	next := make(map[string]bool, len(a.selectedSongMids))
-	for _, song := range a.playlistSongs {
-		if a.selectedSongMids[song.Mid] {
+	next := make(map[string]bool, len(a.playlists.selectedMids))
+	for _, song := range a.playlists.songs {
+		if a.playlists.selectedMids[song.Mid] {
 			next[song.Mid] = true
 		}
 	}
-	a.selectedSongMids = next
+	a.playlists.selectedMids = next
 	if a.selectedSongCount() == 0 {
 		a.resetSongSelection()
 	}
 }
 
 func (a *app) refreshPlaylists() {
-	owner := strings.TrimSpace(a.playlistOwner)
+	owner := strings.TrimSpace(a.playlists.owner)
 	if owner == "" || owner == "未登录" {
 		owner = a.api.UserID()
 	}
-	if len(a.playlists) == 0 {
+	if len(a.playlists.items) == 0 {
 		a.loadPlaylistsFor(owner)
 		return
 	}
@@ -408,7 +408,7 @@ func (a *app) refreshPlaylists() {
 }
 
 func (a *app) refreshPlaylistsQuiet(owner string) {
-	if a.loadingPlaylists || a.refreshingPlaylists || a.loadingSongs {
+	if a.playlists.loading || a.playlists.refreshing || a.playlists.loadingSongs {
 		return
 	}
 	if !a.api.HasCredential() {
@@ -422,67 +422,57 @@ func (a *app) refreshPlaylistsQuiet(owner string) {
 	if owner == "" {
 		return
 	}
-	a.playlistReq++
-	requestID := a.playlistReq
-	a.playlistOwner = owner
-	a.refreshingPlaylists = true
+	a.playlists.owner = owner
+	a.playlists.refreshing = true
 	a.refresh()
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-		defer cancel()
-		items, err := a.api.UserPlaylists(ctx, owner)
-		mapped := make([]Playlist, 0, len(items))
-		for _, item := range items {
-			mapped = append(mapped, Playlist{
-				DirID: item.DirID,
-				TID:   item.TID,
-				Name:  item.Name,
-				Count: item.SongCount,
-			})
-		}
-		a.update(func() {
-			if requestID != a.playlistReq {
-				return
+	var list []Playlist
+	a.async(&a.playlists.slot, 25*time.Second,
+		func(ctx context.Context) error {
+			items, err := a.api.UserPlaylists(ctx, owner)
+			if err != nil {
+				return err
 			}
-			a.refreshingPlaylists = false
+			list = mapPlaylists(items)
+			return nil
+		},
+		func(err error) {
+			a.playlists.refreshing = false
 			if err != nil {
 				a.toast = "刷新失败：" + friendlyError(err)
 				return
 			}
-			a.applyPlaylistsQuiet(mapped)
-			if !a.loadingSongs {
+			a.applyPlaylistsQuiet(list)
+			if !a.playlists.loadingSongs {
 				a.refreshSelectedSongsQuiet()
 			}
 		})
-	}()
 }
 
 func (a *app) applyPlaylistsQuiet(playlists []Playlist) {
-	if playlistsEqual(a.playlists, playlists) {
+	if playlistsEqual(a.playlists.items, playlists) {
 		return
 	}
 	var selectedTID, selectedDirID int64
-	if a.selectedPlaylist >= 0 && a.selectedPlaylist < len(a.playlists) {
-		selected := a.playlists[a.selectedPlaylist]
+	if a.playlists.selected >= 0 && a.playlists.selected < len(a.playlists.items) {
+		selected := a.playlists.items[a.playlists.selected]
 		selectedTID, selectedDirID = selected.TID, selected.DirID
 	}
-	a.playlists = playlists
-	a.selectedPlaylist = -1
+	a.playlists.items = playlists
+	a.playlists.selected = -1
 	if selectedTID != 0 || selectedDirID != 0 {
 		for i, playlist := range playlists {
 			if playlist.TID == selectedTID && playlist.DirID == selectedDirID {
-				a.selectedPlaylist = i
+				a.playlists.selected = i
 				break
 			}
 		}
 	}
-	if a.selectedPlaylist < 0 {
-		a.playlistSongs = nil
-		a.playlistSongsID++
-		a.loadingSongs = false
-		a.playlistErr = ""
-		a.playlistNotice = ""
+	if a.playlists.selected < 0 {
+		a.playlists.songs = nil
+		a.playlists.songsSlot.reset()
+		a.playlists.loadingSongs = false
+		a.playlists.err = ""
+		a.playlists.notice = ""
 		a.resetSongSelection()
 	}
 	if !a.viewingOtherPlaylists() {
@@ -491,72 +481,57 @@ func (a *app) applyPlaylistsQuiet(playlists []Playlist) {
 }
 
 func (a *app) refreshSelectedSongsQuiet() {
-	if a.loadingSongs {
+	if a.playlists.loadingSongs {
 		return
 	}
-	index := a.selectedPlaylist
-	if index < 0 || index >= len(a.playlists) {
+	index := a.playlists.selected
+	if index < 0 || index >= len(a.playlists.items) {
 		return
 	}
-	playlist := a.playlists[index]
+	playlist := a.playlists.items[index]
 	if playlist.DirID == 201 && a.viewingOtherPlaylists() {
 		return
 	}
-	owner := a.playlistOwner
+	owner := a.playlists.owner
 	tid, dirID := playlist.TID, playlist.DirID
-	a.playlistSongsID++
-	requestID := a.playlistSongsID
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		page, err := a.api.PlaylistSongs(ctx, tid, dirID)
-		if err != nil {
-			// A quiet refresh stays quiet when it still has content to
-			// show; it only reports the failure when the panel is empty.
-			a.update(func() {
-				if requestID != a.playlistSongsID || a.playlistOwner != owner {
-					return
-				}
-				if len(a.playlistSongs) == 0 && a.selectedPlaylist >= 0 &&
-					a.selectedPlaylist < len(a.playlists) {
-					current := a.playlists[a.selectedPlaylist]
-					if current.TID == tid && current.DirID == dirID {
-						a.playlistErr = friendlyError(err)
-					}
-				}
-			})
-			return
-		}
-		mapped := make([]Song, 0, len(page.Songs))
-		for _, song := range page.Songs {
-			mapped = append(mapped, songFromAPI(song))
-		}
-		a.update(func() {
-			if requestID != a.playlistSongsID || a.playlistOwner != owner {
+	var page qqmusic.PlaylistPage
+	a.async(&a.playlists.songsSlot, 30*time.Second,
+		func(ctx context.Context) error {
+			fetched, err := a.api.PlaylistSongs(ctx, tid, dirID)
+			page = fetched
+			return err
+		},
+		func(err error) {
+			if a.playlists.owner != owner {
 				return
 			}
-			if a.selectedPlaylist < 0 || a.selectedPlaylist >= len(a.playlists) {
+			if a.playlists.selected < 0 || a.playlists.selected >= len(a.playlists.items) {
 				return
 			}
-			current := a.playlists[a.selectedPlaylist]
+			current := a.playlists.items[a.playlists.selected]
 			if current.TID != tid || current.DirID != dirID {
 				return
 			}
-			if a.playlistErr != "" {
-				a.playlistErr = ""
-			}
-			a.playlistNotice = truncationNotice(page)
-			if songsEqual(a.playlistSongs, mapped) {
+			if err != nil {
+				// A quiet refresh stays quiet when it still has content to
+				// show; it only reports the failure when the panel is empty.
+				if len(a.playlists.songs) == 0 {
+					a.playlists.err = friendlyError(err)
+				}
 				return
 			}
-			a.playlistSongs = mapped
+			a.playlists.err = ""
+			a.playlists.notice = truncationNotice(page)
+			mapped := mapSongs(page)
+			if songsEqual(a.playlists.songs, mapped) {
+				return
+			}
+			a.playlists.songs = mapped
 			a.pruneSongSelection()
 			if !a.viewingOtherPlaylists() {
 				a.savePlaylistCache()
 			}
 		})
-	}()
 }
 
 func truncationNotice(page qqmusic.PlaylistPage) string {
@@ -594,23 +569,22 @@ func songsEqual(a, b []Song) bool {
 }
 
 func (a *app) loadOwnPlaylists() {
-	a.musicIDOpen = false
-	a.musicIDErr = ""
+	a.playlists.musicIDOpen = false
+	a.playlists.musicIDErr = ""
 	owner := a.api.UserID()
-	a.playlistReq++
-	a.playlistSongsID++
-	a.loadingPlaylists = false
-	a.refreshingPlaylists = false
-	a.loadingSongs = false
-	a.playlistOwner = owner
-	a.playlistErr = ""
-	a.playlistNotice = ""
-	a.playlists = nil
-	a.selectedPlaylist = -1
-	a.playlistSongs = nil
+	a.playlists.resetFetches()
+	a.playlists.loading = false
+	a.playlists.refreshing = false
+	a.playlists.loadingSongs = false
+	a.playlists.owner = owner
+	a.playlists.err = ""
+	a.playlists.notice = ""
+	a.playlists.items = nil
+	a.playlists.selected = -1
+	a.playlists.songs = nil
 	a.resetSongSelection()
 	a.restorePlaylistCache()
-	if len(a.playlists) > 0 {
+	if len(a.playlists.items) > 0 {
 		a.refresh()
 		return
 	}
@@ -630,53 +604,44 @@ func (a *app) loadPlaylistsFor(owner string) {
 		a.setToast("缺少 music ID")
 		return
 	}
-	a.playlistReq++
-	requestID := a.playlistReq
-	a.playlistSongsID++
-	a.playlistOwner = owner
-	a.loadingPlaylists = true
-	a.refreshingPlaylists = false
-	a.loadingSongs = false
-	a.playlistErr = ""
-	a.playlistNotice = ""
-	a.playlists = nil
-	a.selectedPlaylist = -1
-	a.playlistSongs = nil
+	a.playlists.songsSlot.reset()
+	a.playlists.owner = owner
+	a.playlists.loading = true
+	a.playlists.refreshing = false
+	a.playlists.loadingSongs = false
+	a.playlists.err = ""
+	a.playlists.notice = ""
+	a.playlists.items = nil
+	a.playlists.selected = -1
+	a.playlists.songs = nil
 	a.resetSongSelection()
-	a.musicIDOpen = false
-	a.musicIDErr = ""
+	a.playlists.musicIDOpen = false
+	a.playlists.musicIDErr = ""
 	a.refresh()
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-		defer cancel()
-		items, err := a.api.UserPlaylists(ctx, owner)
-		mapped := make([]Playlist, 0, len(items))
-		for _, item := range items {
-			mapped = append(mapped, Playlist{
-				DirID: item.DirID,
-				TID:   item.TID,
-				Name:  item.Name,
-				Count: item.SongCount,
-			})
-		}
-		a.update(func() {
-			if requestID != a.playlistReq {
-				return
-			}
-			a.loadingPlaylists = false
+	var list []Playlist
+	a.async(&a.playlists.slot, 25*time.Second,
+		func(ctx context.Context) error {
+			items, err := a.api.UserPlaylists(ctx, owner)
 			if err != nil {
-				a.playlistErr = friendlyError(err)
+				return err
+			}
+			list = mapPlaylists(items)
+			return nil
+		},
+		func(err error) {
+			a.playlists.loading = false
+			if err != nil {
+				a.playlists.err = friendlyError(err)
 				a.toast = "读取歌单失败"
 				return
 			}
-			a.playlists = mapped
-			a.selectedPlaylist = -1
-			a.playlistSongs = nil
+			a.playlists.items = list
+			a.playlists.selected = -1
+			a.playlists.songs = nil
 			if !a.viewingOtherPlaylists() {
 				a.savePlaylistCache()
 			}
-			if len(mapped) == 0 {
+			if len(list) == 0 {
 				if a.viewingOtherPlaylists() {
 					a.toast = "该用户没有公开歌单"
 				} else {
@@ -686,36 +651,35 @@ func (a *app) loadPlaylistsFor(owner string) {
 			}
 			a.loadPlaylistSongs(0)
 		})
-	}()
 }
 
 func (a *app) openMusicIDModal() {
-	a.musicIDInput = ""
-	a.musicIDErr = ""
-	a.musicIDOpen = true
+	a.playlists.musicIDInput = ""
+	a.playlists.musicIDErr = ""
+	a.playlists.musicIDOpen = true
 	a.refresh()
 }
 
 func (a *app) closeMusicIDModal() {
-	a.musicIDOpen = false
-	a.musicIDErr = ""
+	a.playlists.musicIDOpen = false
+	a.playlists.musicIDErr = ""
 	a.refresh()
 }
 
 func (a *app) submitMusicID() {
-	id := strings.TrimSpace(a.musicIDInput)
+	id := strings.TrimSpace(a.playlists.musicIDInput)
 	if !validMusicID(id) {
-		a.musicIDErr = "请输入数字 music ID"
+		a.playlists.musicIDErr = "请输入数字 music ID"
 		a.refresh()
 		return
 	}
 	if !a.api.HasCredential() {
-		a.musicIDErr = "请先登录后再查看歌单"
+		a.playlists.musicIDErr = "请先登录后再查看歌单"
 		a.refresh()
 		return
 	}
-	a.musicIDOpen = false
-	a.musicIDErr = ""
+	a.playlists.musicIDOpen = false
+	a.playlists.musicIDErr = ""
 	if id == a.api.UserID() {
 		a.loadOwnPlaylists()
 		return
@@ -736,7 +700,7 @@ func validMusicID(id string) bool {
 }
 
 func (a *app) musicIDModal(c *ui.Context, col colors) {
-	ui.DialogBase(c, &a.musicIDOpen, func(backdrop, panel ui.Element) {
+	ui.DialogBase(c, &a.playlists.musicIDOpen, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(0, 0, 0, 0.4))
 		panel.Width(376).Padding(18)
 		smoothPanel(panel, col, 16, col.card, false)
@@ -750,9 +714,9 @@ func (a *app) musicIDModal(c *ui.Context, col colors) {
 				})
 				ui.Text(c, "输入 QQ 音乐的数字 music ID，查看该用户公开的歌单。其他用户的「我喜欢」不可读取。").
 					FontSize(12).TextColor(col.muted).MaxWidth(340).LineHeight(1.45)
-				a.textField(c, col, &a.musicIDInput, "QQ 音乐数字 ID", 340, 34, nil, a.submitMusicID)
-				if a.musicIDErr != "" {
-					ui.Text(c, a.musicIDErr).FontSize(12).TextColor(col.red)
+				a.textField(c, col, &a.playlists.musicIDInput, "QQ 音乐数字 ID", 340, 34, nil, a.submitMusicID)
+				if a.playlists.musicIDErr != "" {
+					ui.Text(c, a.playlists.musicIDErr).FontSize(12).TextColor(col.red)
 				}
 				ui.Row(c).Gap(6).Justify(ui.End).Children(func() {
 					secondaryButton(c, col, nil, "取消", a.closeMusicIDModal)
@@ -764,49 +728,62 @@ func (a *app) musicIDModal(c *ui.Context, col colors) {
 }
 
 func (a *app) loadPlaylistSongs(index int) {
-	if index < 0 || index >= len(a.playlists) {
+	if index < 0 || index >= len(a.playlists.items) {
 		return
 	}
 	a.resetSongSelection()
-	playlist := a.playlists[index]
-	a.selectedPlaylist = index
+	playlist := a.playlists.items[index]
+	a.playlists.selected = index
 	if playlist.DirID == 201 && a.viewingOtherPlaylists() {
-		a.playlistSongsID++
-		a.loadingSongs = false
-		a.playlistErr = "其他用户的「我喜欢」不公开"
-		a.playlistNotice = ""
-		a.playlistSongs = nil
+		a.playlists.songsSlot.reset()
+		a.playlists.loadingSongs = false
+		a.playlists.err = "其他用户的「我喜欢」不公开"
+		a.playlists.notice = ""
+		a.playlists.songs = nil
 		a.refresh()
 		return
 	}
-	a.loadingSongs = true
-	a.playlistErr = ""
-	a.playlistNotice = ""
-	a.playlistSongs = nil
-	a.playlistSongsID++
-	requestID := a.playlistSongsID
+	a.playlists.loadingSongs = true
+	a.playlists.err = ""
+	a.playlists.notice = ""
+	a.playlists.songs = nil
 	a.refresh()
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		page, err := a.api.PlaylistSongs(ctx, playlist.TID, playlist.DirID)
-		mapped := make([]Song, 0, len(page.Songs))
-		for _, song := range page.Songs {
-			mapped = append(mapped, songFromAPI(song))
-		}
-		a.update(func() {
-			if a.playlistSongsID != requestID {
-				return
-			}
-			a.loadingSongs = false
+	var page qqmusic.PlaylistPage
+	a.async(&a.playlists.songsSlot, 30*time.Second,
+		func(ctx context.Context) error {
+			fetched, err := a.api.PlaylistSongs(ctx, playlist.TID, playlist.DirID)
+			page = fetched
+			return err
+		},
+		func(err error) {
+			a.playlists.loadingSongs = false
 			if err != nil {
-				a.playlistErr = friendlyError(err)
+				a.playlists.err = friendlyError(err)
 				return
 			}
-			a.playlistSongs = mapped
-			a.playlistNotice = truncationNotice(page)
+			a.playlists.songs = mapSongs(page)
+			a.playlists.notice = truncationNotice(page)
 			a.savePlaylistCache()
 		})
-	}()
+}
+
+func mapPlaylists(items []qqmusic.Playlist) []Playlist {
+	mapped := make([]Playlist, 0, len(items))
+	for _, item := range items {
+		mapped = append(mapped, Playlist{
+			DirID: item.DirID,
+			TID:   item.TID,
+			Name:  item.Name,
+			Count: item.SongCount,
+		})
+	}
+	return mapped
+}
+
+func mapSongs(page qqmusic.PlaylistPage) []Song {
+	mapped := make([]Song, 0, len(page.Songs))
+	for _, song := range page.Songs {
+		mapped = append(mapped, songFromAPI(song))
+	}
+	return mapped
 }

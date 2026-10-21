@@ -6,13 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/rzh0504/qmdr/internal/history"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
 )
 
@@ -37,89 +35,28 @@ type app struct {
 	win *mygo.Window
 	api *qqmusic.Client
 
-	covers       map[string]coverEntry
-	coverLoading map[string]bool
-	coverSem     chan struct{}
+	view     viewID
+	closed   atomic.Bool
+	toast    string
+	updating bool
 
-	view   viewID
-	closed atomic.Bool
+	diskJobs chan func()
 
-	query       string
+	search    searchState
+	playlists playlistState
+	queue     queueState
+	history   historyState
+	covers    coverState
+	login     loginState
+
 	quality     string
-	searching   bool
-	hasSearched bool
-	searchErr   string
-	searchID    int
-	results     []Song
-
-	playlistOwner       string
-	loadingPlaylists    bool
-	refreshingPlaylists bool
-	loadingSongs        bool
-	playlistErr         string
-	playlistNotice      string
-	playlistReq         int
-	playlistSongsID     int
-	playlists           []Playlist
-	selectedPlaylist    int
-	playlistSongs       []Song
-	selectingSongs      bool
-	selectedSongMids    map[string]bool
-	songPressKey        string
-	songPressSeq        int
-	songPressTimer      *time.Timer
-	suppressSongClick   bool
-
-	musicIDOpen  bool
-	musicIDInput string
-	musicIDErr   string
-
-	pending     []Song
-	queue       []QueueItem
-	queueFilter int
-	queueSeq    int
-	downloading bool
-	runID       int
-	cancel      context.CancelFunc
-	logBacklog  []LogEntry
-	diskJobs    chan func()
-
-	// taskCancels cancels one running download; the run-level cancel above
-	// still cancels every task at once.
-	taskCancelsMu sync.Mutex
-	taskCancels   map[int]context.CancelFunc
-
-	historyStore   *history.Store
-	historyItems   []history.Record
-	historyBacklog []history.Record
-	historyCount   int
-	historyBytes   int64
-	historyErr     string
-	historyLoading bool
-
-	historyKeep string
-
 	downloadDir string
 	coverSize   string
 	concurrency float64
 	overwrite   bool
 	appearance  string
 	background  string
-
-	loggedIn  bool
-	userID    string
-	loginType string
-
-	qrOpen   bool
-	qrFailed bool
-	qrSeq    int
-	qrType   string
-	qrStatus string
-	qrBitmap *ui.Bitmap
-	qrCancel context.CancelFunc
-
-	toast    string
-	updating bool
+	historyKeep string
 }
 
 func newApp() *app {
@@ -135,27 +72,21 @@ func newApp() *app {
 	}
 	settings := loadSettings()
 	a := &app{
-		api:              api,
-		covers:           make(map[string]coverEntry),
-		coverLoading:     make(map[string]bool),
-		coverSem:         make(chan struct{}, coverFetchLimit),
-		view:             viewSearch,
-		quality:          settings.Quality,
-		playlistOwner:    userID,
-		selectedPlaylist: -1,
-		selectedSongMids: make(map[string]bool),
-		pending:          loadPending(),
-		historyLoading:   true,
-		downloadDir:      settings.DownloadDir,
-		coverSize:        settings.CoverSize,
-		concurrency:      settings.Concurrency,
-		overwrite:        settings.Overwrite,
-		appearance:       settings.Appearance,
-		background:       settings.Background,
-		historyKeep:      settings.HistoryKeep,
-		loggedIn:         api.HasCredential(),
-		userID:           displayUser,
-		loginType:        loginType,
+		api:         api,
+		view:        viewSearch,
+		covers:      coverState{cache: map[string]coverEntry{}, loading: map[string]bool{}, sem: make(chan struct{}, coverFetchLimit)},
+		queue:       queueState{pending: loadPending()},
+		playlists:   playlistState{owner: userID, selected: -1, selectedMids: map[string]bool{}},
+		history:     historyState{loading: true},
+		login:       loginState{loggedIn: api.HasCredential(), userID: displayUser, loginType: loginType},
+		quality:     settings.Quality,
+		downloadDir: settings.DownloadDir,
+		coverSize:   settings.CoverSize,
+		concurrency: settings.Concurrency,
+		overwrite:   settings.Overwrite,
+		appearance:  settings.Appearance,
+		background:  settings.Background,
+		historyKeep: settings.HistoryKeep,
 	}
 	a.startDiskWorker()
 	a.restorePlaylistCache()
@@ -189,7 +120,7 @@ func (a *app) viewRoot(c *ui.Context) {
 				smoothPanel(content, col, 14, col.card, true)
 				content.Children(func() {
 					a.cardHeader(c, col)
-					if a.view == viewSearch && !a.hasSearched {
+					if a.view == viewSearch && !a.search.searched {
 						ui.Column(c).Grow(1).MinHeight(0).
 							Padding(12, 20, 20, 18).Children(func() {
 							a.searchView(c, col)
@@ -262,18 +193,18 @@ func (a *app) headerActions(c *ui.Context, col colors) {
 	case viewQueue:
 		_, done, _, active := a.queueCounts()
 		skipped := 0
-		for _, item := range a.queue {
+		for _, item := range a.queue.items {
 			if item.Status == StatusSkipped {
 				skipped++
 			}
 		}
-		if a.downloading {
+		if a.queue.downloading {
 			ghostDangerButton(c, col, iconX, "取消", a.cancelQueue)
 		}
-		if !a.downloading && done+skipped > 0 {
+		if !a.queue.downloading && done+skipped > 0 {
 			iconButton(c, col, iconTrash, "清理已完成", a.clearCompleted)
 		}
-		if !a.downloading && active > 0 {
+		if !a.queue.downloading && active > 0 {
 			primaryButton(c, col, iconPlay, "开始", a.startQueue)
 		}
 	}
@@ -359,10 +290,10 @@ func (a *app) setToast(message string) {
 
 func (a *app) appendLog(message, level string) {
 	entry := LogEntry{At: time.Now(), Level: level, Message: message}
-	if a.historyStore == nil {
-		a.logBacklog = append(a.logBacklog, entry)
-		if len(a.logBacklog) > 500 {
-			a.logBacklog = a.logBacklog[len(a.logBacklog)-500:]
+	if a.history.store == nil {
+		a.history.logBacklog = append(a.history.logBacklog, entry)
+		if len(a.history.logBacklog) > 500 {
+			a.history.logBacklog = a.history.logBacklog[len(a.history.logBacklog)-500:]
 		}
 		return
 	}
@@ -370,8 +301,8 @@ func (a *app) appendLog(message, level string) {
 }
 
 func (a *app) queueCounts() (total, done, failed, active int) {
-	total = len(a.queue)
-	for _, item := range a.queue {
+	total = len(a.queue.items)
+	for _, item := range a.queue.items {
 		switch item.Status {
 		case StatusDone:
 			done++
@@ -465,7 +396,7 @@ func (a *app) navItem(c *ui.Context, col colors, key string, icon *ui.SVG, label
 		ui.Text(c, label).FontSize(13).FontWeight(400).TextColor(fg).Grow(1)
 		if key == "queue" {
 			_, _, _, active := a.queueCounts()
-			if count := active + len(a.pending); count > 0 {
+			if count := active + len(a.queue.pending); count > 0 {
 				ui.Textf(c, "%d", count).FontSize(11).TextColor(col.muted)
 			}
 		}
@@ -488,11 +419,11 @@ func (a *app) accountChip(c *ui.Context, col colors) {
 		a.avatar(c, col, 26)
 		ui.Column(c).Gap(1).Grow(1).MinWidth(0).Children(func() {
 			status := "未登录"
-			if a.loggedIn {
+			if a.login.loggedIn {
 				status = "已登录"
 			}
 			ui.Text(c, status).FontSize(12).FontWeight(400).TextColor(col.text).SingleLine()
-			ui.Text(c, a.userID).FontSize(11).TextColor(col.muted).SingleLine().Ellipsis("…")
+			ui.Text(c, a.login.userID).FontSize(11).TextColor(col.muted).SingleLine().Ellipsis("…")
 		})
 		ui.Icon(c, iconChevronRight).Size(13, 13).TextColor(col.faint)
 	})
@@ -517,31 +448,31 @@ func (a *app) avatar(c *ui.Context, col colors, size float32) {
 }
 
 func (a *app) openQR(kind string) {
-	if a.qrCancel != nil {
-		a.qrCancel()
-		a.qrCancel = nil
+	if a.login.qrCancel != nil {
+		a.login.qrCancel()
+		a.login.qrCancel = nil
 	}
-	a.qrType = kind
-	a.qrOpen = true
-	a.qrFailed = false
-	a.qrStatus = "正在获取二维码…"
-	a.qrBitmap = nil
-	a.qrSeq++
-	session := a.qrSeq
+	a.login.qrType = kind
+	a.login.qrOpen = true
+	a.login.qrFailed = false
+	a.login.qrStatus = "正在获取二维码…"
+	a.login.qrBitmap = nil
+	a.login.qrSeq++
+	session := a.login.qrSeq
 	ctx, cancel := context.WithCancel(context.Background())
-	a.qrCancel = cancel
+	a.login.qrCancel = cancel
 	a.refresh()
 
 	go func() {
-		current := func() bool { return a.qrOpen && a.qrSeq == session }
+		current := func() bool { return a.login.qrOpen && a.login.qrSeq == session }
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				log.Printf("qr login panic: %v", recovered)
 				a.update(func() {
 					if current() {
-						a.qrBitmap = nil
-						a.qrFailed = true
-						a.qrStatus = "登录过程出现异常，请重试"
+						a.login.qrBitmap = nil
+						a.login.qrFailed = true
+						a.login.qrStatus = "登录过程出现异常，请重试"
 					}
 				})
 			}
@@ -554,8 +485,8 @@ func (a *app) openQR(kind string) {
 		if err != nil {
 			a.update(func() {
 				if current() {
-					a.qrFailed = true
-					a.qrStatus = "获取二维码失败：" + friendlyError(err)
+					a.login.qrFailed = true
+					a.login.qrStatus = "获取二维码失败：" + friendlyError(err)
 				}
 			})
 			return
@@ -564,8 +495,8 @@ func (a *app) openQR(kind string) {
 		if decodeErr != nil {
 			a.update(func() {
 				if current() {
-					a.qrFailed = true
-					a.qrStatus = "二维码解析失败，请重新获取"
+					a.login.qrFailed = true
+					a.login.qrStatus = "二维码解析失败，请重新获取"
 				}
 			})
 			return
@@ -574,8 +505,8 @@ func (a *app) openQR(kind string) {
 			if !current() {
 				return
 			}
-			a.qrBitmap = bitmap
-			a.qrStatus = "请使用手机扫码"
+			a.login.qrBitmap = bitmap
+			a.login.qrStatus = "请使用手机扫码"
 		})
 
 		failures := 0
@@ -600,9 +531,9 @@ func (a *app) openQR(kind string) {
 				if failures >= 3 {
 					a.update(func() {
 						if current() {
-							a.qrBitmap = nil
-							a.qrFailed = true
-							a.qrStatus = "登录检查失败：" + friendlyError(err)
+							a.login.qrBitmap = nil
+							a.login.qrFailed = true
+							a.login.qrStatus = "登录检查失败：" + friendlyError(err)
 						}
 					})
 					return
@@ -610,7 +541,7 @@ func (a *app) openQR(kind string) {
 				if failures == 1 {
 					a.update(func() {
 						if current() {
-							a.qrStatus = "网络波动，正在重试…"
+							a.login.qrStatus = "网络波动，正在重试…"
 						}
 					})
 				}
@@ -623,14 +554,14 @@ func (a *app) openQR(kind string) {
 				if !current() {
 					return
 				}
-				a.qrStatus = result.Message
+				a.login.qrStatus = result.Message
 				if done {
 					a.finishLogin()
 					return
 				}
 				if stop {
-					a.qrBitmap = nil
-					a.qrFailed = true
+					a.login.qrBitmap = nil
+					a.login.qrFailed = true
 				}
 			})
 			if stop {
@@ -641,38 +572,37 @@ func (a *app) openQR(kind string) {
 }
 
 func (a *app) finishLogin() {
-	a.loggedIn = a.api.HasCredential()
-	a.userID = a.api.UserID()
-	if a.userID == "" {
-		a.userID = "未登录"
+	a.login.loggedIn = a.api.HasCredential()
+	a.login.userID = a.api.UserID()
+	if a.login.userID == "" {
+		a.login.userID = "未登录"
 	}
 	if a.api.Credential().LoginType == 1 {
-		a.loginType = "微信"
+		a.login.loginType = "微信"
 	} else {
-		a.loginType = "QQ"
+		a.login.loginType = "QQ"
 	}
-	a.playlistOwner = a.api.UserID()
-	a.playlistReq++
-	a.playlistSongsID++
-	a.loadingPlaylists = false
-	a.refreshingPlaylists = false
-	a.loadingSongs = false
-	a.musicIDOpen = false
-	a.musicIDInput = ""
-	a.musicIDErr = ""
-	if a.qrCancel != nil {
-		a.qrCancel()
-		a.qrCancel = nil
+	a.playlists.owner = a.api.UserID()
+	a.playlists.resetFetches()
+	a.playlists.loading = false
+	a.playlists.refreshing = false
+	a.playlists.loadingSongs = false
+	a.playlists.musicIDOpen = false
+	a.playlists.musicIDInput = ""
+	a.playlists.musicIDErr = ""
+	if a.login.qrCancel != nil {
+		a.login.qrCancel()
+		a.login.qrCancel = nil
 	}
-	a.qrOpen = false
-	a.qrFailed = false
-	a.qrBitmap = nil
-	a.qrStatus = ""
-	a.playlistErr = ""
-	a.playlistNotice = ""
-	a.playlists = nil
-	a.selectedPlaylist = -1
-	a.playlistSongs = nil
+	a.login.qrOpen = false
+	a.login.qrFailed = false
+	a.login.qrBitmap = nil
+	a.login.qrStatus = ""
+	a.playlists.err = ""
+	a.playlists.notice = ""
+	a.playlists.items = nil
+	a.playlists.selected = -1
+	a.playlists.songs = nil
 	a.resetSongSelection()
 	a.restorePlaylistCache()
 	if a.api.CredentialSaveError() != nil {
@@ -684,19 +614,19 @@ func (a *app) finishLogin() {
 }
 
 func (a *app) closeQR() {
-	if a.qrCancel != nil {
-		a.qrCancel()
-		a.qrCancel = nil
+	if a.login.qrCancel != nil {
+		a.login.qrCancel()
+		a.login.qrCancel = nil
 	}
-	a.qrOpen = false
-	a.qrFailed = false
-	a.qrBitmap = nil
-	a.qrStatus = ""
+	a.login.qrOpen = false
+	a.login.qrFailed = false
+	a.login.qrBitmap = nil
+	a.login.qrStatus = ""
 	a.refresh()
 }
 
 func (a *app) qrModal(c *ui.Context, col colors) {
-	ui.DialogBase(c, &a.qrOpen, func(backdrop, panel ui.Element) {
+	ui.DialogBase(c, &a.login.qrOpen, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(0, 0, 0, 0.4))
 		panel.Width(336).Padding(18)
 		smoothPanel(panel, col, 16, col.card, false)
@@ -704,7 +634,7 @@ func (a *app) qrModal(c *ui.Context, col colors) {
 		panel.Children(func() {
 			ui.Column(c).FillWidth().Gap(14).Children(func() {
 				ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-					ui.Textf(c, "%s登录", a.qrType).FontSize(15).FontWeight(600).
+					ui.Textf(c, "%s登录", a.login.qrType).FontSize(15).FontWeight(600).
 						TextColor(col.text).Grow(1)
 					iconButton(c, col, iconX, "关闭", a.closeQR)
 				})
@@ -715,9 +645,9 @@ func (a *app) qrModal(c *ui.Context, col colors) {
 						Border(1, col.border)
 					qr.Children(func() {
 						switch {
-						case a.qrBitmap != nil:
-							ui.Image(c, a.qrBitmap).Size(188, 188)
-						case a.qrFailed:
+						case a.login.qrBitmap != nil:
+							ui.Image(c, a.login.qrBitmap).Size(188, 188)
+						case a.login.qrFailed:
 							ui.Icon(c, iconAlert).Size(22, 22).TextColor(col.red)
 						default:
 							ui.Spinner(c).Size(22, 22)
@@ -726,15 +656,15 @@ func (a *app) qrModal(c *ui.Context, col colors) {
 				})
 
 				statusColor := col.muted
-				if a.qrFailed {
+				if a.login.qrFailed {
 					statusColor = col.red
 				}
-				ui.Text(c, a.qrStatus).FontSize(12).TextColor(statusColor)
+				ui.Text(c, a.login.qrStatus).FontSize(12).TextColor(statusColor)
 				ui.Row(c).Gap(6).Justify(ui.End).Children(func() {
 					secondaryButton(c, col, nil, "关闭", a.closeQR)
-					if a.qrBitmap != nil || a.qrFailed {
+					if a.login.qrBitmap != nil || a.login.qrFailed {
 						primaryButton(c, col, iconRefresh, "重新获取", func() {
-							a.openQR(a.qrType)
+							a.openQR(a.login.qrType)
 						})
 					}
 				})
@@ -789,14 +719,14 @@ func main() {
 		a.win.OnClosed(func() {
 			a.closed.Store(true)
 			a.stopSongPress()
-			if a.cancel != nil {
-				a.cancel()
+			if a.queue.cancel != nil {
+				a.queue.cancel()
 			}
-			if a.qrCancel != nil {
-				a.qrCancel()
+			if a.login.qrCancel != nil {
+				a.login.qrCancel()
 			}
-			if a.historyStore != nil {
-				_ = a.historyStore.Close()
+			if a.history.store != nil {
+				_ = a.history.store.Close()
 			}
 		})
 		go a.initHistory()

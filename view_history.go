@@ -22,9 +22,9 @@ func (a *app) initHistory() {
 	store, err := history.Open(ctx, path)
 	if err != nil {
 		a.update(func() {
-			a.historyLoading = false
-			a.historyErr = friendlyError(err)
-			a.historyBacklog = nil
+			a.history.loading = false
+			a.history.err = friendlyError(err)
+			a.history.backlog = nil
 		})
 		return
 	}
@@ -44,17 +44,17 @@ func (a *app) initHistory() {
 		return
 	}
 	a.update(func() {
-		a.historyStore = store
+		a.history.store = store
 		a.flushLogBacklog()
-		a.historyLoading = false
-		a.historyItems = records
-		a.historyCount = stats.Count
-		a.historyBytes = stats.Bytes
-		a.historyErr = ""
+		a.history.loading = false
+		a.history.items = records
+		a.history.count = stats.Count
+		a.history.bytes = stats.Bytes
+		a.history.err = ""
 		if recentErr != nil {
-			a.historyErr = "读取记录失败：" + friendlyError(recentErr)
+			a.history.err = "读取记录失败：" + friendlyError(recentErr)
 		} else if statsErr != nil {
-			a.historyErr = "读取统计失败：" + friendlyError(statsErr)
+			a.history.err = "读取统计失败：" + friendlyError(statsErr)
 		}
 		if queueErr != nil {
 			log.Printf("load download queue: %v", queueErr)
@@ -67,7 +67,7 @@ func (a *app) initHistory() {
 }
 
 func (a *app) pruneHistoryNow() {
-	store := a.historyStore
+	store := a.history.store
 	if store == nil {
 		return
 	}
@@ -83,7 +83,7 @@ func (a *app) pruneHistoryNow() {
 		if err != nil {
 			log.Printf("prune download history: %v", err)
 			a.update(func() {
-				if a.historyStore == store {
+				if a.history.store == store {
 					a.toast = "清理过期下载历史失败：" + friendlyError(err)
 				}
 			})
@@ -94,19 +94,19 @@ func (a *app) pruneHistoryNow() {
 		}
 		stats, statsErr := store.Stats(ctx)
 		a.update(func() {
-			if a.historyStore != store {
+			if a.history.store != store {
 				return
 			}
-			items := a.historyItems[:0]
-			for _, record := range a.historyItems {
+			items := a.history.items[:0]
+			for _, record := range a.history.items {
 				if !record.CompletedAt.Before(cutoff) {
 					items = append(items, record)
 				}
 			}
-			a.historyItems = items
+			a.history.items = items
 			if statsErr == nil {
-				a.historyCount = stats.Count
-				a.historyBytes = stats.Bytes
+				a.history.count = stats.Count
+				a.history.bytes = stats.Bytes
 			}
 			a.toast = fmt.Sprintf("已清理 %d 条过期下载记录", removed)
 		})
@@ -114,20 +114,20 @@ func (a *app) pruneHistoryNow() {
 }
 
 func (a *app) retryHistory() {
-	if a.historyLoading {
+	if a.history.loading {
 		return
 	}
-	if a.historyStore != nil {
-		store := a.historyStore
-		a.historyStore = nil
+	if a.history.store != nil {
+		store := a.history.store
+		a.history.store = nil
 		// Close on the worker, after any job still using the store.
 		a.dispatchDisk(func() { _ = store.Close() })
 	}
-	a.historyLoading = true
-	a.historyErr = ""
-	a.historyItems = nil
-	a.historyCount = 0
-	a.historyBytes = 0
+	a.history.loading = true
+	a.history.err = ""
+	a.history.items = nil
+	a.history.count = 0
+	a.history.bytes = 0
 	a.refresh()
 	go a.initHistory()
 }
@@ -136,10 +136,10 @@ func (a *app) recordHistory(record history.Record) {
 	if record.CompletedAt.IsZero() {
 		record.CompletedAt = time.Now()
 	}
-	store := a.historyStore
+	store := a.history.store
 	if store == nil {
-		if a.historyLoading && a.historyErr == "" {
-			a.historyBacklog = append(a.historyBacklog, record)
+		if a.history.loading && a.history.err == "" {
+			a.history.backlog = append(a.history.backlog, record)
 		}
 		return
 	}
@@ -152,7 +152,7 @@ func (a *app) recordHistory(record history.Record) {
 			return
 		}
 		a.update(func() {
-			if a.historyStore != store {
+			if a.history.store != store {
 				return
 			}
 			record.ID = id
@@ -162,12 +162,12 @@ func (a *app) recordHistory(record history.Record) {
 }
 
 func (a *app) flushHistoryBacklog() {
-	if a.historyStore == nil || len(a.historyBacklog) == 0 {
+	if a.history.store == nil || len(a.history.backlog) == 0 {
 		return
 	}
-	store := a.historyStore
-	records := a.historyBacklog
-	a.historyBacklog = nil
+	store := a.history.store
+	records := a.history.backlog
+	a.history.backlog = nil
 	a.dispatchDisk(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -185,7 +185,7 @@ func (a *app) flushHistoryBacklog() {
 			return
 		}
 		a.update(func() {
-			if a.historyStore != store {
+			if a.history.store != store {
 				return
 			}
 			for _, record := range added {
@@ -196,18 +196,18 @@ func (a *app) flushHistoryBacklog() {
 }
 
 func (a *app) prependHistory(record history.Record) {
-	a.historyCount++
-	a.historyBytes += record.FileSize
-	a.historyItems = append(a.historyItems, history.Record{})
-	copy(a.historyItems[1:], a.historyItems[:len(a.historyItems)-1])
-	a.historyItems[0] = record
-	if len(a.historyItems) > historyPageSize {
-		a.historyItems = a.historyItems[:historyPageSize]
+	a.history.count++
+	a.history.bytes += record.FileSize
+	a.history.items = append(a.history.items, history.Record{})
+	copy(a.history.items[1:], a.history.items[:len(a.history.items)-1])
+	a.history.items[0] = record
+	if len(a.history.items) > historyPageSize {
+		a.history.items = a.history.items[:historyPageSize]
 	}
 }
 
 func (a *app) confirmClearHistory() {
-	if a.historyStore == nil || a.historyCount == 0 {
+	if a.history.store == nil || a.history.count == 0 {
 		return
 	}
 	win := a.win
@@ -230,7 +230,7 @@ func (a *app) confirmClearHistory() {
 }
 
 func (a *app) clearHistory() {
-	store := a.historyStore
+	store := a.history.store
 	if store == nil {
 		return
 	}
@@ -239,24 +239,24 @@ func (a *app) clearHistory() {
 		defer cancel()
 		err := store.Clear(ctx)
 		a.update(func() {
-			if a.historyStore != store {
+			if a.history.store != store {
 				return
 			}
 			if err != nil {
 				a.toast = "清空下载历史失败：" + friendlyError(err)
 				return
 			}
-			a.historyItems = nil
-			a.historyBacklog = nil
-			a.historyCount = 0
-			a.historyBytes = 0
+			a.history.items = nil
+			a.history.backlog = nil
+			a.history.count = 0
+			a.history.bytes = 0
 			a.toast = "下载历史已清空"
 		})
 	})
 }
 
 func (a *app) historyView(c *ui.Context, col colors) {
-	if a.historyLoading && a.historyStore == nil {
+	if a.history.loading && a.history.store == nil {
 		softCard(c, col, func() {
 			ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
 				ui.Spinner(c).Size(15, 15)
@@ -265,48 +265,48 @@ func (a *app) historyView(c *ui.Context, col colors) {
 		})
 		return
 	}
-	if a.historyErr != "" && len(a.historyItems) == 0 {
+	if a.history.err != "" && len(a.history.items) == 0 {
 		softCard(c, col, func() {
 			ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
 				ui.Icon(c, iconAlert).Size(15, 15).TextColor(col.red)
-				ui.Text(c, "下载历史不可用："+a.historyErr).FontSize(12).TextColor(col.red).
+				ui.Text(c, "下载历史不可用："+a.history.err).FontSize(12).TextColor(col.red).
 					Grow(1).MaxLines(3)
 				secondaryButton(c, col, iconRefresh, "重试", a.retryHistory)
 			})
 		})
 		return
 	}
-	if len(a.historyItems) == 0 {
+	if len(a.history.items) == 0 {
 		emptyState(c, col, iconClock, "还没有下载记录", "完成下载后，歌曲和文件信息会记录在这里。")
 		return
 	}
 
 	ui.Column(c).Gap(10).Children(func() {
-		if a.historyErr != "" {
+		if a.history.err != "" {
 			ui.Row(c).Gap(9).AlignItems(ui.Center).Padding(0, 4).Children(func() {
 				ui.Icon(c, iconAlert).Size(14, 14).TextColor(col.red)
-				ui.Text(c, a.historyErr).FontSize(11).TextColor(col.red).Grow(1).MaxLines(2)
+				ui.Text(c, a.history.err).FontSize(11).TextColor(col.red).Grow(1).MaxLines(2)
 				secondaryButton(c, col, iconRefresh, "重试", a.retryHistory)
 			})
 		}
 
-		sizeText := formatFileSize(a.historyBytes)
+		sizeText := formatFileSize(a.history.bytes)
 		if sizeText == "" {
 			sizeText = "0 B"
 		}
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Padding(0, 4).Children(func() {
-			ui.Textf(c, "共 %d 条记录 · 合计 %s", a.historyCount, sizeText).FontSize(12).
+			ui.Textf(c, "共 %d 条记录 · 合计 %s", a.history.count, sizeText).FontSize(12).
 				TextColor(col.muted).Grow(1)
 			ghostDangerButton(c, col, iconTrash, "清空历史", a.confirmClearHistory)
 		})
 
 		sheet(c, col, func() {
-			for _, record := range a.historyItems {
+			for _, record := range a.history.items {
 				a.historyRow(c, col, record)
 			}
 		})
 
-		if a.historyCount > len(a.historyItems) {
+		if a.history.count > len(a.history.items) {
 			ui.Textf(c, "仅显示最近 %d 条记录", historyPageSize).FontSize(11).
 				TextColor(col.faint).Padding(0, 4)
 		}

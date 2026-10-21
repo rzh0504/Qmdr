@@ -6,7 +6,7 @@ import (
 
 func (a *app) queueView(c *ui.Context, col colors) {
 	total, _, failed, active := a.queueCounts()
-	if total == 0 && len(a.pending) == 0 {
+	if total == 0 && len(a.queue.pending) == 0 {
 		emptyState(c, col, iconQueue, "队列为空", "在歌单中右键歌曲加入待下载队列，或直接下载歌曲。")
 		return
 	}
@@ -14,10 +14,10 @@ func (a *app) queueView(c *ui.Context, col colors) {
 	items := a.filteredQueue()
 
 	ui.Column(c).Gap(10).Children(func() {
-		if len(a.pending) > 0 {
+		if len(a.queue.pending) > 0 {
 			a.pendingSection(c, col)
 		}
-		if len(a.queue) > 0 {
+		if len(a.queue.items) > 0 {
 			sectionHeader(c, col, "下载队列", func() {
 				ui.Textf(c, "进行中 %d · 失败 %d", active, failed).FontSize(12).
 					TextColor(col.faint)
@@ -51,7 +51,7 @@ func (a *app) queueFilterTabs(c *ui.Context, col colors) ui.Element {
 			i, label := i, label
 			seg := ui.ButtonBase(c).Height(24).Padding(0, 12).Radius(5).Center().
 				Cursor(ui.CursorPointer).Label(label)
-			if i == a.queueFilter {
+			if i == a.queue.filter {
 				seg.Background(col.segThumb)
 				if col.dark {
 					seg.Shadow(0, 1, 1, 0, ui.RGBA(0, 0, 0, 0.25))
@@ -63,7 +63,7 @@ func (a *app) queueFilterTabs(c *ui.Context, col colors) ui.Element {
 				seg.Background(col.cardHover)
 			}
 			if seg.Clicked() {
-				a.queueFilter = i
+				a.queue.filter = i
 				a.refresh()
 			}
 			seg.Children(func() {
@@ -76,12 +76,12 @@ func (a *app) queueFilterTabs(c *ui.Context, col colors) ui.Element {
 
 func (a *app) pendingSection(c *ui.Context, col colors) {
 	sectionHeader(c, col, "待下载队列", func() {
-		ui.Textf(c, "%d 首", len(a.pending)).FontSize(12).TextColor(col.faint)
+		ui.Textf(c, "%d 首", len(a.queue.pending)).FontSize(12).TextColor(col.faint)
 		ghostButton(c, col, nil, "清空", a.clearPending)
 		primaryButton(c, col, iconDownload, "全部下载", a.startPendingDownloads)
 	})
 	sheet(c, col, func() {
-		for i, song := range a.pending {
+		for i, song := range a.queue.pending {
 			i, song := i, song
 			row := ui.Row(c).Gap(10).Padding(6, 10).Height(50).Radius(8).AlignItems(ui.Center)
 			if row.Hovered() {

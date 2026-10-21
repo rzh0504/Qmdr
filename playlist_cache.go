@@ -50,13 +50,13 @@ func (a *app) restorePlaylistCache() {
 	if !ok || !a.api.HasCredential() || cache.UserID != a.api.UserID() || len(cache.Playlists) == 0 {
 		return
 	}
-	a.playlistOwner = a.api.UserID()
-	a.playlists = cache.Playlists
-	a.selectedPlaylist = cache.Selected
-	a.playlistSongs = cache.Songs
-	if a.selectedPlaylist < 0 || a.selectedPlaylist >= len(a.playlists) || len(a.playlistSongs) == 0 {
-		a.selectedPlaylist = -1
-		a.playlistSongs = nil
+	a.playlists.owner = a.api.UserID()
+	a.playlists.items = cache.Playlists
+	a.playlists.selected = cache.Selected
+	a.playlists.songs = cache.Songs
+	if a.playlists.selected < 0 || a.playlists.selected >= len(a.playlists.items) || len(a.playlists.songs) == 0 {
+		a.playlists.selected = -1
+		a.playlists.songs = nil
 	}
 }
 
@@ -65,15 +65,15 @@ func (a *app) savePlaylistCache() {
 	if path == "" {
 		return
 	}
-	owner := strings.TrimSpace(a.playlistOwner)
+	owner := strings.TrimSpace(a.playlists.owner)
 	if owner == "" {
 		owner = a.api.UserID()
 	}
 	if owner == "" || owner == "未登录" || owner != a.api.UserID() {
 		return
 	}
-	selected := a.selectedPlaylist
-	if selected < 0 || selected >= len(a.playlists) {
+	selected := a.playlists.selected
+	if selected < 0 || selected >= len(a.playlists.items) {
 		selected = -1
 	}
 	// Snapshot on the caller's thread; the slices are replaced wholesale,
@@ -81,9 +81,9 @@ func (a *app) savePlaylistCache() {
 	cache := playlistCache{
 		Version:   playlistCacheVersion,
 		UserID:    owner,
-		Playlists: a.playlists,
+		Playlists: a.playlists.items,
 		Selected:  selected,
-		Songs:     a.playlistSongs,
+		Songs:     a.playlists.songs,
 		UpdatedAt: time.Now(),
 	}
 	a.dispatchDisk(func() {

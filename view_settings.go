@@ -80,12 +80,12 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 		a.avatar(c, col, 34)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
 			ui.Text(c, "Qmdr 账号").FontSize(13).FontWeight(400).TextColor(col.text)
-			ui.Textf(c, "%s · %s 登录", a.userID, a.loginType).
+			ui.Textf(c, "%s · %s 登录", a.login.userID, a.login.loginType).
 				FontSize(12).TextColor(col.muted)
 		})
 		status := "未登录"
 		dot := col.faint
-		if a.loggedIn {
+		if a.login.loggedIn {
 			status = "已登录"
 			dot = col.green
 		}
@@ -268,30 +268,29 @@ func (a *app) pickDir() {
 
 func (a *app) reloadCredential() {
 	ok := a.api.ReloadCredential()
-	a.loggedIn = ok
-	a.userID = a.api.UserID()
-	if a.userID == "" {
-		a.userID = "未登录"
+	a.login.loggedIn = ok
+	a.login.userID = a.api.UserID()
+	if a.login.userID == "" {
+		a.login.userID = "未登录"
 	}
 	if a.api.Credential().LoginType == 1 {
-		a.loginType = "微信"
+		a.login.loginType = "微信"
 	} else {
-		a.loginType = "QQ"
+		a.login.loginType = "QQ"
 	}
-	a.playlistReq++
-	a.playlistSongsID++
-	a.loadingPlaylists = false
-	a.refreshingPlaylists = false
-	a.loadingSongs = false
-	a.playlistOwner = a.api.UserID()
-	a.musicIDOpen = false
-	a.musicIDInput = ""
-	a.musicIDErr = ""
-	a.playlistErr = ""
-	a.playlistNotice = ""
-	a.playlists = nil
-	a.selectedPlaylist = -1
-	a.playlistSongs = nil
+	a.playlists.resetFetches()
+	a.playlists.loading = false
+	a.playlists.refreshing = false
+	a.playlists.loadingSongs = false
+	a.playlists.owner = a.api.UserID()
+	a.playlists.musicIDOpen = false
+	a.playlists.musicIDInput = ""
+	a.playlists.musicIDErr = ""
+	a.playlists.err = ""
+	a.playlists.notice = ""
+	a.playlists.items = nil
+	a.playlists.selected = -1
+	a.playlists.songs = nil
 	a.resetSongSelection()
 	a.restorePlaylistCache()
 	if ok {

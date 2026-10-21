@@ -84,19 +84,19 @@ func (a *app) coverBitmap(albumMid string) *ui.Bitmap {
 	if albumMid == "" {
 		return nil
 	}
-	if entry, ok := a.covers[albumMid]; ok {
+	if entry, ok := a.covers.cache[albumMid]; ok {
 		if entry.bitmap != nil {
 			return entry.bitmap
 		}
 		if time.Since(entry.at) < coverRetryAfter {
 			return nil
 		}
-		delete(a.covers, albumMid)
+		delete(a.covers.cache, albumMid)
 	}
-	if a.coverLoading[albumMid] || len(a.covers) >= maxCachedCovers {
+	if a.covers.loading[albumMid] || len(a.covers.cache) >= maxCachedCovers {
 		return nil
 	}
-	a.coverLoading[albumMid] = true
+	a.covers.loading[albumMid] = true
 	go a.loadCover(albumMid)
 	return nil
 }
@@ -108,8 +108,8 @@ func (a *app) loadCover(albumMid string) {
 			a.finishCover(albumMid, nil, fmt.Errorf("封面加载异常"))
 		}
 	}()
-	a.coverSem <- struct{}{}
-	defer func() { <-a.coverSem }()
+	a.covers.sem <- struct{}{}
+	defer func() { <-a.covers.sem }()
 
 	if data, ok := readCoverCache(albumMid); ok {
 		a.finishCover(albumMid, data, nil)
@@ -134,15 +134,15 @@ func (a *app) finishCover(albumMid string, data []byte, err error) {
 		}
 	}
 	a.update(func() {
-		delete(a.coverLoading, albumMid)
-		if len(a.covers) >= maxCachedCovers {
+		delete(a.covers.loading, albumMid)
+		if len(a.covers.cache) >= maxCachedCovers {
 			a.evictOldestCover()
 		}
 		if err != nil {
-			a.covers[albumMid] = coverEntry{at: time.Now()}
+			a.covers.cache[albumMid] = coverEntry{at: time.Now()}
 			return
 		}
-		a.covers[albumMid] = coverEntry{bitmap: bitmap, at: time.Now()}
+		a.covers.cache[albumMid] = coverEntry{bitmap: bitmap, at: time.Now()}
 	})
 }
 
@@ -152,12 +152,12 @@ func (a *app) finishCover(albumMid string, data []byte, err error) {
 // or two.
 func (a *app) evictOldestCover() {
 	oldest, oldestAt := "", time.Time{}
-	for mid, entry := range a.covers {
+	for mid, entry := range a.covers.cache {
 		if oldest == "" || entry.at.Before(oldestAt) {
 			oldest, oldestAt = mid, entry.at
 		}
 	}
 	if oldest != "" {
-		delete(a.covers, oldest)
+		delete(a.covers.cache, oldest)
 	}
 }

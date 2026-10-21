@@ -68,7 +68,7 @@ func (a *app) persistQueueItems(items []QueueItem) {
 	if len(items) == 0 {
 		return
 	}
-	store := a.historyStore
+	store := a.history.store
 	if store == nil {
 		return
 	}
@@ -93,7 +93,7 @@ func (a *app) deleteStoredQueueItems(ids []int) {
 	if len(ids) == 0 {
 		return
 	}
-	store := a.historyStore
+	store := a.history.store
 	if store == nil {
 		return
 	}
@@ -107,12 +107,12 @@ func (a *app) deleteStoredQueueItems(ids []int) {
 }
 
 func (a *app) replaceStoredQueue() {
-	store := a.historyStore
+	store := a.history.store
 	if store == nil {
 		return
 	}
-	records := make([]history.QueueRecord, 0, len(a.queue))
-	for _, item := range a.queue {
+	records := make([]history.QueueRecord, 0, len(a.queue.items))
+	for _, item := range a.queue.items {
 		records = append(records, queueRecordFromItem(item))
 	}
 	a.dispatchDisk(func() {
@@ -125,10 +125,10 @@ func (a *app) replaceStoredQueue() {
 }
 
 func (a *app) restoreQueue(records []history.QueueRecord) {
-	if a.historyStore == nil {
+	if a.history.store == nil {
 		return
 	}
-	if len(a.queue) > 0 {
+	if len(a.queue.items) > 0 {
 		a.replaceStoredQueue()
 		return
 	}
@@ -149,9 +149,9 @@ func (a *app) restoreQueue(records []history.QueueRecord) {
 		if item.ID > maxID {
 			maxID = item.ID
 		}
-		a.queue = append(a.queue, item)
+		a.queue.items = append(a.queue.items, item)
 	}
-	a.queueSeq = maxID
+	a.queue.seq = maxID
 	if len(changed) > 0 {
 		a.persistQueueItems(changed)
 	}

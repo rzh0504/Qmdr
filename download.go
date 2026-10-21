@@ -81,7 +81,7 @@ func (a *app) addToPending(songs ...Song) {
 			continue
 		}
 		exists := false
-		for _, pending := range a.pending {
+		for _, pending := range a.queue.pending {
 			if pending.Mid == song.Mid {
 				exists = true
 				break
@@ -91,7 +91,7 @@ func (a *app) addToPending(songs ...Song) {
 			duplicates++
 			continue
 		}
-		a.pending = append(a.pending, song)
+		a.queue.pending = append(a.queue.pending, song)
 		added++
 	}
 	switch {
@@ -113,35 +113,35 @@ func (a *app) addToPending(songs ...Song) {
 }
 
 func (a *app) removePending(index int) {
-	if index < 0 || index >= len(a.pending) {
+	if index < 0 || index >= len(a.queue.pending) {
 		return
 	}
-	a.pending = append(a.pending[:index], a.pending[index+1:]...)
+	a.queue.pending = append(a.queue.pending[:index], a.queue.pending[index+1:]...)
 	a.savePending()
 	a.refresh()
 }
 
 func (a *app) clearPending() {
-	if len(a.pending) == 0 {
+	if len(a.queue.pending) == 0 {
 		return
 	}
-	a.pending = nil
+	a.queue.pending = nil
 	a.savePending()
 	a.setToast("已清空待下载队列")
 }
 
 func (a *app) startPendingDownloads() {
-	if len(a.pending) == 0 {
+	if len(a.queue.pending) == 0 {
 		return
 	}
-	if a.downloading {
+	if a.queue.downloading {
 		a.setToast("已有下载任务在运行，请先等待或取消")
 		return
 	}
-	songs := append([]Song(nil), a.pending...)
-	a.pending = nil
+	songs := append([]Song(nil), a.queue.pending...)
+	a.queue.pending = nil
 	if !a.enqueueSongs(songs) {
-		a.pending = songs
+		a.queue.pending = songs
 		a.refresh()
 		return
 	}
@@ -152,7 +152,7 @@ func (a *app) enqueueSongs(songs []Song) bool {
 	if len(songs) == 0 {
 		return false
 	}
-	if a.downloading {
+	if a.queue.downloading {
 		a.setToast("已有下载任务在运行，请先等待或取消")
 		a.view = viewQueue
 		a.refresh()
@@ -167,18 +167,18 @@ func (a *app) enqueueSongs(songs []Song) bool {
 
 	quality := a.quality
 	now := time.Now()
-	first := len(a.queue)
+	first := len(a.queue.items)
 	for _, song := range songs {
-		a.queueSeq++
-		a.queue = append(a.queue, QueueItem{
-			ID:        a.queueSeq,
+		a.queue.seq++
+		a.queue.items = append(a.queue.items, QueueItem{
+			ID:        a.queue.seq,
 			Song:      song,
 			Status:    StatusWaiting,
 			Quality:   quality,
 			CreatedAt: now,
 		})
 	}
-	a.persistQueueItems(a.queue[first:])
+	a.persistQueueItems(a.queue.items[first:])
 	a.appendLog(fmt.Sprintf("已添加 %d 首歌曲到下载队列", len(songs)), "info")
 	a.view = viewQueue
 	a.refresh()
@@ -187,11 +187,11 @@ func (a *app) enqueueSongs(songs []Song) bool {
 }
 
 func (a *app) startQueue() {
-	if a.downloading {
+	if a.queue.downloading {
 		return
 	}
 	var tasks []downloadTask
-	for _, item := range a.queue {
+	for _, item := range a.queue.items {
 		if item.Status != StatusWaiting {
 			continue
 		}
@@ -222,10 +222,10 @@ func (a *app) startQueue() {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	a.cancel = cancel
-	a.downloading = true
-	a.runID++
-	runID := a.runID
+	a.queue.cancel = cancel
+	a.queue.downloading = true
+	a.queue.runID++
+	runID := a.queue.runID
 	dir := a.downloadDir
 	overwrite := a.overwrite
 	coverSize := coverSizeValue(a.coverSize)
@@ -239,11 +239,11 @@ func (a *app) startQueue() {
 	go func() {
 		a.runWorkers(ctx, runID, tasks, workers, dir, overwrite, coverSize, claims)
 		a.update(func() {
-			if runID != a.runID {
+			if runID != a.queue.runID {
 				return
 			}
-			a.downloading = false
-			a.cancel = nil
+			a.queue.downloading = false
+			a.queue.cancel = nil
 			if ctx.Err() != nil {
 				a.appendLog("下载已取消", "warning")
 				a.toast = "下载已取消"
@@ -297,21 +297,21 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 	// Each task carries its own cancel so one row can be cancelled without
 	// touching the rest of the queue; the run-level ctx still cancels all.
 	taskCtx, taskCancel := context.WithCancel(ctx)
-	a.taskCancelsMu.Lock()
-	if a.taskCancels == nil {
-		a.taskCancels = make(map[int]context.CancelFunc)
+	a.queue.taskMu.Lock()
+	if a.queue.taskCancels == nil {
+		a.queue.taskCancels = make(map[int]context.CancelFunc)
 	}
-	a.taskCancels[task.ID] = taskCancel
-	a.taskCancelsMu.Unlock()
+	a.queue.taskCancels[task.ID] = taskCancel
+	a.queue.taskMu.Unlock()
 	defer func() {
-		a.taskCancelsMu.Lock()
-		delete(a.taskCancels, task.ID)
-		a.taskCancelsMu.Unlock()
+		a.queue.taskMu.Lock()
+		delete(a.queue.taskCancels, task.ID)
+		a.queue.taskMu.Unlock()
 		taskCancel()
 	}()
 
 	a.update(func() {
-		if runID != a.runID || a.closed.Load() {
+		if runID != a.queue.runID || a.closed.Load() {
 			return
 		}
 		item := a.queueItem(task.ID)
@@ -354,7 +354,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 			progress = min(1, float64(received)/float64(size))
 		}
 		a.update(func() {
-			if runID != a.runID {
+			if runID != a.queue.runID {
 				return
 			}
 			item := a.queueItem(task.ID)
@@ -395,7 +395,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 	}
 
 	a.update(func() {
-		if runID != a.runID {
+		if runID != a.queue.runID {
 			return
 		}
 		item := a.queueItem(task.ID)
@@ -418,7 +418,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 
 func (a *app) markCancelled(runID int, task downloadTask) {
 	a.update(func() {
-		if runID != a.runID {
+		if runID != a.queue.runID {
 			return
 		}
 		if item := a.queueItem(task.ID); item != nil {
@@ -432,7 +432,7 @@ func (a *app) markCancelled(runID int, task downloadTask) {
 func (a *app) markFailed(runID int, task downloadTask, err error) {
 	message := friendlyError(err)
 	a.update(func() {
-		if runID != a.runID {
+		if runID != a.queue.runID {
 			return
 		}
 		if item := a.queueItem(task.ID); item != nil {
@@ -459,7 +459,7 @@ func (a *app) markSkipped(runID int, task downloadTask, dest, quality string) {
 		CompletedAt: time.Now(),
 	}
 	a.update(func() {
-		if runID != a.runID {
+		if runID != a.queue.runID {
 			return
 		}
 		if item := a.queueItem(task.ID); item != nil {
@@ -476,31 +476,31 @@ func (a *app) markSkipped(runID int, task downloadTask, dest, quality string) {
 }
 
 func (a *app) cancelQueue() {
-	if !a.downloading {
+	if !a.queue.downloading {
 		a.setToast("当前没有正在下载的任务")
 		return
 	}
-	if a.cancel != nil {
-		a.cancel()
+	if a.queue.cancel != nil {
+		a.queue.cancel()
 		a.setToast("正在取消下载…")
 	}
 }
 
 // cancelTask stops one downloading item and leaves the queue running.
 func (a *app) cancelTask(id int) {
-	a.taskCancelsMu.Lock()
-	cancel := a.taskCancels[id]
-	a.taskCancelsMu.Unlock()
+	a.queue.taskMu.Lock()
+	cancel := a.queue.taskCancels[id]
+	a.queue.taskMu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
 }
 
 func (a *app) clearCompleted() {
-	out := a.queue[:0]
+	out := a.queue.items[:0]
 	removed := 0
 	var removedIDs []int
-	for _, item := range a.queue {
+	for _, item := range a.queue.items {
 		if item.Status == StatusDone || item.Status == StatusSkipped {
 			removed++
 			removedIDs = append(removedIDs, item.ID)
@@ -508,7 +508,7 @@ func (a *app) clearCompleted() {
 		}
 		out = append(out, item)
 	}
-	a.queue = out
+	a.queue.items = out
 	if removed == 0 {
 		a.setToast("没有已完成的任务")
 		return
@@ -519,7 +519,7 @@ func (a *app) clearCompleted() {
 }
 
 func (a *app) retryItem(id int) {
-	if a.downloading {
+	if a.queue.downloading {
 		a.setToast("请先等待当前任务结束")
 		return
 	}
@@ -537,13 +537,13 @@ func (a *app) retryItem(id int) {
 }
 
 func (a *app) removeItem(id int) {
-	if a.downloading {
+	if a.queue.downloading {
 		a.setToast("请先取消当前下载")
 		return
 	}
 	index := -1
-	for i := range a.queue {
-		if a.queue[i].ID == id {
+	for i := range a.queue.items {
+		if a.queue.items[i].ID == id {
 			index = i
 			break
 		}
@@ -551,25 +551,25 @@ func (a *app) removeItem(id int) {
 	if index < 0 {
 		return
 	}
-	a.queue = append(a.queue[:index], a.queue[index+1:]...)
+	a.queue.items = append(a.queue.items[:index], a.queue.items[index+1:]...)
 	a.deleteStoredQueueItems([]int{id})
 	a.refresh()
 }
 
 func (a *app) queueItem(id int) *QueueItem {
-	for i := range a.queue {
-		if a.queue[i].ID == id {
-			return &a.queue[i]
+	for i := range a.queue.items {
+		if a.queue.items[i].ID == id {
+			return &a.queue.items[i]
 		}
 	}
 	return nil
 }
 
 func (a *app) filteredQueue() []QueueItem {
-	switch a.queueFilter {
+	switch a.queue.filter {
 	case 1:
 		var out []QueueItem
-		for _, item := range a.queue {
+		for _, item := range a.queue.items {
 			if item.Status == StatusWaiting || item.Status == StatusDownloading {
 				out = append(out, item)
 			}
@@ -577,7 +577,7 @@ func (a *app) filteredQueue() []QueueItem {
 		return out
 	case 2:
 		var out []QueueItem
-		for _, item := range a.queue {
+		for _, item := range a.queue.items {
 			if item.Status == StatusDone || item.Status == StatusSkipped {
 				out = append(out, item)
 			}
@@ -585,14 +585,14 @@ func (a *app) filteredQueue() []QueueItem {
 		return out
 	case 3:
 		var out []QueueItem
-		for _, item := range a.queue {
+		for _, item := range a.queue.items {
 			if item.Status == StatusFailed || item.Status == StatusCancelled {
 				out = append(out, item)
 			}
 		}
 		return out
 	default:
-		return a.queue
+		return a.queue.items
 	}
 }
 

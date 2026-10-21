@@ -51,7 +51,7 @@ func (a *app) savePending() {
 	}
 	state := pendingState{
 		Version: pendingStateVersion,
-		Songs:   normalizePendingSongs(a.pending),
+		Songs:   normalizePendingSongs(a.queue.pending),
 	}
 	a.dispatchDisk(func() {
 		if err := savePendingFile(path, state.Songs); err != nil {

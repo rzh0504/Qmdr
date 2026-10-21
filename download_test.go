@@ -27,20 +27,20 @@ func TestRestoreQueueConvertsDownloading(t *testing.T) {
 	if err := store.SaveQueueItems(ctx, records); err != nil {
 		t.Fatal(err)
 	}
-	a := &app{historyStore: store}
+	a := &app{history: historyState{store: store}}
 	a.restoreQueue(records)
 
-	if len(a.queue) != 2 {
-		t.Fatalf("restored %d queue items, want 2", len(a.queue))
+	if len(a.queue.items) != 2 {
+		t.Fatalf("restored %d queue items, want 2", len(a.queue.items))
 	}
-	if a.queue[0].Status != StatusWaiting || a.queue[0].Progress != 0 {
-		t.Fatalf("restored downloading item = %+v, want waiting at 0", a.queue[0])
+	if a.queue.items[0].Status != StatusWaiting || a.queue.items[0].Progress != 0 {
+		t.Fatalf("restored downloading item = %+v, want waiting at 0", a.queue.items[0])
 	}
-	if a.queue[1].Status != StatusDone {
-		t.Fatalf("restored done item = %+v, want done", a.queue[1])
+	if a.queue.items[1].Status != StatusDone {
+		t.Fatalf("restored done item = %+v, want done", a.queue.items[1])
 	}
-	if a.queueSeq != 5 {
-		t.Fatalf("queueSeq = %d, want 5", a.queueSeq)
+	if a.queue.seq != 5 {
+		t.Fatalf("queueSeq = %d, want 5", a.queue.seq)
 	}
 
 	stored, err := store.LoadQueue(ctx, now.Add(-time.Hour))
@@ -84,31 +84,31 @@ func TestQueueRecordRoundTrip(t *testing.T) {
 }
 
 func TestQueueFilters(t *testing.T) {
-	a := &app{queue: []QueueItem{
+	a := &app{queue: queueState{items: []QueueItem{
 		{ID: 1, Status: StatusWaiting},
 		{ID: 2, Status: StatusDownloading},
 		{ID: 3, Status: StatusDone},
 		{ID: 4, Status: StatusSkipped},
 		{ID: 5, Status: StatusFailed},
 		{ID: 6, Status: StatusCancelled},
-	}}
+	}}}
 
 	if all := a.filteredQueue(); len(all) != 6 {
 		t.Fatalf("filteredQueue(all) returned %d items, want 6", len(all))
 	}
 
-	a.queueFilter = 1
+	a.queue.filter = 1
 	if active := a.filteredQueue(); len(active) != 2 {
 		t.Fatalf("filteredQueue(active) returned %d items, want 2", len(active))
 	}
 
-	a.queueFilter = 2
+	a.queue.filter = 2
 	completed := a.filteredQueue()
 	if len(completed) != 2 || completed[0].ID != 3 || completed[1].ID != 4 {
 		t.Fatalf("filteredQueue(completed) = %+v, want done and skipped", completed)
 	}
 
-	a.queueFilter = 3
+	a.queue.filter = 3
 	if failed := a.filteredQueue(); len(failed) != 2 {
 		t.Fatalf("filteredQueue(failed) returned %d items, want 2", len(failed))
 	}

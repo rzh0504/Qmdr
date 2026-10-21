@@ -18,7 +18,7 @@ const (
 )
 
 func (a *app) storeLog(entry LogEntry) {
-	store := a.historyStore
+	store := a.history.store
 	if store == nil {
 		return
 	}
@@ -36,18 +36,18 @@ func (a *app) storeLog(entry LogEntry) {
 }
 
 func (a *app) flushLogBacklog() {
-	if a.historyStore == nil || len(a.logBacklog) == 0 {
+	if a.history.store == nil || len(a.history.logBacklog) == 0 {
 		return
 	}
-	entries := a.logBacklog
-	a.logBacklog = nil
+	entries := a.history.logBacklog
+	a.history.logBacklog = nil
 	for _, entry := range entries {
 		a.storeLog(entry)
 	}
 }
 
 func (a *app) exportLogs() {
-	store := a.historyStore
+	store := a.history.store
 	if store == nil {
 		a.setToast("日志数据库尚未就绪，请稍后再试")
 		return
