@@ -86,7 +86,8 @@ type app struct {
 	qrBitmap *ui.Bitmap
 	qrCancel context.CancelFunc
 
-	toast string
+	toast    string
+	updating bool
 }
 
 func newApp() *app {
@@ -637,8 +638,22 @@ func (a *app) qrModal(c *ui.Context, col colors) {
 
 func main() {
 	mygo.App.SetName("Qmdr")
+	mygo.App.SetVersion(appVersion)
+	if !mygo.App.RequestSingleInstanceLock() {
+		return
+	}
 	a := newApp()
 	mygo.Theme.SetSource(themeSource(a.appearance))
+	mygo.App.SetMenu(a.menu())
+	mygo.App.OnSecondInstance(func(args []string, workingDir string) {
+		if a.win == nil {
+			return
+		}
+		if a.win.IsMinimized() {
+			a.win.Restore()
+		}
+		a.win.Focus()
+	})
 
 	mygo.App.WhenReady(func() {
 		if err := os.MkdirAll(a.downloadDir, 0o755); err != nil {

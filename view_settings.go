@@ -197,10 +197,18 @@ func (a *app) aboutSettings(c *ui.Context, col colors) {
 		a.logoMark(c, col, 24)
 		ui.Column(c).Gap(2).Padding(0, 0, 0, 10).Children(func() {
 			ui.Text(c, "Qmdr").FontSize(13).FontWeight(500).TextColor(col.text)
-			ui.Text(c, "版本 0.2.0 · GPL-3.0").FontSize(12).TextColor(col.muted)
+			ui.Textf(c, "版本 %s · GPL-3.0 · MyGo 原生 UI", appVersion).
+				FontSize(12).TextColor(col.muted)
 		})
 		ui.Spacer(c)
-		ui.Text(c, "MyGo 原生 UI").FontSize(11.5).TextColor(col.faint)
+		if a.updating {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Spinner(c).Size(13, 13)
+				ui.Text(c, "检查中…").FontSize(12).TextColor(col.muted)
+			})
+			return
+		}
+		secondaryButton(c, col, iconRefresh, "检查更新", a.checkUpdates)
 	})
 }
 
