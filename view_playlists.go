@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -9,12 +10,23 @@ import (
 )
 
 func (a *app) playlistsView(c *ui.Context, col colors) {
-	a.playlistLoader(c, col)
+	ui.Column(c).Fill().Gap(12).Children(func() {
+		a.playlistLoader(c, col)
 
-	ui.Row(c).Gap(16).AlignItems(ui.Start).Children(func() {
-		a.playlistSidebar(c, col)
-		a.playlistPreview(c, col)
+		ui.Row(c).Grow(1).MinHeight(0).FillWidth().AlignItems(ui.Stretch).Gap(16).Children(func() {
+			a.playlistSidebar(c, col)
+			a.playlistPreview(c, col)
+		})
 	})
+}
+
+func listPanel(c *ui.Context, col colors, key string, fn func()) ui.Element {
+	panel := ui.Column(c).Grow(1).MinHeight(0).FillWidth().Padding(4)
+	smoothFlat(panel, col, 12, col.chip)
+	panel.Children(func() {
+		ui.Scroll(c).Key(key).Grow(1).MinHeight(0).FillWidth().Gap(1).Children(fn)
+	})
+	return panel
 }
 
 func (a *app) playlistLoader(c *ui.Context, col colors) {
@@ -36,8 +48,8 @@ func (a *app) playlistLoader(c *ui.Context, col colors) {
 }
 
 func (a *app) playlistSidebar(c *ui.Context, col colors) {
-	ui.Column(c).Width(264).Gap(8).Children(func() {
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Padding(0, 4).Children(func() {
+	ui.Column(c).Width(264).FillHeight().MinHeight(0).Gap(12).Children(func() {
+		ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).Padding(0, 4).Children(func() {
 			ui.Text(c, "我的歌单").FontSize(12).FontWeight(600).TextColor(col.muted).Grow(1)
 			if len(a.playlists) > 0 {
 				ui.Textf(c, "%d", len(a.playlists)).FontSize(12).TextColor(col.faint)
@@ -60,7 +72,7 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 			return
 		}
 
-		sheet(c, col, func() {
+		listPanel(c, col, "playlists", func() {
 			for i, playlist := range a.playlists {
 				i, playlist := i, playlist
 				selected := i == a.selectedPlaylist
@@ -90,7 +102,7 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 }
 
 func (a *app) playlistPreview(c *ui.Context, col colors) {
-	ui.Column(c).Grow(1).MinWidth(0).Gap(12).Children(func() {
+	ui.Column(c).Grow(1).MinWidth(0).FillHeight().MinHeight(0).Gap(12).Children(func() {
 		if len(a.playlists) == 0 || a.selectedPlaylist < 0 || a.selectedPlaylist >= len(a.playlists) {
 			sheet(c, col, func() {
 				emptyState(c, col, iconPlay, "选择一个歌单", "左侧选择歌单后，这里会显示歌曲。")
@@ -99,7 +111,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 		}
 		playlist := a.playlists[a.selectedPlaylist]
 
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).Children(func() {
 			playlistCover(c, col, a.selectedPlaylist+1, 44)
 			ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
 				ui.Text(c, playlist.Name).FontSize(16).FontWeight(600).
@@ -138,7 +150,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 				emptyState(c, col, iconMusic, "歌单为空", "这个歌单暂时没有可下载的歌曲。")
 			})
 		default:
-			sheet(c, col, func() {
+			listPanel(c, col, "songs-"+strconv.Itoa(a.selectedPlaylist), func() {
 				for i, song := range a.playlistSongs {
 					a.songRow(c, col, song, i, true, nil)
 				}

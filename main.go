@@ -161,6 +161,13 @@ func (a *app) viewRoot(c *ui.Context) {
 						})
 						return
 					}
+					if a.view == viewPlaylists {
+						ui.Column(c).Grow(1).MinHeight(0).
+							Padding(12, 20, 20, 18).Children(func() {
+							a.playlistsView(c, col)
+						})
+						return
+					}
 					ui.Scroll(c).Grow(1).MinHeight(0).
 						Padding(12, 20, 20, 18).Gap(18).Children(func() {
 						switch a.view {
