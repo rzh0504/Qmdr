@@ -135,8 +135,12 @@ func (a *app) viewRoot(c *ui.Context) {
 						})
 						return
 					}
-					ui.Scroll(c).Grow(1).MinHeight(0).
-						Padding(12, 20, 20, 18).Gap(18).Children(func() {
+					scroll := ui.Scroll(c).Grow(1).MinHeight(0).
+						Padding(12, 20, 20, 18).Gap(18)
+					if a.view == viewSearch {
+						scroll = scroll.TrackScroll(&a.search.scroll)
+					}
+					scroll.Children(func() {
 						switch a.view {
 						case viewSearch:
 							a.searchView(c, col)

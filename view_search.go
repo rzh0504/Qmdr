@@ -20,7 +20,7 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			searchBox(c, col, &a.search.query, "搜索歌曲、歌手或专辑",
 				func() { a.doSearch() },
-				func() { a.search.query = ""; a.refresh() },
+				func() { a.clearSearch() },
 			).Grow(1)
 			selectControl(c, col, &a.quality, qualityOptions, 140, col.chip, nil)
 			primaryButton(c, col, iconSearch, "搜索", func() {
@@ -41,7 +41,10 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 	})
 }
 
-const searchPageSize = 20
+const (
+	searchPageSize          = 20
+	searchLoadMoreThreshold = 120
+)
 
 func (a *app) searchResults(c *ui.Context, col colors) {
 	if !a.search.searched {
@@ -50,15 +53,16 @@ func (a *app) searchResults(c *ui.Context, col colors) {
 		})
 		return
 	}
+	if a.search.hasMore && !a.search.loading && !a.search.loadingMore &&
+		a.search.scroll.MaxY > 0 &&
+		a.search.scroll.Y >= a.search.scroll.MaxY-searchLoadMoreThreshold {
+		a.loadMoreSearch()
+	}
 
 	ui.Column(c).Gap(8).Children(func() {
 		sectionHeader(c, col, "搜索结果", func() {
-			if !a.search.loading && a.search.err == "" {
-				if a.search.hasMore {
-					ui.Textf(c, "已加载 %d 首", len(a.search.results)).FontSize(12).TextColor(col.faint)
-				} else {
-					ui.Textf(c, "%d 首", len(a.search.results)).FontSize(12).TextColor(col.faint)
-				}
+			if !a.search.loading && a.search.err == "" && !a.search.hasMore {
+				ui.Textf(c, "%d 首", len(a.search.results)).FontSize(12).TextColor(col.faint)
 			}
 			if len(a.search.results) > 0 && !a.search.loading {
 				secondaryButton(c, col, iconDownload, "全部下载", func() {
@@ -100,15 +104,11 @@ func (a *app) searchResults(c *ui.Context, col colors) {
 					a.openSongMenu(row, song, false)
 				}
 			})
-			if a.search.hasMore || a.search.loadingMore {
+			if a.search.loadingMore {
 				ui.Row(c).FillWidth().Height(36).Justify(ui.Center).
 					AlignItems(ui.Center).Gap(6).Children(func() {
-					if a.search.loadingMore {
-						ui.Spinner(c).Size(13, 13)
-						ui.Text(c, "正在加载更多…").FontSize(12).TextColor(col.muted)
-					} else {
-						secondaryButton(c, col, iconChevronDown, "加载更多", a.loadMoreSearch)
-					}
+					ui.Spinner(c).Size(13, 13)
+					ui.Text(c, "正在加载更多…").FontSize(12).TextColor(col.muted)
 				})
 			}
 		}
@@ -130,6 +130,7 @@ func (a *app) doSearch() {
 	a.search.page = 0
 	a.search.hasMore = false
 	a.search.loadingMore = false
+	a.search.scroll.Y = 0
 	a.refresh()
 	a.async(&a.search.slot, 20*time.Second,
 		func(ctx context.Context) error {
@@ -151,6 +152,23 @@ func (a *app) doSearch() {
 				a.toast = "没有找到相关歌曲"
 			}
 		})
+}
+
+// clearSearch empties the search box and removes its results, cancelling
+// a search still in flight.
+func (a *app) clearSearch() {
+	a.search.slot.reset()
+	a.search.query = ""
+	a.search.searched = false
+	a.search.loading = false
+	a.search.err = ""
+	a.search.results = nil
+	a.search.searchID = ""
+	a.search.page = 0
+	a.search.hasMore = false
+	a.search.loadingMore = false
+	a.search.scroll.Y = 0
+	a.refresh()
 }
 
 func (a *app) loadMoreSearch() {

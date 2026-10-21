@@ -23,6 +23,7 @@ type searchState struct {
 	page        int
 	hasMore     bool
 	loadingMore bool
+	scroll      ui.ScrollState
 }
 
 // playlistState is the playlists page: the list on the left, the songs of
