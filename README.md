@@ -2,6 +2,10 @@
 
 Qmdr 是一个使用 Go + MyGo 原生 UI 的 QQ 音乐桌面下载工具，目标平台为 Windows、macOS 和 Linux。
 
+## 界面
+
+![Qmdr 歌单下载页运行截图](assets/screenshots/playlists.png)
+
 ## 当前进度
 
 - 原生亮色 UI：搜索下载、歌单预览、下载队列、设置
@@ -11,7 +15,6 @@ Qmdr 是一个使用 Go + MyGo 原生 UI 的 QQ 音乐桌面下载工具，目�
 - 真实文件下载：并发队列、进度、取消、跳过已存在文件、任务日志
 - 下载设置持久化，支持 1–8 个并发任务
 - 下载完成后写入标题、歌手、专辑、封面和歌词（FLAC / MP3）
-- 待接入：打包与签名
 
 ## 运行
 
@@ -31,17 +34,7 @@ Go 客户端从系统配置目录读取 `qqmusic_cred.json`：
 - macOS：`~/Library/Application Support/Qmdr/qqmusic_cred.json`
 - Linux：`$XDG_CONFIG_HOME/Qmdr/qqmusic_cred.json`
 
-该文件包含登录令牌，不会提交到仓库。设置页可以重新加载或导出 JSON。旧版 Python 的 pickle 凭证已迁移为上述 JSON。
-
-## 目录
-
-- `app.go`、`main.go`、`sidebar.go`、`header.go`、`view_*.go`、`styles.go`、`buttons.go`、`controls.go`、`rows.go`、`modal.go`、`theme.go`：MyGo 原生 UI
-- `download_queue.go`、`download_worker.go`、`download_files.go`：下载队列、并发执行、文件命名与落盘
-- `internal/qqmusic`：请求封装、登录、搜索、歌单、歌词、封面、榜单、用户资料与文件下载
-- `internal/tag`：FLAC / MP3 标签与封面写入
-- `internal/settings`、`internal/pending`、`internal/playlistcache`、`internal/queue`、`internal/model`、`internal/format`、`internal/apperr`、`internal/fsutil`、`internal/version`、`internal/history`：设置、待下载、缓存、队列转换与通用工具
-- `assets`：应用图标资源
-- `.github/workflows/release.yml`：vtag 三平台发版工作流
+该文件包含登录令牌，不会提交到仓库。设置页可以重新加载或导出 JSON。
 
 ## 免责声明
 
