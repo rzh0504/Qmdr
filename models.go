@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 type Song struct {
 	Mid      string `json:"mid"`
 	Title    string `json:"title"`
@@ -49,14 +51,15 @@ func (s QueueStatus) Label() string {
 }
 
 type QueueItem struct {
-	ID       int
-	Song     Song
-	Status   QueueStatus
-	Progress float64
-	Quality  string
-	Error    string
-	FilePath string
-	FileSize int64
+	ID        int
+	Song      Song
+	Status    QueueStatus
+	Progress  float64
+	Quality   string
+	Error     string
+	FilePath  string
+	FileSize  int64
+	CreatedAt time.Time
 }
 
 type LogEntry struct {

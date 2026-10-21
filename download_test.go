@@ -1,10 +1,86 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/rzh0504/qmdr/internal/history"
 )
+
+func TestRestoreQueueConvertsDownloading(t *testing.T) {
+	ctx := context.Background()
+	store, err := history.Open(ctx, filepath.Join(t.TempDir(), "qmdr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	now := time.Now()
+	records := []history.QueueRecord{
+		{ID: 3, SongMID: "mid-a", Status: int(StatusDownloading), Progress: 0.6, CreatedAt: now},
+		{ID: 5, SongMID: "mid-b", Status: int(StatusDone), Progress: 1, CreatedAt: now},
+	}
+	if err := store.SaveQueueItems(ctx, records); err != nil {
+		t.Fatal(err)
+	}
+	a := &app{historyStore: store}
+	a.restoreQueue(records)
+
+	if len(a.queue) != 2 {
+		t.Fatalf("restored %d queue items, want 2", len(a.queue))
+	}
+	if a.queue[0].Status != StatusWaiting || a.queue[0].Progress != 0 {
+		t.Fatalf("restored downloading item = %+v, want waiting at 0", a.queue[0])
+	}
+	if a.queue[1].Status != StatusDone {
+		t.Fatalf("restored done item = %+v, want done", a.queue[1])
+	}
+	if a.queueSeq != 5 {
+		t.Fatalf("queueSeq = %d, want 5", a.queueSeq)
+	}
+
+	stored, err := store.LoadQueue(ctx, now.Add(-time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != 2 || stored[0].ID != 3 || stored[0].Status != int(StatusWaiting) {
+		t.Fatalf("stored queue = %+v, want item 3 as waiting and item 5", stored)
+	}
+	if stored[1].ID != 5 || stored[1].Status != int(StatusDone) {
+		t.Fatalf("stored done item = %+v, want done", stored[1])
+	}
+}
+
+func TestQueueRecordRoundTrip(t *testing.T) {
+	createdAt := time.Unix(1700000000, 0)
+	original := QueueItem{
+		ID: 7,
+		Song: Song{
+			Mid:      "mid",
+			Title:    "Title",
+			Artist:   "Artist",
+			Album:    "Album",
+			AlbumMid: "album-mid",
+			Duration: "03:00",
+			Quality:  "无损",
+			VIP:      true,
+		},
+		Status:    StatusFailed,
+		Progress:  0.4,
+		Quality:   "FLAC",
+		Error:     "network",
+		FilePath:  `C:\Music\song.flac`,
+		FileSize:  12345,
+		CreatedAt: createdAt,
+	}
+	restored := queueItemFromRecord(queueRecordFromItem(original))
+	if restored != original {
+		t.Fatalf("queue round trip = %+v, want %+v", restored, original)
+	}
+}
 
 func TestQueueFilters(t *testing.T) {
 	a := &app{queue: []QueueItem{

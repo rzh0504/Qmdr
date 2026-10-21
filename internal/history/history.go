@@ -82,8 +82,33 @@ func (s *Store) migrate(ctx context.Context) error {
 		)`); err != nil {
 		return err
 	}
+	if _, err := s.db.Execute(ctx,
+		`CREATE INDEX IF NOT EXISTS idx_downloads_completed_at ON downloads(completed_at DESC, id DESC)`); err != nil {
+		return err
+	}
+	if _, err := s.db.Execute(ctx, `
+		CREATE TABLE IF NOT EXISTS queue_items (
+			id INTEGER PRIMARY KEY,
+			song_mid TEXT NOT NULL,
+			title TEXT NOT NULL,
+			artist TEXT NOT NULL,
+			album TEXT NOT NULL,
+			album_mid TEXT NOT NULL,
+			duration TEXT NOT NULL,
+			song_quality TEXT NOT NULL,
+			vip INTEGER NOT NULL,
+			status INTEGER NOT NULL,
+			progress REAL NOT NULL,
+			quality TEXT NOT NULL,
+			error TEXT NOT NULL,
+			file_path TEXT NOT NULL,
+			file_size INTEGER NOT NULL,
+			created_at INTEGER NOT NULL
+		)`); err != nil {
+		return err
+	}
 	_, err := s.db.Execute(ctx,
-		`CREATE INDEX IF NOT EXISTS idx_downloads_completed_at ON downloads(completed_at DESC, id DESC)`)
+		`CREATE INDEX IF NOT EXISTS idx_queue_items_created_at ON queue_items(created_at)`)
 	return err
 }
 

@@ -109,3 +109,104 @@ func TestStoreRecordsStatsAndClear(t *testing.T) {
 		t.Fatalf("reopened history has %d records, want 0", stats.Count)
 	}
 }
+
+func TestQueueStorage(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "qmdr.db")
+	store, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	now := time.Now()
+	old := QueueRecord{
+		ID:          1,
+		SongMID:     "mid-old",
+		Title:       "Old",
+		Artist:      "Artist",
+		Album:       "Album",
+		AlbumMID:    "album",
+		Duration:    "03:00",
+		SongQuality: "无损",
+		VIP:         true,
+		Status:      5,
+		Progress:    0.5,
+		Quality:     "FLAC",
+		Error:       "cancelled",
+		FilePath:    `C:\Music\old.flac`,
+		FileSize:    4096,
+		CreatedAt:   now.Add(-2 * time.Hour),
+	}
+	fresh := QueueRecord{
+		ID:        2,
+		SongMID:   "mid-new",
+		Title:     "New",
+		Status:    2,
+		Progress:  1,
+		Quality:   "MP3 320K",
+		FilePath:  `C:\Music\new.mp3`,
+		FileSize:  2048,
+		CreatedAt: now,
+	}
+	if err := store.SaveQueueItems(ctx, []QueueRecord{old, fresh}); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := store.LoadQueue(ctx, now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 2 || loaded[0].ID != 1 || loaded[1].ID != 2 {
+		t.Fatalf("LoadQueue = %+v, want ids 1 and 2", loaded)
+	}
+	if !loaded[0].VIP || loaded[0].Progress != 0.5 || loaded[0].FileSize != 4096 {
+		t.Fatalf("unexpected first record: %+v", loaded[0])
+	}
+
+	old.Status = 0
+	old.Error = ""
+	if err := store.SaveQueueItem(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = store.LoadQueue(ctx, now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded[0].Status != 0 || loaded[0].Error != "" {
+		t.Fatalf("updated record = %+v, want waiting with no error", loaded[0])
+	}
+
+	if err := store.PruneQueue(ctx, now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = store.LoadQueue(ctx, now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].ID != 2 {
+		t.Fatalf("after prune = %+v, want only id 2", loaded)
+	}
+
+	if err := store.DeleteQueueItems(ctx, []int{2}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = store.LoadQueue(ctx, now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 0 {
+		t.Fatalf("after delete = %+v, want empty", loaded)
+	}
+
+	if err := store.ReplaceQueue(ctx, []QueueRecord{old}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = store.LoadQueue(ctx, now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].SongMID != "mid-old" {
+		t.Fatalf("after replace = %+v, want old record", loaded)
+	}
+}

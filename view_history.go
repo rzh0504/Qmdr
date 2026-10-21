@@ -28,6 +28,12 @@ func (a *app) initHistory() {
 		})
 		return
 	}
+	now := time.Now()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	if err := store.PruneQueue(ctx, dayStart); err != nil {
+		log.Printf("prune download queue: %v", err)
+	}
+	queueRecords, queueErr := store.LoadQueue(ctx, dayStart)
 	records, recentErr := store.Recent(ctx, historyPageSize)
 	stats, statsErr := store.Stats(ctx)
 	if a.closed.Load() {
@@ -45,6 +51,11 @@ func (a *app) initHistory() {
 			a.historyErr = "读取记录失败：" + friendlyError(recentErr)
 		} else if statsErr != nil {
 			a.historyErr = "读取统计失败：" + friendlyError(statsErr)
+		}
+		if queueErr != nil {
+			log.Printf("load download queue: %v", queueErr)
+		} else {
+			a.restoreQueue(queueRecords)
 		}
 		a.flushHistoryBacklog()
 		a.pruneHistoryNow()
