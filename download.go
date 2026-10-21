@@ -229,6 +229,9 @@ func (a *app) startQueue() {
 	dir := a.downloadDir
 	overwrite := a.overwrite
 	coverSize := coverSizeValue(a.coverSize)
+	// A download that a previous run left unfinished leaves its .part file
+	// behind; start each run with a clean directory.
+	cleanPartFiles(dir)
 	claims := newDownloadClaims()
 	a.appendLog(fmt.Sprintf("开始处理下载队列（并发 %d）", workers), "info")
 	a.refresh()
@@ -607,6 +610,23 @@ func (a *app) openDownloadDir() {
 	}
 }
 
+// cleanPartFiles removes the .part files of downloads that a previous run
+// never finished; they cannot be resumed.
+func cleanPartFiles(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".part") {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+			log.Printf("remove stale part file: %v", err)
+		}
+	}
+}
+
 func (a *app) writeMetadataSafely(ctx context.Context, task downloadTask, dest string, coverSize int) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -682,7 +702,10 @@ func sanitizeFilename(name string) string {
 		}
 		return r
 	}, name)
-	name = strings.TrimSpace(strings.Trim(name, "."))
+	// Windows drops trailing dots and spaces when it saves the file, so
+	// trim them here to keep the stored path equal to the real one;
+	// leading whitespace goes too, as the reference backend trims it.
+	name = strings.TrimRight(strings.TrimSpace(name), " .")
 	if name == "" {
 		name = "未知歌曲"
 	}
@@ -695,7 +718,10 @@ func sanitizeFilename(name string) string {
 	runes := []rune(name)
 	const maxRunes = 160
 	if len(runes) > maxRunes {
-		name = string(runes[:maxRunes])
+		name = strings.TrimRight(strings.TrimSpace(string(runes[:maxRunes])), " .")
+		if name == "" {
+			name = "未知歌曲"
+		}
 	}
 	return name
 }

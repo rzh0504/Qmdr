@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -107,10 +108,28 @@ func (c *Client) Download(ctx context.Context, rawURL, dest string, overwrite bo
 	if err := file.Close(); err != nil {
 		return received, err
 	}
-	if !overwrite {
-		if _, err := os.Stat(dest); err == nil {
+	if _, err := os.Stat(dest); err == nil && !overwrite {
+		// The file appeared while this one was downloading. Keep the
+		// completed audio under the next free name instead of failing
+		// after a full download.
+		dup := ""
+		ext := filepath.Ext(dest)
+		stem := strings.TrimSuffix(dest, ext)
+		for i := 2; i <= 999; i++ {
+			candidate := fmt.Sprintf("%s (%d)%s", stem, i, ext)
+			if _, err := os.Stat(candidate); err != nil {
+				dup = candidate
+				break
+			}
+		}
+		if dup == "" {
 			return received, fmt.Errorf("目标文件已存在：%s", filepath.Base(dest))
 		}
+		if err := os.Rename(tempPath, dup); err != nil {
+			return received, err
+		}
+		success = true
+		return received, nil
 	}
 	if err := os.Rename(tempPath, dest); err != nil {
 		return received, err

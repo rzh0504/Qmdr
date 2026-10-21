@@ -512,6 +512,20 @@ func (a *app) refreshSelectedSongsQuiet() {
 		defer cancel()
 		page, err := a.api.PlaylistSongs(ctx, tid, dirID)
 		if err != nil {
+			// A quiet refresh stays quiet when it still has content to
+			// show; it only reports the failure when the panel is empty.
+			a.update(func() {
+				if requestID != a.playlistSongsID || a.playlistOwner != owner {
+					return
+				}
+				if len(a.playlistSongs) == 0 && a.selectedPlaylist >= 0 &&
+					a.selectedPlaylist < len(a.playlists) {
+					current := a.playlists[a.selectedPlaylist]
+					if current.TID == tid && current.DirID == dirID {
+						a.playlistErr = friendlyError(err)
+					}
+				}
+			})
 			return
 		}
 		mapped := make([]Song, 0, len(page.Songs))
@@ -533,9 +547,6 @@ func (a *app) refreshSelectedSongsQuiet() {
 				a.playlistErr = ""
 			}
 			a.playlistNotice = truncationNotice(page)
-			if songsEqual(a.playlistSongs, mapped) {
-				return
-			}
 			if songsEqual(a.playlistSongs, mapped) {
 				return
 			}

@@ -17,9 +17,21 @@ const (
 	coverThumbSize  = 150
 	maxCachedCovers = 500
 	coverFetchLimit = 4
+	// A failed cover may be fetched again after a while: the failure is
+	// often a passing network hiccup, not a song without a cover.
+	coverRetryAfter = 5 * time.Minute
 )
 
 var coverMidPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
+
+// coverEntry is a fetched cover or a remembered failure with a time, so a
+// failing album does not retry every frame yet does not stay dark for the
+// whole session.
+type coverEntry struct {
+	bitmap   *ui.Bitmap
+	failedAt time.Time
+}
+// for the whole session.
 
 func coverCachePath(albumMid string) string {
 	if !coverMidPattern.MatchString(albumMid) {
@@ -72,10 +84,16 @@ func (a *app) coverBitmap(albumMid string) *ui.Bitmap {
 	if albumMid == "" {
 		return nil
 	}
-	if bitmap, ok := a.covers[albumMid]; ok {
-		return bitmap
+	if entry, ok := a.covers[albumMid]; ok {
+		if entry.bitmap != nil {
+			return entry.bitmap
+		}
+		if time.Since(entry.failedAt) < coverRetryAfter {
+			return nil
+		}
+		delete(a.covers, albumMid)
 	}
-	if a.coverLoading[albumMid] || a.coverFailed[albumMid] || len(a.covers) >= maxCachedCovers {
+	if a.coverLoading[albumMid] || len(a.covers) >= maxCachedCovers {
 		return nil
 	}
 	a.coverLoading[albumMid] = true
@@ -118,9 +136,9 @@ func (a *app) finishCover(albumMid string, data []byte, err error) {
 	a.update(func() {
 		delete(a.coverLoading, albumMid)
 		if err != nil {
-			a.coverFailed[albumMid] = true
+			a.covers[albumMid] = coverEntry{failedAt: time.Now()}
 			return
 		}
-		a.covers[albumMid] = bitmap
+		a.covers[albumMid] = coverEntry{bitmap: bitmap}
 	})
 }

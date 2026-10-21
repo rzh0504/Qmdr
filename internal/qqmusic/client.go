@@ -26,6 +26,7 @@ const (
 	cdnBase         = "https://isure.stream.qqmusic.qq.com/"
 	defaultUA       = "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.54"
 	fallbackQIMEI   = "6c9d3cd110abca9b16311cee10001e717614"
+	placeholderUID  = "0"
 	versionCode     = 13020508
 	maxResponseSize = 32 << 20
 )
@@ -183,7 +184,7 @@ func (c *Client) callWith(ctx context.Context, hc *http.Client, module, method s
 		"format":     "json",
 		"inCharset":  "utf-8",
 		"outCharset": "utf-8",
-		"uid":        "3931641530",
+		"uid":        placeholderUID,
 	}
 	credential := c.Credential()
 	hasCredential := credential.Valid()

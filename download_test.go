@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,6 +130,36 @@ func TestFormatFileSize(t *testing.T) {
 		if got := formatFileSize(tc.size); got != tc.want {
 			t.Errorf("formatFileSize(%d) = %q, want %q", tc.size, got, tc.want)
 		}
+	}
+}
+
+func TestSanitizeFilename(t *testing.T) {
+	cases := []struct {
+		name string
+		want string
+	}{
+		{"A<B>C:D\"/E\\F|G?H*I", "A_B_C_D__E_F_G_H_I"},
+		{"name. ", "name"},
+		{"name .", "name"},
+		{"...", "未知歌曲"},
+		{"CON", "_CON"},
+		{"lpt4.txt", "_lpt4.txt"},
+		{"normal.mp3", "normal.mp3"},
+		{"  spaced  ", "spaced"},
+	}
+	for _, tc := range cases {
+		if got := sanitizeFilename(tc.name); got != tc.want {
+			t.Errorf("sanitizeFilename(%q) = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+
+	long := strings.Repeat("字", 200) + ".  "
+	trimmed := []rune(sanitizeFilename(long))
+	if len(trimmed) > 160 {
+		t.Fatalf("sanitized length = %d, want at most 160", len(trimmed))
+	}
+	if strings.HasSuffix(sanitizeFilename(long), " ") || strings.HasSuffix(sanitizeFilename(long), ".") {
+		t.Fatalf("sanitized %q keeps a trailing dot or space", sanitizeFilename(long))
 	}
 }
 

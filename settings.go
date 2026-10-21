@@ -27,8 +27,8 @@ func settingsPath() string {
 	return filepath.Join(dir, "Qmdr", "settings.json")
 }
 
-func loadSettings() appSettings {
-	settings := appSettings{
+func defaultSettings() appSettings {
+	return appSettings{
 		DownloadDir: defaultDownloadDir(),
 		Quality:     "FLAC 无损",
 		CoverSize:   "800 px",
@@ -37,6 +37,10 @@ func loadSettings() appSettings {
 		Background:  "rex",
 		HistoryKeep: "90 天",
 	}
+}
+
+func loadSettings() appSettings {
+	settings := defaultSettings()
 	path := settingsPath()
 	if path == "" {
 		return settings
@@ -46,15 +50,7 @@ func loadSettings() appSettings {
 		return settings
 	}
 	if err := json.Unmarshal(data, &settings); err != nil {
-		return appSettings{
-			DownloadDir: defaultDownloadDir(),
-			Quality:     "FLAC 无损",
-			CoverSize:   "800 px",
-			Concurrency: 3,
-			Appearance:  "light",
-			Background:  "rex",
-			HistoryKeep: "90 天",
-		}
+		return defaultSettings()
 	}
 	if settings.DownloadDir == "" {
 		settings.DownloadDir = defaultDownloadDir()

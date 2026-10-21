@@ -37,9 +37,8 @@ type app struct {
 	win *mygo.Window
 	api *qqmusic.Client
 
-	covers       map[string]*ui.Bitmap
+	covers       map[string]coverEntry
 	coverLoading map[string]bool
-	coverFailed  map[string]bool
 	coverSem     chan struct{}
 
 	view   viewID
@@ -135,11 +134,10 @@ func newApp() *app {
 		displayUser = "未登录"
 	}
 	settings := loadSettings()
-a := &app{
+	a := &app{
 		api:              api,
-		covers:           make(map[string]*ui.Bitmap),
+		covers:           make(map[string]coverEntry),
 		coverLoading:     make(map[string]bool),
-		coverFailed:      make(map[string]bool),
 		coverSem:         make(chan struct{}, coverFetchLimit),
 		view:             viewSearch,
 		quality:          settings.Quality,
@@ -768,6 +766,7 @@ func main() {
 		if err := os.MkdirAll(a.downloadDir, 0o755); err != nil {
 			a.downloadDir = defaultDownloadDir()
 		}
+		cleanPartFiles(a.downloadDir)
 		options := mygo.WindowOptions{
 			Title:           "Qmdr · QQ 音乐下载器",
 			Width:           1200,
