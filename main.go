@@ -49,15 +49,16 @@ type app struct {
 	searchID    int
 	results     []Song
 
-	playlistOwner    string
-	loadingPlaylists bool
-	loadingSongs     bool
-	playlistErr      string
-	playlistReq      int
-	playlistSongsID  int
-	playlists        []Playlist
-	selectedPlaylist int
-	playlistSongs    []Song
+	playlistOwner       string
+	loadingPlaylists    bool
+	refreshingPlaylists bool
+	loadingSongs        bool
+	playlistErr         string
+	playlistReq         int
+	playlistSongsID     int
+	playlists           []Playlist
+	selectedPlaylist    int
+	playlistSongs       []Song
 
 	musicIDOpen  bool
 	musicIDInput string
@@ -578,6 +579,7 @@ func (a *app) finishLogin() {
 	a.playlistOwner = a.api.UserID()
 	a.playlistReq++
 	a.loadingPlaylists = false
+	a.refreshingPlaylists = false
 	a.musicIDOpen = false
 	a.musicIDInput = ""
 	a.musicIDErr = ""

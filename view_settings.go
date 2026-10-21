@@ -267,6 +267,7 @@ func (a *app) reloadCredential() {
 	a.playlistReq++
 	a.playlistSongsID++
 	a.loadingPlaylists = false
+	a.refreshingPlaylists = false
 	a.loadingSongs = false
 	a.playlistOwner = a.api.UserID()
 	a.musicIDOpen = false

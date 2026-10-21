@@ -49,13 +49,13 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 						SingleLine().Ellipsis("…")
 				}
 			})
-			if a.loadingPlaylists {
+			if a.loadingPlaylists || a.refreshingPlaylists {
 				ui.Row(c).Gap(4).AlignItems(ui.Center).Padding(2, 6).Children(func() {
 					ui.Spinner(c).Size(12, 12)
-					ui.Text(c, "刷新中").FontSize(12).TextColor(col.faint)
+					ui.Text(c, "刷新").FontSize(12).TextColor(col.faint)
 				})
 			} else {
-				chipButton(c, col, iconRefresh, "刷新", a.loadPlaylists)
+				chipButton(c, col, iconRefresh, "刷新", a.refreshPlaylists)
 			}
 			if a.viewingOtherPlaylists() {
 				chipButton(c, col, iconChevronLeft, "返回我的", a.loadOwnPlaylists)
@@ -162,7 +162,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 				emptyState(c, col, iconMusic, "歌单为空", "这个歌单暂时没有可下载的歌曲。")
 			})
 		default:
-			listPanel(c, col, "songs-"+a.playlistOwner+"-"+strconv.Itoa(a.selectedPlaylist), func() {
+			listPanel(c, col, "songs-"+a.playlistOwner+"-"+strconv.FormatInt(playlist.TID, 10), func() {
 				for i, song := range a.playlistSongs {
 					a.songRow(c, col, song, i, true, nil)
 				}
@@ -171,12 +171,174 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 	})
 }
 
-func (a *app) loadPlaylists() {
+func (a *app) refreshPlaylists() {
 	owner := strings.TrimSpace(a.playlistOwner)
 	if owner == "" || owner == "未登录" {
 		owner = a.api.UserID()
 	}
-	a.loadPlaylistsFor(owner)
+	if len(a.playlists) == 0 {
+		a.loadPlaylistsFor(owner)
+		return
+	}
+	a.refreshPlaylistsQuiet(owner)
+}
+
+func (a *app) refreshPlaylistsQuiet(owner string) {
+	if a.loadingPlaylists || a.refreshingPlaylists || a.loadingSongs {
+		return
+	}
+	if !a.api.HasCredential() {
+		a.setToast("请先登录后读取歌单")
+		return
+	}
+	owner = strings.TrimSpace(owner)
+	if owner == "" || owner == "未登录" {
+		owner = a.api.UserID()
+	}
+	if owner == "" {
+		return
+	}
+	a.playlistReq++
+	requestID := a.playlistReq
+	a.playlistOwner = owner
+	a.refreshingPlaylists = true
+	a.refresh()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		items, err := a.api.UserPlaylists(ctx, owner)
+		mapped := make([]Playlist, 0, len(items))
+		for _, item := range items {
+			mapped = append(mapped, Playlist{
+				DirID: item.DirID,
+				TID:   item.TID,
+				Name:  item.Name,
+				Count: item.SongCount,
+			})
+		}
+		a.update(func() {
+			if requestID != a.playlistReq {
+				return
+			}
+			a.refreshingPlaylists = false
+			if err != nil {
+				a.toast = "刷新失败：" + friendlyError(err)
+				return
+			}
+			a.applyPlaylistsQuiet(mapped)
+			if !a.loadingSongs {
+				a.refreshSelectedSongsQuiet()
+			}
+		})
+	}()
+}
+
+func (a *app) applyPlaylistsQuiet(playlists []Playlist) {
+	if playlistsEqual(a.playlists, playlists) {
+		return
+	}
+	var selectedTID, selectedDirID int64
+	if a.selectedPlaylist >= 0 && a.selectedPlaylist < len(a.playlists) {
+		selected := a.playlists[a.selectedPlaylist]
+		selectedTID, selectedDirID = selected.TID, selected.DirID
+	}
+	a.playlists = playlists
+	a.selectedPlaylist = -1
+	if selectedTID != 0 || selectedDirID != 0 {
+		for i, playlist := range playlists {
+			if playlist.TID == selectedTID && playlist.DirID == selectedDirID {
+				a.selectedPlaylist = i
+				break
+			}
+		}
+	}
+	if a.selectedPlaylist < 0 {
+		a.playlistSongs = nil
+		a.playlistSongsID++
+		a.loadingSongs = false
+		a.playlistErr = ""
+	}
+	if !a.viewingOtherPlaylists() {
+		a.savePlaylistCache()
+	}
+}
+
+func (a *app) refreshSelectedSongsQuiet() {
+	if a.loadingSongs {
+		return
+	}
+	index := a.selectedPlaylist
+	if index < 0 || index >= len(a.playlists) {
+		return
+	}
+	playlist := a.playlists[index]
+	if playlist.DirID == 201 && a.viewingOtherPlaylists() {
+		return
+	}
+	owner := a.playlistOwner
+	tid, dirID := playlist.TID, playlist.DirID
+	a.playlistSongsID++
+	requestID := a.playlistSongsID
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		songs, err := a.api.PlaylistSongs(ctx, tid, dirID)
+		if err != nil {
+			return
+		}
+		mapped := make([]Song, 0, len(songs))
+		for _, song := range songs {
+			mapped = append(mapped, songFromAPI(song))
+		}
+		a.update(func() {
+			if requestID != a.playlistSongsID || a.playlistOwner != owner {
+				return
+			}
+			if a.selectedPlaylist < 0 || a.selectedPlaylist >= len(a.playlists) {
+				return
+			}
+			current := a.playlists[a.selectedPlaylist]
+			if current.TID != tid || current.DirID != dirID {
+				return
+			}
+			if a.playlistErr != "" {
+				a.playlistErr = ""
+			}
+			if songsEqual(a.playlistSongs, mapped) {
+				return
+			}
+			a.playlistSongs = mapped
+			if !a.viewingOtherPlaylists() {
+				a.savePlaylistCache()
+			}
+		})
+	}()
+}
+
+func playlistsEqual(a, b []Playlist) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func songsEqual(a, b []Song) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *app) loadOwnPlaylists() {
@@ -186,6 +348,7 @@ func (a *app) loadOwnPlaylists() {
 	a.playlistReq++
 	a.playlistSongsID++
 	a.loadingPlaylists = false
+	a.refreshingPlaylists = false
 	a.loadingSongs = false
 	a.playlistOwner = owner
 	a.playlistErr = ""
@@ -218,6 +381,7 @@ func (a *app) loadPlaylistsFor(owner string) {
 	a.playlistSongsID++
 	a.playlistOwner = owner
 	a.loadingPlaylists = true
+	a.refreshingPlaylists = false
 	a.loadingSongs = false
 	a.playlistErr = ""
 	a.playlists = nil
