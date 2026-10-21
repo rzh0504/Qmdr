@@ -18,7 +18,7 @@ func (a *app) queueView(c *ui.Context, col colors) {
 		if len(a.pending) > 0 {
 			a.pendingSection(c, col)
 		}
-		if active+failed > 0 {
+		if len(a.queue) > 0 {
 			activeDownloads := 0
 			speed := 0.0
 			for _, item := range a.queue {
@@ -42,7 +42,9 @@ func (a *app) queueView(c *ui.Context, col colors) {
 			})
 
 			if len(activeItems) == 0 {
-				emptyState(c, col, iconQueue, "没有符合条件的任务", "切换筛选条件查看其他任务。")
+				if active+failed > 0 {
+					emptyState(c, col, iconQueue, "没有符合条件的任务", "切换筛选条件查看其他任务。")
+				}
 			} else {
 				sheet(c, col, func() {
 					for _, item := range activeItems {
