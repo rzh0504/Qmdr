@@ -29,7 +29,7 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 		})
 
 		ui.Row(c).Gap(2).AlignItems(ui.Center).Wrap().Children(func() {
-			ui.Text(c, "试试").FontSize(11.5).TextColor(col.faint).Padding(0, 6, 0, 0)
+			ui.Text(c, "试试").FontSize(12).TextColor(col.faint).Padding(0, 6, 0, 0)
 			for _, tag := range []string{"周杰伦", "华语流行", "深夜电台", "G.E.M. 邓紫棋", "陈奕迅"} {
 				tag := tag
 				textLink(c, col, tag, func() {
@@ -52,7 +52,7 @@ func (a *app) searchResults(c *ui.Context, col colors) {
 	ui.Column(c).Gap(8).Children(func() {
 		sectionHeader(c, col, "搜索结果", func() {
 			if !a.searching && a.searchErr == "" {
-				ui.Textf(c, "%d 首", len(a.results)).FontSize(11.5).TextColor(col.faint)
+				ui.Textf(c, "%d 首", len(a.results)).FontSize(12).TextColor(col.faint)
 			}
 			if len(a.results) > 0 && !a.searching {
 				secondaryButton(c, col, iconDownload, "全部下载", func() {

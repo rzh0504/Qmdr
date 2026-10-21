@@ -65,7 +65,7 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 		AlignItems(ui.Center).Children(func() {
 		a.avatar(c, col, 34)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-			ui.Text(c, "Qmdr 账号").FontSize(13).FontWeight(500).TextColor(col.text)
+			ui.Text(c, "Qmdr 账号").FontSize(13).FontWeight(400).TextColor(col.text)
 			ui.Textf(c, "%s · %s 登录", a.userID, a.loginType).
 				FontSize(12).TextColor(col.muted)
 		})
@@ -151,7 +151,7 @@ func (a *app) backgroundTile(c *ui.Context, col colors, w wash) {
 				})
 			}
 		})
-		label := ui.Text(c, w.name).FontSize(12.5).TextColor(col.muted).
+		label := ui.Text(c, w.name).FontSize(13).TextColor(col.muted).
 			TextAlign(ui.Center)
 		if selected {
 			label.TextColor(col.text).FontWeight(600)
@@ -196,7 +196,7 @@ func (a *app) aboutSettings(c *ui.Context, col colors) {
 	ui.Row(c).FillWidth().MinHeight(56).Padding(11, 0).AlignItems(ui.Center).Children(func() {
 		a.logoMark(c, col, 24)
 		ui.Column(c).Gap(2).Padding(0, 0, 0, 10).Children(func() {
-			ui.Text(c, "Qmdr").FontSize(13).FontWeight(500).TextColor(col.text)
+			ui.Text(c, "Qmdr").FontSize(13).FontWeight(400).TextColor(col.text)
 			ui.Textf(c, "版本 %s · GPL-3.0 · MyGo 原生 UI", appVersion).
 				FontSize(12).TextColor(col.muted)
 		})

@@ -194,7 +194,7 @@ func primaryButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClic
 		if icon != nil {
 			ui.Icon(c, icon).Size(14, 14).TextColor(col.accentText)
 		}
-		ui.Text(c, label).FontSize(12.5).FontWeight(500).TextColor(col.accentText).SingleLine()
+		ui.Text(c, label).FontSize(13).FontWeight(400).TextColor(col.accentText).SingleLine()
 	})
 	return btn
 }
@@ -216,7 +216,7 @@ func secondaryButton(c *ui.Context, col colors, icon *ui.SVG, label string, onCl
 		if icon != nil {
 			ui.Icon(c, icon).Size(14, 14).TextColor(col.muted)
 		}
-		ui.Text(c, label).FontSize(12.5).FontWeight(500).TextColor(col.text).SingleLine()
+		ui.Text(c, label).FontSize(13).FontWeight(400).TextColor(col.text).SingleLine()
 	})
 	return btn
 }
@@ -239,7 +239,7 @@ func chipButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClick f
 		if icon != nil {
 			ui.Icon(c, icon).Size(12, 12).TextColor(fg)
 		}
-		ui.Text(c, label).FontSize(11.5).TextColor(fg).SingleLine()
+		ui.Text(c, label).FontSize(12).TextColor(fg).SingleLine()
 	})
 	return btn
 }
@@ -284,7 +284,7 @@ func segmentedControl(c *ui.Context, col colors, selected *int, labels ...string
 				}
 			}
 			s.Children(func() {
-				ui.Text(c, label).FontSize(12.5).SingleLine().TextColor(col.text)
+				ui.Text(c, label).FontSize(13).SingleLine().TextColor(col.text)
 			})
 		}
 	})
@@ -390,7 +390,7 @@ func (a *app) songRow(c *ui.Context, col colors, song Song, index int, showIndex
 		a.cover(c, col, song.AlbumMid, 34)
 		ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, song.Title).FontSize(12.5).FontWeight(500).TextColor(col.text).SingleLine()
+				ui.Text(c, song.Title).FontSize(13).FontWeight(400).TextColor(col.text).SingleLine()
 				if song.VIP {
 					ui.Text(c, "VIP").FontSize(9).FontWeight(600).TextColor(col.gold).SingleLine()
 				}
@@ -398,7 +398,7 @@ func (a *app) songRow(c *ui.Context, col colors, song Song, index int, showIndex
 					ui.Text(c, song.Quality).FontSize(10).TextColor(col.muted).SingleLine()
 				}
 			})
-			ui.Textf(c, "%s · %s", song.Artist, song.Album).FontSize(11.5).
+			ui.Textf(c, "%s · %s", song.Artist, song.Album).FontSize(12).
 				TextColor(col.muted).SingleLine()
 		})
 		ui.Text(c, song.Duration).Width(38).FontSize(11).TextColor(col.faint).SingleLine()

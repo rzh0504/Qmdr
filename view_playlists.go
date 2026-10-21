@@ -35,7 +35,7 @@ func (a *app) playlistLoader(c *ui.Context, col colors) {
 		}
 		ui.Spacer(c)
 		if len(a.playlists) > 0 {
-			ui.Textf(c, "%d 个歌单", len(a.playlists)).FontSize(11.5).TextColor(col.faint)
+			ui.Textf(c, "%d 个歌单", len(a.playlists)).FontSize(12).TextColor(col.faint)
 		}
 	})
 }
@@ -45,7 +45,7 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Padding(0, 4).Children(func() {
 			ui.Text(c, "我的歌单").FontSize(12).FontWeight(600).TextColor(col.muted).Grow(1)
 			if len(a.playlists) > 0 {
-				ui.Textf(c, "%d", len(a.playlists)).FontSize(11.5).TextColor(col.faint)
+				ui.Textf(c, "%d", len(a.playlists)).FontSize(12).TextColor(col.faint)
 			}
 		})
 
@@ -83,7 +83,7 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 				btn.Children(func() {
 					playlistCover(c, col, i+1, 30)
 					ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
-						ui.Text(c, playlist.Name).FontSize(12.5).FontWeight(500).
+						ui.Text(c, playlist.Name).FontSize(13).FontWeight(400).
 							TextColor(col.text).SingleLine()
 						ui.Textf(c, "%d 首", playlist.Count).FontSize(11).
 							TextColor(col.muted).SingleLine()
@@ -107,9 +107,9 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			playlistCover(c, col, a.selectedPlaylist+1, 44)
 			ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
-				ui.Text(c, playlist.Name).FontSize(16).FontWeight(650).
+				ui.Text(c, playlist.Name).FontSize(16).FontWeight(600).
 					TextColor(col.text).SingleLine()
-				ui.Textf(c, "%d 首", playlist.Count).FontSize(11.5).TextColor(col.muted)
+				ui.Textf(c, "%d 首", playlist.Count).FontSize(12).TextColor(col.muted)
 			})
 			if a.loadingSongs {
 				ui.Spinner(c).Size(15, 15)

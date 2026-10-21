@@ -29,7 +29,7 @@ func (a *app) queueView(c *ui.Context, col colors) {
 				a.refresh()
 			}
 			ui.Spacer(c)
-			ui.Textf(c, "%d 个任务", len(items)).FontSize(11.5).TextColor(col.faint)
+			ui.Textf(c, "%d 个任务", len(items)).FontSize(12).TextColor(col.faint)
 		})
 
 		if len(items) == 0 {
@@ -61,15 +61,15 @@ func (a *app) queueSummary(c *ui.Context, col colors, total, done, failed, skipp
 	ui.Row(c).FillWidth().AlignItems(ui.End).Children(func() {
 		ui.Column(c).Gap(2).Grow(1).Children(func() {
 			ui.Row(c).Gap(9).AlignItems(ui.End).Children(func() {
-				ui.Textf(c, "%.0f%%", percent).FontSize(24).FontWeight(650).TextColor(col.text)
+				ui.Textf(c, "%.0f%%", percent).FontSize(24).FontWeight(600).TextColor(col.text)
 				ui.Textf(c, "%d / %d", processed, total).FontSize(11).TextColor(col.faint)
 			})
 			ui.Textf(c, "完成 %d · 跳过 %d · 失败 %d · 进行中 %d", done, skipped, failed, active).
-				FontSize(11.5).TextColor(col.muted)
+				FontSize(12).TextColor(col.muted)
 		})
 		if activeDownloads > 0 {
 			ui.Textf(c, "%d 个下载中 · %.1f MB/s", activeDownloads, speed).
-				FontSize(11.5).TextColor(col.muted)
+				FontSize(12).TextColor(col.muted)
 		}
 	})
 
@@ -109,7 +109,7 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem) {
 			a.cover(c, col, item.Song.AlbumMid, 30)
 			ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, item.Song.Title).FontSize(12.5).FontWeight(500).
+					ui.Text(c, item.Song.Title).FontSize(13).FontWeight(400).
 						TextColor(col.text).SingleLine()
 					if item.Song.VIP {
 						ui.Text(c, "VIP").FontSize(9).FontWeight(600).TextColor(col.gold)
@@ -118,7 +118,7 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem) {
 				if item.Error != "" {
 					ui.Text(c, item.Error).FontSize(11).TextColor(col.red).SingleLine()
 				} else {
-					ui.Text(c, item.Song.Artist).FontSize(11.5).TextColor(col.muted).SingleLine()
+					ui.Text(c, item.Song.Artist).FontSize(12).TextColor(col.muted).SingleLine()
 				}
 			})
 		})
@@ -136,7 +136,7 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem) {
 								Radius(2).Background(col.accent)
 						}
 					})
-					ui.Textf(c, "%.0f%%", item.Progress*100).FontSize(10.5).TextColor(col.muted)
+					ui.Textf(c, "%.0f%%", item.Progress*100).FontSize(11).TextColor(col.muted)
 				})
 			}
 		})
@@ -171,7 +171,7 @@ func (a *app) queueLogs(c *ui.Context, col colors) {
 	}
 	toggle.Children(func() {
 		ui.Text(c, "任务日志").FontSize(12).FontWeight(600).TextColor(col.muted)
-		ui.Textf(c, "%d", len(a.logs)).FontSize(11.5).TextColor(col.faint)
+		ui.Textf(c, "%d", len(a.logs)).FontSize(12).TextColor(col.faint)
 		ui.Spacer(c)
 		label := "展开"
 		icon := iconChevronDown
@@ -179,7 +179,7 @@ func (a *app) queueLogs(c *ui.Context, col colors) {
 			label = "收起"
 			icon = iconChevronUp
 		}
-		ui.Text(c, label).FontSize(11.5).TextColor(col.faint)
+		ui.Text(c, label).FontSize(12).TextColor(col.faint)
 		ui.Icon(c, icon).Size(13, 13).TextColor(col.faint)
 	})
 
@@ -187,7 +187,7 @@ func (a *app) queueLogs(c *ui.Context, col colors) {
 		return
 	}
 	if len(a.logs) == 0 {
-		ui.Text(c, "暂无日志").FontSize(11.5).TextColor(col.faint).Padding(4, 4)
+		ui.Text(c, "暂无日志").FontSize(12).TextColor(col.faint).Padding(4, 4)
 		return
 	}
 
@@ -205,7 +205,7 @@ func (a *app) queueLogs(c *ui.Context, col colors) {
 					fg = col.gold
 				}
 				ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
-					ui.Text(c, entry.Time).Width(58).Font("monospace").FontSize(10.5).
+					ui.Text(c, entry.Time).Width(58).Font("monospace").FontSize(11).
 						TextColor(col.faint).SingleLine()
 					ui.Text(c, entry.Message).Font("monospace").FontSize(11).
 						TextColor(fg).Grow(1).MaxLines(2).LineHeight(1.45)

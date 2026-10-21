@@ -185,7 +185,7 @@ func (a *app) viewRoot(c *ui.Context) {
 func (a *app) cardHeader(c *ui.Context, col colors) {
 	ui.Row(c).FillWidth().Height(headerH).Shrink(0).AlignItems(ui.Center).
 		Padding(0, 8, 0, 16).DragWindow().Children(func() {
-		ui.Text(c, a.pageTitle()).FontSize(14.5).FontWeight(650).TextColor(col.text)
+		ui.Text(c, a.pageTitle()).FontSize(15).FontWeight(600).TextColor(col.text)
 		ui.Spacer(c)
 		a.headerActions(c, col)
 		if runtime.GOOS != "darwin" {
@@ -432,7 +432,7 @@ func (a *app) navItem(c *ui.Context, col colors, key string, icon *ui.SVG, label
 	}
 	row.Children(func() {
 		ui.Icon(c, icon).Size(15, 15).TextColor(fg)
-		ui.Text(c, label).FontSize(12.5).FontWeight(500).TextColor(fg).Grow(1)
+		ui.Text(c, label).FontSize(13).FontWeight(400).TextColor(fg).Grow(1)
 		if key == "queue" {
 			if _, _, _, active := a.queueCounts(); active > 0 {
 				ui.Textf(c, "%d", active).FontSize(11).TextColor(col.muted)
@@ -464,7 +464,7 @@ func (a *app) accountChip(c *ui.Context, col colors) {
 			if a.loggedIn {
 				status = "已登录"
 			}
-			ui.Text(c, status).FontSize(12).FontWeight(500).TextColor(col.text).SingleLine()
+			ui.Text(c, status).FontSize(12).FontWeight(400).TextColor(col.text).SingleLine()
 			ui.Text(c, a.userID).FontSize(11).TextColor(col.muted).SingleLine().Ellipsis("…")
 		})
 		ui.Icon(c, iconChevronRight).Size(13, 13).TextColor(col.faint)
@@ -484,7 +484,7 @@ func (a *app) avatar(c *ui.Context, col colors, size float32) {
 	ui.Box(c).Size(size, size).Radius(size / 2).Background(col.chip).
 		Children(func() {
 			ui.Row(c).Fill().Center().Children(func() {
-				ui.Text(c, "Q").FontSize(size * 0.4).FontWeight(600).TextColor(col.text)
+				ui.Text(c, "Q").FontSize(float32(int(size*0.4 + 0.5))).FontWeight(600).TextColor(col.text)
 			})
 		})
 }
@@ -608,7 +608,7 @@ func (a *app) qrModal(c *ui.Context, col colors) {
 			Shadow(0, 16, 40, 0, col.floatShadow)
 		panel.Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-				ui.Textf(c, "%s登录", a.qrType).FontSize(15).FontWeight(650).
+				ui.Textf(c, "%s登录", a.qrType).FontSize(15).FontWeight(600).
 					TextColor(col.text).Grow(1)
 				iconButton(c, col, iconX, "关闭", a.closeQR)
 			})
