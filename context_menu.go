@@ -92,8 +92,17 @@ func (a *app) menuView(c *ui.Context, col colors) {
 			return
 		}
 		panel := ui.Column(c).Absolute().Left(x).Top(y).Width(width).Padding(contextMenuPadding)
+		// The opaque base keeps the surface solid even if a repaint skips
+		// the smooth path fill; the stroke makes the edge unmistakable.
+		panel.Background(col.card)
 		smoothPanel(panel, col, contextMenuRadius, col.card, false)
 		panel.Shadow(0, 12, 32, 0, col.floatShadow)
+		if !col.dark {
+			panel.DrawOver(func(p *ui.Painter, r ui.Rect) {
+				path := smoothRectPath(snapRect(p, r), contextMenuRadius)
+				p.StrokePath(&path, 1, col.border)
+			})
+		}
 		panel.Children(func() {
 			for _, item := range menu.items {
 				item := item
