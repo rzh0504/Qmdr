@@ -183,7 +183,7 @@ func iconButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClick f
 }
 
 func primaryButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClick func()) ui.Element {
-	btn := ui.ButtonBase(c).Height(30).Padding(0, 14).Gap(6).
+	btn := ui.ButtonBase(c).Height(30).Padding(0, 14).Gap(6).Radius(8).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label)
 	fill := col.accent
 	if btn.Pressed() {
@@ -191,7 +191,9 @@ func primaryButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClic
 	} else if btn.Hovered() {
 		fill = col.accentHover
 	}
-	smoothFlat(btn, col, 8, fill)
+	// Native fill: at this size its edge stays crisp at fractional scale,
+	// where a path fill can leave a pixel of raggedness on the accent.
+	btn.Background(fill)
 	if btn.Clicked() && onClick != nil {
 		onClick()
 	}

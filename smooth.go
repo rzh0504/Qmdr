@@ -52,6 +52,20 @@ func cornerDistance(u, v float32) float32 {
 	return min(max(extent-u, extent-v), 0) + extent*(f-1)
 }
 
+// snapRect rounds a rectangle's edges to whole device pixels, as native
+// fills do, so that its straight edges stay crisp.
+func snapRect(p *ui.Painter, r ui.Rect) ui.Rect {
+	scale := p.Scale()
+	if scale <= 0 {
+		return r
+	}
+	x0 := float32(math.Round(float64(r.X*scale))) / scale
+	y0 := float32(math.Round(float64(r.Y*scale))) / scale
+	x1 := float32(math.Round(float64((r.X+r.W)*scale))) / scale
+	y1 := float32(math.Round(float64((r.Y+r.H)*scale))) / scale
+	return ui.Rect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}
+}
+
 // smoothRectPath returns the continuous rounded rectangle of radius, as
 // MyGo draws on macOS, for renderers that round corners circularly.
 func smoothRectPath(r ui.Rect, radius float32) ui.Path {
@@ -99,7 +113,7 @@ func smoothFlat(e ui.Element, col colors, radius float32, fill ui.Color) ui.Elem
 		return e
 	}
 	e.Draw(func(p *ui.Painter, r ui.Rect) {
-		path := smoothRectPath(r, radius)
+		path := smoothRectPath(snapRect(p, r), radius)
 		p.FillPath(&path, fill)
 	})
 	return e
@@ -111,7 +125,7 @@ func smoothGradientTile(e ui.Element, col colors, radius float32, base, glow ui.
 	e.Radius(radius)
 	e = lift(e, col)
 	e.Draw(func(p *ui.Painter, r ui.Rect) {
-		path := smoothRectPath(r, radius)
+		path := smoothRectPath(snapRect(p, r), radius)
 		p.FillPathGradient(&path, base)
 		p.FillPathGradient(&path, glow)
 		if col.dark {
@@ -135,7 +149,7 @@ func smoothFace(e ui.Element, col colors, radius float32, fill ui.Color) ui.Elem
 			Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.05))
 	}
 	e.Draw(func(p *ui.Painter, r ui.Rect) {
-		path := smoothRectPath(r, radius)
+		path := smoothRectPath(snapRect(p, r), radius)
 		p.FillPath(&path, fill)
 		if col.dark {
 			p.StrokePath(&path, 1, col.edge)
@@ -152,7 +166,7 @@ func smoothField(e ui.Element, col colors, radius float32, fill, stroke, focus u
 		e.Shadow(0, 0, 0, 3.5*glow, focus.Alpha(0.32*glow))
 	}
 	e.Draw(func(p *ui.Painter, r ui.Rect) {
-		path := smoothRectPath(r, radius)
+		path := smoothRectPath(snapRect(p, r), radius)
 		p.FillPath(&path, fill)
 		p.StrokePath(&path, 1, stroke)
 		if glow > 0 {
@@ -177,7 +191,7 @@ func smoothPanel(e ui.Element, col colors, radius float32, fill ui.Color, clip b
 	}
 	e = lift(e, col)
 	e.Draw(func(p *ui.Painter, r ui.Rect) {
-		path := smoothRectPath(r, radius)
+		path := smoothRectPath(snapRect(p, r), radius)
 		p.FillPath(&path, fill)
 		if col.dark {
 			p.StrokePath(&path, 1, col.edge)
