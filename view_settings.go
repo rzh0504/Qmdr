@@ -87,23 +87,35 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 
 func (a *app) downloadSettings(c *ui.Context, col colors) {
 	a.settingsRow(c, col, "下载目录", func() {
-		ui.TextInput(c, &a.downloadDir).
+		input := ui.TextInput(c, &a.downloadDir).
 			Placeholder("选择下载目录").
 			Label("下载目录").
 			Grow(1).Height(30).
 			Background(col.cardAlt).Border(1, col.border).Radius(6)
+		if input.Changed() {
+			a.saveSettings()
+		}
 		secondaryButton(c, col, iconFolder, "选择…", func() {
 			a.pickDir()
 		})
 	})
 	a.settingsRow(c, col, "默认音质", func() {
-		ui.Select(c, &a.quality, qualityOptions).Width(180)
+		selectInput := ui.Select(c, &a.quality, qualityOptions).Width(180)
+		if selectInput.Changed() {
+			a.saveSettings()
+		}
 	})
 	a.settingsRow(c, col, "封面尺寸", func() {
-		ui.Select(c, &a.coverSize, coverSizeOptions).Width(120)
+		selectInput := ui.Select(c, &a.coverSize, coverSizeOptions).Width(120)
+		if selectInput.Changed() {
+			a.saveSettings()
+		}
 	})
 	a.settingsRow(c, col, "覆盖文件", func() {
-		ui.Checkbox(c, &a.overwrite, "覆盖已存在的文件")
+		checkbox := ui.Checkbox(c, &a.overwrite, "覆盖已存在的文件")
+		if checkbox.Changed() {
+			a.saveSettings()
+		}
 	})
 }
 
@@ -156,6 +168,7 @@ func (a *app) pickDir() {
 				return
 			}
 			a.downloadDir = paths[0]
+			a.saveSettings()
 			a.appendLog("下载目录已更新："+a.downloadDir, "info")
 			a.toast = "下载目录已更新"
 		})

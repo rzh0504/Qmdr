@@ -86,14 +86,16 @@ func newApp() *app {
 	if displayUser == "" {
 		displayUser = "未登录"
 	}
+	settings := loadSettings()
 	a := &app{
 		api:              api,
 		view:             viewSearch,
-		quality:          "FLAC 无损",
+		quality:          settings.Quality,
 		musicID:          userID,
 		selectedPlaylist: -1,
-		downloadDir:      defaultDownloadDir(),
-		coverSize:        "800 px",
+		downloadDir:      settings.DownloadDir,
+		coverSize:        settings.CoverSize,
+		overwrite:        settings.Overwrite,
 		loggedIn:         api.HasCredential(),
 		userID:           displayUser,
 		loginType:        loginType,
