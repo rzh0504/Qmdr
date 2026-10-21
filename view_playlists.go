@@ -232,6 +232,12 @@ func (a *app) songContextMenu(m *ui.Menu, song Song) {
 		}
 		return
 	}
+	a.songActionsMenu(m, song)
+}
+
+// songActionsMenu lists the actions for one song, independent of any
+// selection mode in the playlists page.
+func (a *app) songActionsMenu(m *ui.Menu, song Song) {
 	if m.Item("下载这首歌").Chosen() {
 		a.downloadSongNow(song)
 	}

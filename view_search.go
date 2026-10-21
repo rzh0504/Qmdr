@@ -85,11 +85,14 @@ func (a *app) searchResults(c *ui.Context, col colors) {
 			sheet(c, col, func() {
 				for i, song := range a.search.results {
 					song := song
-					a.songRow(c, col, song, songRowOptions{
+					row := a.songRow(c, col, song, songRowOptions{
 						index: i,
 						onDownload: func() {
 							a.enqueueSongs([]Song{song})
 						},
+					})
+					row.ContextMenu(func(m *ui.Menu) {
+						a.songActionsMenu(m, song)
 					})
 				}
 			})
