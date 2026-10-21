@@ -103,6 +103,7 @@ func (a *app) themeColors(c *ui.Context) colors {
 		t.SurfacePressed = ui.Hex("#4f4f58")
 	}
 	t.Border = ui.Transparent
+	t.Font = "Microsoft YaHei UI, Noto Sans SC"
 	t.Text = col.text
 	t.TextMuted = col.muted
 	t.Accent = col.accent
