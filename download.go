@@ -25,6 +25,48 @@ type downloadTask struct {
 	Quality  string
 }
 
+type claimResult int
+
+const (
+	claimOK claimResult = iota
+	claimSkip
+	claimExhausted
+)
+
+type downloadClaims struct {
+	mu    sync.Mutex
+	paths map[string]bool
+}
+
+func newDownloadClaims() *downloadClaims {
+	return &downloadClaims{paths: make(map[string]bool)}
+}
+
+func (c *downloadClaims) reserve(dir, base, ext string, overwrite bool) (string, claimResult) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i := 1; i <= 999; i++ {
+		name := base + ext
+		if i > 1 {
+			name = fmt.Sprintf("%s (%d)%s", base, i, ext)
+		}
+		dest, err := safeDownloadPath(dir, name)
+		if err != nil {
+			return "", claimExhausted
+		}
+		if _, err := os.Stat(dest); err == nil && !overwrite {
+			return dest, claimSkip
+		}
+		key := strings.ToLower(dest)
+		if c.paths[key] {
+			continue
+		}
+		c.paths[key] = true
+		return dest, claimOK
+	}
+	return "", claimExhausted
+}
+
 func (a *app) enqueueSongs(songs []Song) {
 	if len(songs) == 0 {
 		return
@@ -102,11 +144,12 @@ func (a *app) startQueue() {
 	dir := a.downloadDir
 	overwrite := a.overwrite
 	coverSize := coverSizeValue(a.coverSize)
+	claims := newDownloadClaims()
 	a.appendLog(fmt.Sprintf("开始处理下载队列（并发 %d）", workers), "info")
 	a.refresh()
 
 	go func() {
-		a.runWorkers(ctx, runID, tasks, workers, dir, overwrite, coverSize)
+		a.runWorkers(ctx, runID, tasks, workers, dir, overwrite, coverSize, claims)
 		a.update(func() {
 			if runID != a.runID {
 				return
@@ -125,7 +168,7 @@ func (a *app) startQueue() {
 	}()
 }
 
-func (a *app) runWorkers(ctx context.Context, runID int, tasks []downloadTask, workers int, dir string, overwrite bool, coverSize int) {
+func (a *app) runWorkers(ctx context.Context, runID int, tasks []downloadTask, workers int, dir string, overwrite bool, coverSize int, claims *downloadClaims) {
 	jobs := make(chan downloadTask)
 	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {
@@ -136,7 +179,7 @@ func (a *app) runWorkers(ctx context.Context, runID int, tasks []downloadTask, w
 				if ctx.Err() != nil {
 					return
 				}
-				a.processDownload(ctx, runID, task, dir, overwrite, coverSize)
+				a.processDownload(ctx, runID, task, dir, overwrite, coverSize, claims)
 			}
 		}()
 	}
@@ -153,7 +196,7 @@ feed:
 	wg.Wait()
 }
 
-func (a *app) processDownload(ctx context.Context, runID int, task downloadTask, dir string, overwrite bool, coverSize int) {
+func (a *app) processDownload(ctx context.Context, runID int, task downloadTask, dir string, overwrite bool, coverSize int, claims *downloadClaims) {
 	a.update(func() {
 		if runID != a.runID || a.closed {
 			return
@@ -182,15 +225,14 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		return
 	}
 
-	name := sanitizeFilename(task.Artist + " - " + task.Title)
-	dest, err := safeDownloadPath(dir, name+resolved.Ext)
-	if err != nil {
-		a.markFailed(runID, task, err)
-		return
-	}
-
-	if _, statErr := os.Stat(dest); statErr == nil && !overwrite {
+	base := sanitizeFilename(task.Artist + " - " + task.Title)
+	dest, claim := claims.reserve(dir, base, resolved.Ext, overwrite)
+	switch claim {
+	case claimSkip:
 		a.markSkipped(runID, task, dest, resolved.Quality)
+		return
+	case claimExhausted:
+		a.markFailed(runID, task, errors.New("找不到可用的目标文件名"))
 		return
 	}
 
