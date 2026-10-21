@@ -32,8 +32,9 @@ const (
 )
 
 type app struct {
-	win *mygo.Window
-	api *qqmusic.Client
+	win       *mygo.Window
+	api       *qqmusic.Client
+	brandIcon *ui.Bitmap
 
 	view     viewID
 	closed   atomic.Bool
@@ -73,8 +74,10 @@ func newApp() *app {
 		displayUser = "未登录"
 	}
 	settings := loadSettings()
+	brandIcon, _ := ui.DecodeBitmap(appIconPNG)
 	a := &app{
 		api:         api,
+		brandIcon:   brandIcon,
 		view:        viewSearch,
 		covers:      coverState{cache: map[string]coverEntry{}, loading: map[string]bool{}, sem: make(chan struct{}, coverFetchLimit)},
 		queue:       queueState{pending: loadPending()},
@@ -441,7 +444,30 @@ func (a *app) accountChip(c *ui.Context, col colors) {
 	})
 }
 
+// applyAppIcon gives each platform its best icon: Windows reads the
+// multi-size ICO embedded with rsrc, macOS uses the PNG for the Dock and
+// ships an ICNS with the bundle, and Linux takes the PNG on the window.
+func applyAppIcon(win *mygo.Window) {
+	switch runtime.GOOS {
+	case "windows":
+		// The ICO resource gives the crispest taskbar icon; scaling a large
+		// PNG into a HICON here is blurrier.
+	case "darwin":
+		if err := mygo.App.Dock.SetIcon(appIconPNG); err != nil {
+			log.Printf("set dock icon: %v", err)
+		}
+	default:
+		if err := win.SetIcon(appIconPNG); err != nil {
+			log.Printf("set window icon: %v", err)
+		}
+	}
+}
+
 func (a *app) logoMark(c *ui.Context, col colors, size float32) {
+	if a.brandIcon != nil {
+		ui.Image(c, a.brandIcon).Size(size, size)
+		return
+	}
 	ui.Box(c).Size(size, size).Radius(size * 0.26).Background(col.accent).
 		Children(func() {
 			ui.Row(c).Fill().Center().Children(func() {
@@ -790,9 +816,7 @@ func main() {
 			options.AutoHideMenuBar = true
 		}
 		a.win = mygo.NewWindow(options)
-		if err := a.win.SetIcon(appIconPNG); err != nil {
-			log.Printf("set window icon: %v", err)
-		}
+		applyAppIcon(a.win)
 		a.win.OnClosed(func() {
 			a.closed.Store(true)
 			a.stopSongPress()
