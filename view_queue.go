@@ -35,11 +35,8 @@ func (a *app) queueView(c *ui.Context, col colors) {
 				}
 			})
 
-			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-				filter := segmentedControl(c, col, &a.queueFilter, "全部", "进行中", "失败")
-				if filter.Changed() {
-					a.refresh()
-				}
+			ui.Row(c).Height(32).FillWidth().AlignItems(ui.Center).Children(func() {
+				a.queueFilterTabs(c, col)
 				ui.Spacer(c)
 				ui.Textf(c, "%d 个任务", len(activeItems)).FontSize(12).TextColor(col.faint)
 			})
@@ -70,6 +67,38 @@ func (a *app) queueView(c *ui.Context, col colors) {
 	if total > 0 || len(a.logs) > 0 {
 		a.queueLogs(c, col)
 	}
+}
+
+func (a *app) queueFilterTabs(c *ui.Context, col colors) ui.Element {
+	labels := []string{"全部", "进行中", "失败"}
+	track := ui.Row(c).Height(28).Padding(2).Radius(7).Gap(1).
+		Background(col.chip).AlignItems(ui.Center).Shrink(0)
+	track.Children(func() {
+		for i, label := range labels {
+			i, label := i, label
+			seg := ui.ButtonBase(c).Height(24).Padding(0, 12).Radius(5).Center().
+				Cursor(ui.CursorPointer).Label(label)
+			if i == a.queueFilter {
+				seg.Background(col.segThumb)
+				if col.dark {
+					seg.Shadow(0, 1, 1, 0, ui.RGBA(0, 0, 0, 0.25))
+				} else {
+					seg.Shadow(0, 0.5, 1.5, 0, ui.RGBA(0, 0, 0, 0.16)).
+						Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.04))
+				}
+			} else if seg.Hovered() {
+				seg.Background(col.cardHover)
+			}
+			if seg.Clicked() {
+				a.queueFilter = i
+				a.refresh()
+			}
+			seg.Children(func() {
+				ui.Text(c, label).FontSize(13).SingleLine().TextColor(col.text)
+			})
+		}
+	})
+	return track
 }
 
 func (a *app) pendingSection(c *ui.Context, col colors) {
