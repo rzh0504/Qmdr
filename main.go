@@ -790,6 +790,9 @@ func main() {
 			options.AutoHideMenuBar = true
 		}
 		a.win = mygo.NewWindow(options)
+		if err := a.win.SetIcon(appIconPNG); err != nil {
+			log.Printf("set window icon: %v", err)
+		}
 		a.win.OnClosed(func() {
 			a.closed.Store(true)
 			a.stopSongPress()
