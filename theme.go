@@ -1,6 +1,8 @@
 package main
 
 import (
+	"runtime"
+
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
@@ -103,7 +105,7 @@ func (a *app) themeColors(c *ui.Context) colors {
 		t.SurfacePressed = ui.Hex("#4f4f58")
 	}
 	t.Border = ui.Transparent
-	t.Font = "Microsoft YaHei UI, Noto Sans SC"
+	t.Font = platformUIFont()
 	t.Text = col.text
 	t.TextMuted = col.muted
 	t.Accent = col.accent
@@ -194,6 +196,16 @@ func validBackground(id string) bool {
 
 func validAppearance(value string) bool {
 	return value == "light" || value == "dark" || value == "system"
+}
+
+// platformUIFont returns the families to name on Windows, whose system UI
+// font leaves CJK text to a fallback; macOS and Linux draw with their own
+// interface font, and their own fallback for other scripts, when it is "".
+func platformUIFont() string {
+	if runtime.GOOS == "windows" {
+		return "Microsoft YaHei UI, Noto Sans SC"
+	}
+	return ""
 }
 
 func themeSource(value string) mygo.ThemeSource {
