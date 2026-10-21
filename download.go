@@ -339,7 +339,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 	}
 
 	started := time.Now()
-	_, err = a.api.Download(ctx, resolved.URL, dest, overwrite, func(received, size int64) {
+	written, err := a.api.Download(ctx, resolved.URL, dest, overwrite, func(received, size int64) {
 		progress := 0.0
 		if size > 0 {
 			progress = min(1, float64(received)/float64(size))
@@ -375,6 +375,11 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 	metaErr := a.writeMetadataSafely(metaCtx, task, dest, coverSize)
 	metaCancel()
 
+	size := fileSize(dest)
+	if size == 0 {
+		size = written
+	}
+
 	a.update(func() {
 		if runID != a.runID {
 			return
@@ -388,6 +393,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		item.Speed = 0
 		item.Quality = resolved.Quality
 		item.FilePath = dest
+		item.FileSize = size
 		a.appendLog("下载成功："+task.Title+"（"+resolved.Quality+"）", "success")
 		if metaErr != nil {
 			a.appendLog("元数据写入失败："+task.Title+"（"+friendlyError(metaErr)+"）", "warning")
@@ -427,6 +433,7 @@ func (a *app) markFailed(runID int, task downloadTask, err error) {
 }
 
 func (a *app) markSkipped(runID int, task downloadTask, dest, quality string) {
+	size := fileSize(dest)
 	a.update(func() {
 		if runID != a.runID {
 			return
@@ -437,6 +444,7 @@ func (a *app) markSkipped(runID int, task downloadTask, dest, quality string) {
 			item.Speed = 0
 			item.Quality = quality
 			item.FilePath = dest
+			item.FileSize = size
 		}
 		a.appendLog("文件已存在，跳过："+task.Title, "muted")
 		a.recalcOverallProgress()
@@ -487,6 +495,7 @@ func (a *app) retryItem(id int) {
 	item.Progress = 0
 	item.Speed = 0
 	item.Error = ""
+	item.FileSize = 0
 	a.recalcOverallProgress()
 	a.appendLog("重新加入队列："+item.Song.Title, "info")
 	a.startQueue()
@@ -604,6 +613,29 @@ func coverSizeValue(value string) int {
 		return size
 	default:
 		return 800
+	}
+}
+
+func fileSize(path string) int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return info.Size()
+}
+
+func formatFileSize(size int64) string {
+	switch {
+	case size <= 0:
+		return ""
+	case size >= 1<<30:
+		return fmt.Sprintf("%.1f GB", float64(size)/float64(1<<30))
+	case size >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(size)/float64(1<<20))
+	case size >= 1<<10:
+		return fmt.Sprintf("%.0f KB", float64(size)/float64(1<<10))
+	default:
+		return fmt.Sprintf("%d B", size)
 	}
 }
 

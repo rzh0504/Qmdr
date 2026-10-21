@@ -57,6 +57,7 @@ type QueueItem struct {
 	Quality  string
 	Error    string
 	FilePath string
+	FileSize int64
 }
 
 type LogEntry struct {

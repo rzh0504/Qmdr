@@ -162,6 +162,8 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem) {
 		})
 
 		ui.Text(c, item.Quality).Width(56).FontSize(11).TextColor(col.muted).SingleLine()
+		ui.Text(c, formatFileSize(item.FileSize)).Width(70).FontSize(11).
+			TextColor(col.muted).SingleLine()
 
 		progressBox := ui.Box(c).Width(84)
 		progressBox.Children(func() {
