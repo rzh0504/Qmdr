@@ -65,18 +65,24 @@ func queueItemFromRecord(record history.QueueRecord) QueueItem {
 }
 
 func (a *app) persistQueueItems(items []QueueItem) {
-	if a.historyStore == nil || len(items) == 0 {
+	if len(items) == 0 {
+		return
+	}
+	store := a.historyStore
+	if store == nil {
 		return
 	}
 	records := make([]history.QueueRecord, 0, len(items))
 	for _, item := range items {
 		records = append(records, queueRecordFromItem(item))
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := a.historyStore.SaveQueueItems(ctx, records); err != nil {
-		log.Printf("persist download queue: %v", err)
-	}
+	a.dispatchDisk(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := store.SaveQueueItems(ctx, records); err != nil {
+			log.Printf("persist download queue: %v", err)
+		}
+	})
 }
 
 func (a *app) persistQueueItem(item QueueItem) {
@@ -84,29 +90,38 @@ func (a *app) persistQueueItem(item QueueItem) {
 }
 
 func (a *app) deleteStoredQueueItems(ids []int) {
-	if a.historyStore == nil || len(ids) == 0 {
+	if len(ids) == 0 {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := a.historyStore.DeleteQueueItems(ctx, ids); err != nil {
-		log.Printf("delete download queue items: %v", err)
+	store := a.historyStore
+	if store == nil {
+		return
 	}
+	a.dispatchDisk(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := store.DeleteQueueItems(ctx, ids); err != nil {
+			log.Printf("delete download queue items: %v", err)
+		}
+	})
 }
 
 func (a *app) replaceStoredQueue() {
-	if a.historyStore == nil {
+	store := a.historyStore
+	if store == nil {
 		return
 	}
 	records := make([]history.QueueRecord, 0, len(a.queue))
 	for _, item := range a.queue {
 		records = append(records, queueRecordFromItem(item))
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := a.historyStore.ReplaceQueue(ctx, records); err != nil {
-		log.Printf("replace download queue: %v", err)
-	}
+	a.dispatchDisk(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := store.ReplaceQueue(ctx, records); err != nil {
+			log.Printf("replace download queue: %v", err)
+		}
+	})
 }
 
 func (a *app) restoreQueue(records []history.QueueRecord) {

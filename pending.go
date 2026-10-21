@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,12 +43,23 @@ func loadPendingFile(path string) []Song {
 	return normalizePendingSongs(state.Songs)
 }
 
-func (a *app) savePending() error {
+func (a *app) savePending() {
 	path := pendingStatePath()
 	if path == "" {
-		return fmt.Errorf("找不到配置目录")
+		a.setToast("找不到配置目录")
+		return
 	}
-	return savePendingFile(path, a.pending)
+	state := pendingState{
+		Version: pendingStateVersion,
+		Songs:   normalizePendingSongs(a.pending),
+	}
+	a.dispatchDisk(func() {
+		if err := savePendingFile(path, state.Songs); err != nil {
+			a.update(func() {
+				a.toast = "待下载队列保存失败：" + friendlyError(err)
+			})
+		}
+	})
 }
 
 func savePendingFile(path string, songs []Song) error {

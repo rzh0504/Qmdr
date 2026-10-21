@@ -85,8 +85,10 @@ func (s *Store) SaveQueueItems(ctx context.Context, records []QueueRecord) error
 	for _, record := range records {
 		statements = append(statements, sqlite.Statement{SQL: queueUpsertSQL, Args: queueArgs(record)})
 	}
-	_, err := s.db.Transaction(ctx, statements)
-	return err
+	return s.withDB(func(db *sqlite.DB) error {
+		_, err := db.Transaction(ctx, statements)
+		return err
+	})
 }
 
 func (s *Store) SaveQueueItem(ctx context.Context, record QueueRecord) error {
@@ -99,8 +101,10 @@ func (s *Store) ReplaceQueue(ctx context.Context, records []QueueRecord) error {
 	for _, record := range records {
 		statements = append(statements, sqlite.Statement{SQL: queueUpsertSQL, Args: queueArgs(record)})
 	}
-	_, err := s.db.Transaction(ctx, statements)
-	return err
+	return s.withDB(func(db *sqlite.DB) error {
+		_, err := db.Transaction(ctx, statements)
+		return err
+	})
 }
 
 func (s *Store) DeleteQueueItems(ctx context.Context, ids []int) error {
@@ -114,50 +118,58 @@ func (s *Store) DeleteQueueItems(ctx context.Context, ids []int) error {
 			Args: []any{id},
 		})
 	}
-	_, err := s.db.Transaction(ctx, statements)
-	return err
+	return s.withDB(func(db *sqlite.DB) error {
+		_, err := db.Transaction(ctx, statements)
+		return err
+	})
 }
 
 func (s *Store) PruneQueue(ctx context.Context, before time.Time) error {
-	_, err := s.db.Execute(ctx, `DELETE FROM queue_items WHERE created_at < ?`, before.Unix())
-	return err
+	return s.withDB(func(db *sqlite.DB) error {
+		_, err := db.Execute(ctx, `DELETE FROM queue_items WHERE created_at < ?`, before.Unix())
+		return err
+	})
 }
 
 func (s *Store) LoadQueue(ctx context.Context, since time.Time) ([]QueueRecord, error) {
-	rows, err := s.db.Query(ctx, `
-		SELECT id, song_mid, title, artist, album, album_mid, duration, song_quality, vip, status,
-		       progress, quality, error, file_path, file_size, created_at
-		FROM queue_items
-		WHERE created_at >= ?
-		ORDER BY id ASC`, since.Unix())
-	if err != nil {
-		return nil, err
-	}
-	records := make([]QueueRecord, 0, len(rows.Values))
-	for _, row := range rows.Values {
-		if len(row) < 16 {
-			continue
+	var records []QueueRecord
+	err := s.withDB(func(db *sqlite.DB) error {
+		rows, err := db.Query(ctx, `
+			SELECT id, song_mid, title, artist, album, album_mid, duration, song_quality, vip, status,
+			       progress, quality, error, file_path, file_size, created_at
+			FROM queue_items
+			WHERE created_at >= ?
+			ORDER BY id ASC`, since.Unix())
+		if err != nil {
+			return err
 		}
-		records = append(records, QueueRecord{
-			ID:          int(int64Value(row[0])),
-			SongMID:     stringValue(row[1]),
-			Title:       stringValue(row[2]),
-			Artist:      stringValue(row[3]),
-			Album:       stringValue(row[4]),
-			AlbumMID:    stringValue(row[5]),
-			Duration:    stringValue(row[6]),
-			SongQuality: stringValue(row[7]),
-			VIP:         int64Value(row[8]) != 0,
-			Status:      int(int64Value(row[9])),
-			Progress:    float64Value(row[10]),
-			Quality:     stringValue(row[11]),
-			Error:       stringValue(row[12]),
-			FilePath:    stringValue(row[13]),
-			FileSize:    int64Value(row[14]),
-			CreatedAt:   time.Unix(int64Value(row[15]), 0).Local(),
-		})
-	}
-	return records, nil
+		records = make([]QueueRecord, 0, len(rows.Values))
+		for _, row := range rows.Values {
+			if len(row) < 16 {
+				continue
+			}
+			records = append(records, QueueRecord{
+				ID:          int(int64Value(row[0])),
+				SongMID:     stringValue(row[1]),
+				Title:       stringValue(row[2]),
+				Artist:      stringValue(row[3]),
+				Album:       stringValue(row[4]),
+				AlbumMID:    stringValue(row[5]),
+				Duration:    stringValue(row[6]),
+				SongQuality: stringValue(row[7]),
+				VIP:         int64Value(row[8]) != 0,
+				Status:      int(int64Value(row[9])),
+				Progress:    float64Value(row[10]),
+				Quality:     stringValue(row[11]),
+				Error:       stringValue(row[12]),
+				FilePath:    stringValue(row[13]),
+				FileSize:    int64Value(row[14]),
+				CreatedAt:   time.Unix(int64Value(row[15]), 0).Local(),
+			})
+		}
+		return nil
+	})
+	return records, err
 }
 
 func float64Value(value any) float64 {

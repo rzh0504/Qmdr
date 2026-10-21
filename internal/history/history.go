@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo/plugins/sqlite"
@@ -35,7 +36,25 @@ type Stats struct {
 }
 
 type Store struct {
+	mu sync.Mutex
 	db *sqlite.DB
+}
+
+// ErrStoreClosed reports an operation on a store that has been closed.
+var ErrStoreClosed = errors.New("下载历史数据库已关闭")
+
+// withDB runs fn with the store's database, waiting for any operation
+// already in flight, so closing a store never races a running operation.
+func (s *Store) withDB(fn func(db *sqlite.DB) error) error {
+	if s == nil {
+		return ErrStoreClosed
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return ErrStoreClosed
+	}
+	return fn(s.db)
 }
 
 func DefaultPath() string {
@@ -132,93 +151,124 @@ func (s *Store) Add(ctx context.Context, record Record) (int64, error) {
 	if record.Status == "" {
 		record.Status = StatusDone
 	}
-	result, err := s.db.Execute(ctx, `
-		INSERT INTO downloads
-			(song_mid, title, artist, album, album_mid, quality, file_path, file_size, status, completed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		record.SongMID,
-		record.Title,
-		record.Artist,
-		record.Album,
-		record.AlbumMID,
-		record.Quality,
-		record.FilePath,
-		record.FileSize,
-		record.Status,
-		record.CompletedAt.Unix(),
-	)
+	var id int64
+	err := s.withDB(func(db *sqlite.DB) error {
+		result, err := db.Execute(ctx, `
+			INSERT INTO downloads
+				(song_mid, title, artist, album, album_mid, quality, file_path, file_size, status, completed_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			record.SongMID,
+			record.Title,
+			record.Artist,
+			record.Album,
+			record.AlbumMID,
+			record.Quality,
+			record.FilePath,
+			record.FileSize,
+			record.Status,
+			record.CompletedAt.Unix(),
+		)
+		if err != nil {
+			return err
+		}
+		id = result.LastInsertID
+		return nil
+	})
 	if err != nil {
 		return 0, err
 	}
-	return result.LastInsertID, nil
+	return id, nil
 }
 
 func (s *Store) Recent(ctx context.Context, limit int) ([]Record, error) {
 	if limit <= 0 {
 		limit = 200
 	}
-	rows, err := s.db.Query(ctx, `
-		SELECT id, song_mid, title, artist, album, album_mid, quality, file_path, file_size, status, completed_at
-		FROM downloads
-		ORDER BY completed_at DESC, id DESC
-		LIMIT ?`, limit)
-	if err != nil {
-		return nil, err
-	}
-	records := make([]Record, 0, len(rows.Values))
-	for _, row := range rows.Values {
-		if len(row) < 11 {
-			continue
+	var records []Record
+	err := s.withDB(func(db *sqlite.DB) error {
+		rows, err := db.Query(ctx, `
+			SELECT id, song_mid, title, artist, album, album_mid, quality, file_path, file_size, status, completed_at
+			FROM downloads
+			ORDER BY completed_at DESC, id DESC
+			LIMIT ?`, limit)
+		if err != nil {
+			return err
 		}
-		records = append(records, Record{
-			ID:          int64Value(row[0]),
-			SongMID:     stringValue(row[1]),
-			Title:       stringValue(row[2]),
-			Artist:      stringValue(row[3]),
-			Album:       stringValue(row[4]),
-			AlbumMID:    stringValue(row[5]),
-			Quality:     stringValue(row[6]),
-			FilePath:    stringValue(row[7]),
-			FileSize:    int64Value(row[8]),
-			Status:      stringValue(row[9]),
-			CompletedAt: time.Unix(int64Value(row[10]), 0).Local(),
-		})
-	}
-	return records, nil
+		records = make([]Record, 0, len(rows.Values))
+		for _, row := range rows.Values {
+			if len(row) < 11 {
+				continue
+			}
+			records = append(records, Record{
+				ID:          int64Value(row[0]),
+				SongMID:     stringValue(row[1]),
+				Title:       stringValue(row[2]),
+				Artist:      stringValue(row[3]),
+				Album:       stringValue(row[4]),
+				AlbumMID:    stringValue(row[5]),
+				Quality:     stringValue(row[6]),
+				FilePath:    stringValue(row[7]),
+				FileSize:    int64Value(row[8]),
+				Status:      stringValue(row[9]),
+				CompletedAt: time.Unix(int64Value(row[10]), 0).Local(),
+			})
+		}
+		return nil
+	})
+	return records, err
 }
 
 func (s *Store) Stats(ctx context.Context) (Stats, error) {
-	rows, err := s.db.Query(ctx, `SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM downloads`)
-	if err != nil {
-		return Stats{}, err
-	}
-	if len(rows.Values) == 0 || len(rows.Values[0]) < 2 {
-		return Stats{}, nil
-	}
-	return Stats{
-		Count: int(int64Value(rows.Values[0][0])),
-		Bytes: int64Value(rows.Values[0][1]),
-	}, nil
+	var stats Stats
+	err := s.withDB(func(db *sqlite.DB) error {
+		rows, err := db.Query(ctx, `SELECT COUNT(*), COALESCE(SUM(file_size), 0) FROM downloads`)
+		if err != nil {
+			return err
+		}
+		if len(rows.Values) == 0 || len(rows.Values[0]) < 2 {
+			return nil
+		}
+		stats = Stats{
+			Count: int(int64Value(rows.Values[0][0])),
+			Bytes: int64Value(rows.Values[0][1]),
+		}
+		return nil
+	})
+	return stats, err
 }
 
 func (s *Store) Clear(ctx context.Context) error {
-	_, err := s.db.Execute(ctx, `DELETE FROM downloads`)
-	return err
+	return s.withDB(func(db *sqlite.DB) error {
+		_, err := db.Execute(ctx, `DELETE FROM downloads`)
+		return err
+	})
 }
 
 func (s *Store) Prune(ctx context.Context, before time.Time) (int64, error) {
-	result, err := s.db.Execute(ctx, `DELETE FROM downloads WHERE completed_at < ?`, before.Unix())
-	if err != nil {
-		return 0, err
-	}
-	return result.Changes, nil
+	var changes int64
+	err := s.withDB(func(db *sqlite.DB) error {
+		result, err := db.Execute(ctx, `DELETE FROM downloads WHERE completed_at < ?`, before.Unix())
+		if err != nil {
+			return err
+		}
+		changes = result.Changes
+		return nil
+	})
+	return changes, err
 }
 
 func (s *Store) Close() error {
-	if s == nil || s.db == nil {
+	if s == nil {
 		return nil
 	}
-	return s.db.Close()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return nil
+	}
+	db := s.db
+	s.db = nil
+	return db.Close()
 }
 
 func stringValue(value any) string {

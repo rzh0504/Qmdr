@@ -95,14 +95,16 @@ func (a *app) saveSettings() {
 		Background:  a.background,
 		HistoryKeep: a.historyKeep,
 	}
-	data, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		a.setToast("保存设置失败：" + friendlyError(err))
-		return
-	}
-	if err := fsutil.WriteFileAtomic(path, data, 0o644); err != nil {
-		a.setToast("保存设置失败：" + friendlyError(err))
-	}
+	a.dispatchDisk(func() {
+		data, err := json.MarshalIndent(settings, "", "  ")
+		if err != nil {
+			a.update(func() { a.toast = "保存设置失败：" + friendlyError(err) })
+			return
+		}
+		if err := fsutil.WriteFileAtomic(path, data, 0o644); err != nil {
+			a.update(func() { a.toast = "保存设置失败：" + friendlyError(err) })
+		}
+	})
 }
 
 func validQuality(value string) bool {

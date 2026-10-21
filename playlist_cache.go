@@ -76,6 +76,8 @@ func (a *app) savePlaylistCache() {
 	if selected < 0 || selected >= len(a.playlists) {
 		selected = -1
 	}
+	// Snapshot on the caller's thread; the slices are replaced wholesale,
+	// never mutated, so the worker can marshal them safely.
 	cache := playlistCache{
 		Version:   playlistCacheVersion,
 		UserID:    owner,
@@ -84,11 +86,15 @@ func (a *app) savePlaylistCache() {
 		Songs:     a.playlistSongs,
 		UpdatedAt: time.Now(),
 	}
-	data, err := json.MarshalIndent(cache, "", "  ")
-	if err != nil {
-		return
-	}
-	if err := fsutil.WriteFileAtomic(path, data, 0o644); err != nil {
-		a.appendLog("歌单缓存保存失败："+friendlyError(err), "warning")
-	}
+	a.dispatchDisk(func() {
+		data, err := json.MarshalIndent(cache, "", "  ")
+		if err != nil {
+			return
+		}
+		if err := fsutil.WriteFileAtomic(path, data, 0o644); err != nil {
+			a.update(func() {
+				a.appendLog("歌单缓存保存失败："+friendlyError(err), "warning")
+			})
+		}
+	})
 }

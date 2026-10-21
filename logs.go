@@ -18,19 +18,21 @@ const (
 )
 
 func (a *app) storeLog(entry LogEntry) {
-	if a.historyStore == nil {
+	store := a.historyStore
+	if store == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	err := a.historyStore.AddLog(ctx, history.LogRecord{
-		At:      entry.At,
-		Level:   entry.Level,
-		Message: entry.Message,
+	a.dispatchDisk(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := store.AddLog(ctx, history.LogRecord{
+			At:      entry.At,
+			Level:   entry.Level,
+			Message: entry.Message,
+		}); err != nil {
+			log.Printf("write task log: %v", err)
+		}
 	})
-	if err != nil {
-		log.Printf("write task log: %v", err)
-	}
 }
 
 func (a *app) flushLogBacklog() {

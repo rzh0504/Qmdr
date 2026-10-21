@@ -76,28 +76,41 @@ func (a *app) pruneHistoryNow() {
 		return
 	}
 	cutoff := time.Now().AddDate(0, 0, -days)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	removed, err := store.Prune(ctx, cutoff)
-	if err != nil {
-		a.setToast("清理过期下载历史失败：" + friendlyError(err))
-		return
-	}
-	if removed == 0 {
-		return
-	}
-	items := a.historyItems[:0]
-	for _, record := range a.historyItems {
-		if !record.CompletedAt.Before(cutoff) {
-			items = append(items, record)
+	a.dispatchDisk(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		removed, err := store.Prune(ctx, cutoff)
+		if err != nil {
+			log.Printf("prune download history: %v", err)
+			a.update(func() {
+				if a.historyStore == store {
+					a.toast = "清理过期下载历史失败：" + friendlyError(err)
+				}
+			})
+			return
 		}
-	}
-	a.historyItems = items
-	if stats, err := store.Stats(ctx); err == nil {
-		a.historyCount = stats.Count
-		a.historyBytes = stats.Bytes
-	}
-	a.setToast(fmt.Sprintf("已清理 %d 条过期下载记录", removed))
+		if removed == 0 {
+			return
+		}
+		stats, statsErr := store.Stats(ctx)
+		a.update(func() {
+			if a.historyStore != store {
+				return
+			}
+			items := a.historyItems[:0]
+			for _, record := range a.historyItems {
+				if !record.CompletedAt.Before(cutoff) {
+					items = append(items, record)
+				}
+			}
+			a.historyItems = items
+			if statsErr == nil {
+				a.historyCount = stats.Count
+				a.historyBytes = stats.Bytes
+			}
+			a.toast = fmt.Sprintf("已清理 %d 条过期下载记录", removed)
+		})
+	})
 }
 
 func (a *app) retryHistory() {
@@ -105,8 +118,10 @@ func (a *app) retryHistory() {
 		return
 	}
 	if a.historyStore != nil {
-		_ = a.historyStore.Close()
+		store := a.historyStore
 		a.historyStore = nil
+		// Close on the worker, after any job still using the store.
+		a.dispatchDisk(func() { _ = store.Close() })
 	}
 	a.historyLoading = true
 	a.historyErr = ""
@@ -121,40 +136,63 @@ func (a *app) recordHistory(record history.Record) {
 	if record.CompletedAt.IsZero() {
 		record.CompletedAt = time.Now()
 	}
-	if a.historyStore == nil {
+	store := a.historyStore
+	if store == nil {
 		if a.historyLoading && a.historyErr == "" {
 			a.historyBacklog = append(a.historyBacklog, record)
 		}
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	id, err := a.historyStore.Add(ctx, record)
-	if err != nil {
-		log.Printf("record download history: %v", err)
-		return
-	}
-	record.ID = id
-	a.prependHistory(record)
+	a.dispatchDisk(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		id, err := store.Add(ctx, record)
+		if err != nil {
+			log.Printf("record download history: %v", err)
+			return
+		}
+		a.update(func() {
+			if a.historyStore != store {
+				return
+			}
+			record.ID = id
+			a.prependHistory(record)
+		})
+	})
 }
 
 func (a *app) flushHistoryBacklog() {
 	if a.historyStore == nil || len(a.historyBacklog) == 0 {
 		return
 	}
+	store := a.historyStore
 	records := a.historyBacklog
 	a.historyBacklog = nil
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	for _, record := range records {
-		id, err := a.historyStore.Add(ctx, record)
-		if err != nil {
-			log.Printf("record download history: %v", err)
-			continue
+	a.dispatchDisk(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		var added []history.Record
+		for _, record := range records {
+			id, err := store.Add(ctx, record)
+			if err != nil {
+				log.Printf("record download history: %v", err)
+				continue
+			}
+			record.ID = id
+			added = append(added, record)
 		}
-		record.ID = id
-		a.prependHistory(record)
-	}
+		if len(added) == 0 {
+			return
+		}
+		a.update(func() {
+			if a.historyStore != store {
+				return
+			}
+			for _, record := range added {
+				a.prependHistory(record)
+			}
+		})
+	})
 }
 
 func (a *app) prependHistory(record history.Record) {
@@ -196,11 +234,14 @@ func (a *app) clearHistory() {
 	if store == nil {
 		return
 	}
-	go func() {
+	a.dispatchDisk(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		err := store.Clear(ctx)
 		a.update(func() {
+			if a.historyStore != store {
+				return
+			}
 			if err != nil {
 				a.toast = "清空下载历史失败：" + friendlyError(err)
 				return
@@ -211,7 +252,7 @@ func (a *app) clearHistory() {
 			a.historyBytes = 0
 			a.toast = "下载历史已清空"
 		})
-	}()
+	})
 }
 
 func (a *app) historyView(c *ui.Context, col colors) {

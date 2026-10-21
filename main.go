@@ -83,6 +83,7 @@ type app struct {
 	runID       int
 	cancel      context.CancelFunc
 	logBacklog  []LogEntry
+	diskJobs    chan func()
 
 	// taskCancels cancels one running download; the run-level cancel above
 	// still cancels every task at once.
@@ -134,7 +135,7 @@ func newApp() *app {
 		displayUser = "未登录"
 	}
 	settings := loadSettings()
-	a := &app{
+a := &app{
 		api:              api,
 		covers:           make(map[string]*ui.Bitmap),
 		coverLoading:     make(map[string]bool),
@@ -158,6 +159,7 @@ func newApp() *app {
 		userID:           displayUser,
 		loginType:        loginType,
 	}
+	a.startDiskWorker()
 	a.restorePlaylistCache()
 	return a
 }

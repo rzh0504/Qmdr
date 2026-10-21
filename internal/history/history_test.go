@@ -2,7 +2,9 @@ package history
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -245,5 +247,49 @@ func TestLogStorage(t *testing.T) {
 	}
 	if len(records) != 1 || records[0].Message != "second" {
 		t.Fatalf("after prune = %+v, want only second", records)
+	}
+}
+
+func TestStoreCloseDuringUse(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "qmdr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Operations and a Close never touch the database at the same time:
+	// each operation either completes or reports ErrStoreClosed.
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				_, err := store.Add(ctx, Record{SongMID: "mid", Title: "T", FilePath: "x.flac"})
+				cancel()
+				if err != nil && !errors.Is(err, ErrStoreClosed) {
+					t.Errorf("Add failed with %v, want nil or ErrStoreClosed", err)
+					return
+				}
+			}
+		}()
+	}
+	for i := 0; i < 25; i++ {
+		time.Sleep(time.Millisecond)
+		// Repeated closes are safe and wait for running operations.
+		if err := store.Close(); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	}
+	wg.Wait()
+
+	// Operations after Close report ErrStoreClosed instead of touching a
+	// closed database.
+	if _, err := store.Add(ctx, Record{}); !errors.Is(err, ErrStoreClosed) {
+		t.Fatalf("Add after Close = %v, want ErrStoreClosed", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("second Close: %v", err)
 	}
 }
