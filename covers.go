@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/rzh0504/qmdr/internal/fsutil"
 )
 
 const (
@@ -47,10 +49,7 @@ func writeCoverCache(albumMid string, data []byte) {
 	if path == "" || len(data) < 1024 {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return
-	}
-	_ = os.WriteFile(path, data, 0o644)
+	_ = fsutil.WriteFileAtomic(path, data, 0o644)
 }
 
 func (a *app) cover(c *ui.Context, col colors, albumMid string, size float32) ui.Element {
@@ -85,6 +84,12 @@ func (a *app) coverBitmap(albumMid string) *ui.Bitmap {
 }
 
 func (a *app) loadCover(albumMid string) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Printf("cover load panic: %v", recovered)
+			a.finishCover(albumMid, nil, fmt.Errorf("封面加载异常"))
+		}
+	}()
 	a.coverSem <- struct{}{}
 	defer func() { <-a.coverSem }()
 
@@ -103,15 +108,16 @@ func (a *app) loadCover(albumMid string) {
 }
 
 func (a *app) finishCover(albumMid string, data []byte, err error) {
+	var bitmap *ui.Bitmap
+	if err == nil {
+		bitmap, err = ui.DecodeBitmap(data)
+		if err != nil {
+			_ = os.Remove(coverCachePath(albumMid))
+		}
+	}
 	a.update(func() {
 		delete(a.coverLoading, albumMid)
 		if err != nil {
-			a.coverFailed[albumMid] = true
-			return
-		}
-		bitmap, decodeErr := ui.DecodeBitmap(data)
-		if decodeErr != nil {
-			_ = os.Remove(coverCachePath(albumMid))
 			a.coverFailed[albumMid] = true
 			return
 		}

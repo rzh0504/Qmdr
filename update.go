@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -38,6 +40,15 @@ func (a *app) checkUpdates() {
 	win := a.win
 
 	go func() {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				log.Printf("update check panic: %v\n%s", recovered, debug.Stack())
+				a.update(func() {
+					a.updating = false
+					a.toast = "检查更新时出现异常，请稍后重试"
+				})
+			}
+		}()
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		release, err := fetchLatestRelease(ctx)

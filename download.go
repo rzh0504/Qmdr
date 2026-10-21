@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -179,7 +181,7 @@ func (a *app) runWorkers(ctx context.Context, runID int, tasks []downloadTask, w
 				if ctx.Err() != nil {
 					return
 				}
-				a.processDownload(ctx, runID, task, dir, overwrite, coverSize, claims)
+				a.processDownloadSafely(ctx, runID, task, dir, overwrite, coverSize, claims)
 			}
 		}()
 	}
@@ -196,9 +198,19 @@ feed:
 	wg.Wait()
 }
 
+func (a *app) processDownloadSafely(ctx context.Context, runID int, task downloadTask, dir string, overwrite bool, coverSize int, claims *downloadClaims) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Printf("download task panic: %v\n%s", recovered, debug.Stack())
+			a.markFailed(runID, task, fmt.Errorf("下载任务异常：%v", recovered))
+		}
+	}()
+	a.processDownload(ctx, runID, task, dir, overwrite, coverSize, claims)
+}
+
 func (a *app) processDownload(ctx context.Context, runID int, task downloadTask, dir string, overwrite bool, coverSize int, claims *downloadClaims) {
 	a.update(func() {
-		if runID != a.runID || a.closed {
+		if runID != a.runID || a.closed.Load() {
 			return
 		}
 		item := a.queueItem(task.ID)
@@ -270,7 +282,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 	}
 
 	metaCtx, metaCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	metaErr := a.writeMetadata(metaCtx, task, dest, coverSize)
+	metaErr := a.writeMetadataSafely(metaCtx, task, dest, coverSize)
 	metaCancel()
 
 	a.update(func() {
@@ -462,6 +474,16 @@ func (a *app) openDownloadDir() {
 	if err := mygo.Shell.OpenPath(dir); err != nil {
 		a.setToast("打开下载目录失败：" + err.Error())
 	}
+}
+
+func (a *app) writeMetadataSafely(ctx context.Context, task downloadTask, dest string, coverSize int) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Printf("metadata panic: %v\n%s", recovered, debug.Stack())
+			err = fmt.Errorf("元数据写入异常")
+		}
+	}()
+	return a.writeMetadata(ctx, task, dest, coverSize)
 }
 
 func (a *app) writeMetadata(ctx context.Context, task downloadTask, dest string, coverSize int) error {

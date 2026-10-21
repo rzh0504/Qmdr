@@ -85,12 +85,16 @@ func writeFLAC(path string, info Info) error {
 	return file.Save(path)
 }
 
-func writeMP3(path string, info Info) error {
+func writeMP3(path string, info Info) (err error) {
 	file, err := id3v2.Open(path, id3v2.Options{Parse: true})
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 	file.SetVersion(4)
 
 	for _, id := range []string{"TIT2", "TPE1", "TALB", "APIC", "USLT"} {

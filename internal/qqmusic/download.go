@@ -12,11 +12,18 @@ import (
 
 type ProgressFunc func(received, total int64)
 
+const downloadStallTimeout = 90 * time.Second
+
 func (c *Client) Download(ctx context.Context, rawURL, dest string, overwrite bool, progress ProgressFunc) (int64, error) {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return 0, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	downloadCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stall := time.AfterFunc(downloadStallTimeout, cancel)
+	defer stall.Stop()
+
+	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -25,6 +32,12 @@ func (c *Client) Download(ctx context.Context, rawURL, dest string, overwrite bo
 
 	resp, err := c.http.Do(req)
 	if err != nil {
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
+		if downloadCtx.Err() != nil {
+			return 0, fmt.Errorf("下载超时：长时间没有收到数据")
+		}
 		return 0, err
 	}
 	defer resp.Body.Close()
@@ -52,6 +65,7 @@ func (c *Client) Download(ctx context.Context, rawURL, dest string, overwrite bo
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
+			stall.Reset(downloadStallTimeout)
 			if _, err := file.Write(buf[:n]); err != nil {
 				return received, err
 			}
@@ -65,6 +79,12 @@ func (c *Client) Download(ctx context.Context, rawURL, dest string, overwrite bo
 			break
 		}
 		if readErr != nil {
+			if ctx.Err() != nil {
+				return received, ctx.Err()
+			}
+			if downloadCtx.Err() != nil {
+				return received, fmt.Errorf("下载超时：长时间没有收到数据")
+			}
 			return received, readErr
 		}
 		if err := ctx.Err(); err != nil {
@@ -72,14 +92,25 @@ func (c *Client) Download(ctx context.Context, rawURL, dest string, overwrite bo
 		}
 	}
 
+	if err := ctx.Err(); err != nil {
+		return received, err
+	}
+	if received == 0 {
+		return 0, fmt.Errorf("下载内容为空")
+	}
+	if total > 0 && received != total {
+		return received, fmt.Errorf("下载不完整：已接收 %d/%d 字节", received, total)
+	}
 	if err := file.Sync(); err != nil {
 		return received, err
 	}
 	if err := file.Close(); err != nil {
 		return received, err
 	}
-	if overwrite {
-		_ = os.Remove(dest)
+	if !overwrite {
+		if _, err := os.Stat(dest); err == nil {
+			return received, fmt.Errorf("目标文件已存在：%s", filepath.Base(dest))
+		}
 	}
 	if err := os.Rename(tempPath, dest); err != nil {
 		return received, err

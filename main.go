@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -39,7 +40,7 @@ type app struct {
 	coverSem     chan struct{}
 
 	view   viewID
-	closed bool
+	closed atomic.Bool
 
 	query       string
 	quality     string
@@ -86,6 +87,8 @@ type app struct {
 	loginType string
 
 	qrOpen   bool
+	qrFailed bool
+	qrSeq    int
 	qrType   string
 	qrStatus string
 	qrBitmap *ui.Bitmap
@@ -302,7 +305,7 @@ func (a *app) windowControls(c *ui.Context, col colors) {
 }
 
 func (a *app) update(fn func()) {
-	if a.closed || a.win == nil {
+	if a.closed.Load() || a.win == nil {
 		return
 	}
 	a.win.Update(fn)
@@ -499,34 +502,62 @@ func (a *app) openQR(kind string) {
 	}
 	a.qrType = kind
 	a.qrOpen = true
+	a.qrFailed = false
 	a.qrStatus = "正在获取二维码…"
 	a.qrBitmap = nil
+	a.qrSeq++
+	session := a.qrSeq
 	ctx, cancel := context.WithCancel(context.Background())
 	a.qrCancel = cancel
 	a.refresh()
 
 	go func() {
-		qr, err := a.api.StartQRLogin(ctx, kind)
+		current := func() bool { return a.qrOpen && a.qrSeq == session }
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				log.Printf("qr login panic: %v", recovered)
+				a.update(func() {
+					if current() {
+						a.qrBitmap = nil
+						a.qrFailed = true
+						a.qrStatus = "登录过程出现异常，请重试"
+					}
+				})
+			}
+		}()
+		qr, err := func() (*qqmusic.QRLogin, error) {
+			startCtx, startCancel := context.WithTimeout(ctx, 20*time.Second)
+			defer startCancel()
+			return a.api.StartQRLogin(startCtx, kind)
+		}()
 		if err != nil {
 			a.update(func() {
-				if a.qrOpen {
+				if current() {
+					a.qrFailed = true
 					a.qrStatus = "获取二维码失败：" + friendlyError(err)
 				}
 			})
 			return
 		}
-		var bitmap *ui.Bitmap
-		if bmp, err := ui.DecodeBitmap(qr.Image); err == nil {
-			bitmap = bmp
+		bitmap, decodeErr := ui.DecodeBitmap(qr.Image)
+		if decodeErr != nil {
+			a.update(func() {
+				if current() {
+					a.qrFailed = true
+					a.qrStatus = "二维码解析失败，请重新获取"
+				}
+			})
+			return
 		}
 		a.update(func() {
-			if !a.qrOpen {
+			if !current() {
 				return
 			}
 			a.qrBitmap = bitmap
 			a.qrStatus = "请使用手机扫码"
 		})
 
+		failures := 0
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -535,27 +566,50 @@ func (a *app) openQR(kind string) {
 				return
 			case <-ticker.C:
 			}
-			result, err := a.api.PollQRLogin(ctx, qr)
+			result, err := func() (qqmusic.LoginResult, error) {
+				pollCtx, pollCancel := context.WithTimeout(ctx, 15*time.Second)
+				defer pollCancel()
+				return a.api.PollQRLogin(pollCtx, qr)
+			}()
 			if err != nil {
 				if ctx.Err() != nil {
 					return
 				}
-				a.update(func() {
-					if a.qrOpen {
-						a.qrStatus = "登录检查失败：" + friendlyError(err)
-					}
-				})
-				return
+				failures++
+				if failures >= 3 {
+					a.update(func() {
+						if current() {
+							a.qrBitmap = nil
+							a.qrFailed = true
+							a.qrStatus = "登录检查失败：" + friendlyError(err)
+						}
+					})
+					return
+				}
+				if failures == 1 {
+					a.update(func() {
+						if current() {
+							a.qrStatus = "网络波动，正在重试…"
+						}
+					})
+				}
+				continue
 			}
+			failures = 0
 			done := result.Event == qqmusic.LoginDone
 			stop := done || result.Event == qqmusic.LoginExpired || result.Event == qqmusic.LoginRefused
 			a.update(func() {
-				if !a.qrOpen {
+				if !current() {
 					return
 				}
 				a.qrStatus = result.Message
 				if done {
 					a.finishLogin()
+					return
+				}
+				if stop {
+					a.qrBitmap = nil
+					a.qrFailed = true
 				}
 			})
 			if stop {
@@ -578,8 +632,10 @@ func (a *app) finishLogin() {
 	}
 	a.playlistOwner = a.api.UserID()
 	a.playlistReq++
+	a.playlistSongsID++
 	a.loadingPlaylists = false
 	a.refreshingPlaylists = false
+	a.loadingSongs = false
 	a.musicIDOpen = false
 	a.musicIDInput = ""
 	a.musicIDErr = ""
@@ -588,6 +644,7 @@ func (a *app) finishLogin() {
 		a.qrCancel = nil
 	}
 	a.qrOpen = false
+	a.qrFailed = false
 	a.qrBitmap = nil
 	a.qrStatus = ""
 	a.playlistErr = ""
@@ -595,7 +652,11 @@ func (a *app) finishLogin() {
 	a.selectedPlaylist = -1
 	a.playlistSongs = nil
 	a.restorePlaylistCache()
-	a.toast = "登录成功"
+	if a.api.CredentialSaveError() != nil {
+		a.toast = "登录成功，但凭证保存失败，重启后需重新登录"
+	} else {
+		a.toast = "登录成功"
+	}
 	a.refresh()
 }
 
@@ -605,6 +666,7 @@ func (a *app) closeQR() {
 		a.qrCancel = nil
 	}
 	a.qrOpen = false
+	a.qrFailed = false
 	a.qrBitmap = nil
 	a.qrStatus = ""
 	a.refresh()
@@ -629,18 +691,25 @@ func (a *app) qrModal(c *ui.Context, col colors) {
 						Background(ui.RGB(255, 255, 255)).Center().
 						Border(1, col.border)
 					qr.Children(func() {
-						if a.qrBitmap != nil {
+						switch {
+						case a.qrBitmap != nil:
 							ui.Image(c, a.qrBitmap).Size(188, 188)
-						} else {
+						case a.qrFailed:
+							ui.Icon(c, iconAlert).Size(22, 22).TextColor(col.red)
+						default:
 							ui.Spinner(c).Size(22, 22)
 						}
 					})
 				})
 
-				ui.Text(c, a.qrStatus).FontSize(12).TextColor(col.muted)
+				statusColor := col.muted
+				if a.qrFailed {
+					statusColor = col.red
+				}
+				ui.Text(c, a.qrStatus).FontSize(12).TextColor(statusColor)
 				ui.Row(c).Gap(6).Justify(ui.End).Children(func() {
 					secondaryButton(c, col, nil, "关闭", a.closeQR)
-					if a.qrBitmap != nil {
+					if a.qrBitmap != nil || a.qrFailed {
 						primaryButton(c, col, iconRefresh, "重新获取", func() {
 							a.openQR(a.qrType)
 						})
@@ -694,7 +763,7 @@ func main() {
 		}
 		a.win = mygo.NewWindow(options)
 		a.win.OnClosed(func() {
-			a.closed = true
+			a.closed.Store(true)
 			if a.cancel != nil {
 				a.cancel()
 			}

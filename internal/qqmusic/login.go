@@ -176,6 +176,9 @@ func (c *Client) pollQQQR(ctx context.Context, qr *QRLogin) (LoginResult, error)
 		return LoginResult{}, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return LoginResult{}, fmt.Errorf("登录服务器返回 HTTP %d", resp.StatusCode)
+	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return LoginResult{}, err
@@ -288,6 +291,9 @@ func (c *Client) authorizeQQ(ctx context.Context, hc *http.Client, uin, sigx str
 		return err
 	}
 	resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("登录服务器返回 HTTP %d", resp.StatusCode)
+	}
 	location := resp.Header.Get("Location")
 	loc, err := url.Parse(location)
 	if err != nil {
@@ -367,7 +373,7 @@ func (c *Client) acceptCredential(payload credentialPayload, fallbackType int) e
 		return fmt.Errorf("登录响应缺少凭证字段")
 	}
 	c.setCredential(credential)
-	_ = c.SaveCredential()
+	c.setCredentialSaveError(c.SaveCredential())
 	return nil
 }
 
@@ -425,7 +431,15 @@ func get(ctx context.Context, hc *http.Client, rawURL string, headers map[string
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
-	return hc.Do(req)
+	resp, err := hc.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= http.StatusBadRequest {
+		resp.Body.Close()
+		return nil, fmt.Errorf("登录服务器返回 HTTP %d", resp.StatusCode)
+	}
+	return resp, nil
 }
 
 func cookieValue(hc *http.Client, rawURLs []string, name string) string {

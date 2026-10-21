@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/rzh0504/qmdr/internal/fsutil"
 )
 
 const (
@@ -65,6 +67,7 @@ type Client struct {
 
 	mu         sync.RWMutex
 	credential Credential
+	saveErr    error
 	QIMEI      string
 }
 
@@ -89,10 +92,23 @@ func (c *Client) setCredential(credential Credential) {
 	c.mu.Unlock()
 }
 
+func (c *Client) setCredentialSaveError(err error) {
+	c.mu.Lock()
+	c.saveErr = err
+	c.mu.Unlock()
+}
+
+func (c *Client) CredentialSaveError() error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.saveErr
+}
+
 func newHTTPClient() *http.Client {
 	jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxIdleConnsPerHost = 8
+	transport.ResponseHeaderTimeout = 20 * time.Second
 	return &http.Client{Transport: transport, Jar: jar}
 }
 
@@ -132,7 +148,7 @@ func (c *Client) SaveCredential() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return fsutil.WriteFileAtomic(path, data, 0o600)
 }
 
 func (c *Client) ReloadCredential() bool {

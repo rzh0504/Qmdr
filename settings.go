@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/rzh0504/qmdr/internal/fsutil"
 )
 
 type appSettings struct {
@@ -88,12 +90,12 @@ func (a *app) saveSettings() {
 	}
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
+		a.setToast("保存设置失败：" + friendlyError(err))
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return
+	if err := fsutil.WriteFileAtomic(path, data, 0o644); err != nil {
+		a.setToast("保存设置失败：" + friendlyError(err))
 	}
-	_ = os.WriteFile(path, data, 0o644)
 }
 
 func validQuality(value string) bool {

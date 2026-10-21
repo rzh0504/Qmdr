@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/rzh0504/qmdr/internal/fsutil"
 )
 
 const playlistCacheVersion = 1
@@ -86,8 +88,7 @@ func (a *app) savePlaylistCache() {
 	if err != nil {
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return
+	if err := fsutil.WriteFileAtomic(path, data, 0o644); err != nil {
+		a.appendLog("歌单缓存保存失败："+friendlyError(err), "warning")
 	}
-	_ = os.WriteFile(path, data, 0o644)
 }
