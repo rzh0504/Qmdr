@@ -54,7 +54,7 @@ func (a *app) settingRow(c *ui.Context, col colors, label, detail string, first 
 }
 
 func (a *app) textField(c *ui.Context, col colors, value *string, placeholder string, width, height float32, onChange, onSubmit func()) ui.Element {
-	frame := ui.Row(c).Width(width).Height(height).AlignItems(ui.Center)
+	frame := ui.Row(c).Width(width).Height(height).Padding(0, 10).AlignItems(ui.Center)
 	var input ui.Element
 	frame.Children(func() {
 		input = ui.TextInputBase(c, value).

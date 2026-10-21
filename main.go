@@ -226,11 +226,6 @@ func (a *app) headerActions(c *ui.Context, col colors) {
 	case viewSearch, viewSettings:
 		iconButton(c, col, iconFolder, "打开下载目录", a.openDownloadDir)
 	case viewPlaylists:
-		if a.viewingOtherPlaylists() {
-			secondaryButton(c, col, iconChevronLeft, "返回我的", a.loadOwnPlaylists)
-		} else {
-			secondaryButton(c, col, iconUser, "按 ID 查看", a.openMusicIDModal)
-		}
 		if a.loadingPlaylists {
 			ui.Spinner(c).Size(14, 14).Margin(4, 0, 4, 0)
 		} else {

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -39,14 +38,21 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 		}
 		ui.Row(c).Height(44).FillWidth().AlignItems(ui.Center).Padding(0, 4).Children(func() {
 			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-				ui.Text(c, title).FontSize(12).FontWeight(600).TextColor(col.muted)
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, title).FontSize(12).FontWeight(600).TextColor(col.muted)
+					if len(a.playlists) > 0 {
+						ui.Textf(c, "%d", len(a.playlists)).FontSize(12).TextColor(col.faint)
+					}
+				})
 				if a.viewingOtherPlaylists() {
 					ui.Text(c, a.playlistOwner).FontSize(11).TextColor(col.faint).
 						SingleLine().Ellipsis("…")
 				}
 			})
-			if len(a.playlists) > 0 {
-				ui.Textf(c, "%d", len(a.playlists)).FontSize(12).TextColor(col.faint)
+			if a.viewingOtherPlaylists() {
+				chipButton(c, col, iconChevronLeft, "返回我的", a.loadOwnPlaylists)
+			} else {
+				chipButton(c, col, iconUser, "按 ID 查看", a.openMusicIDModal)
 			}
 		})
 
@@ -304,9 +310,8 @@ func validMusicID(id string) bool {
 func (a *app) musicIDModal(c *ui.Context, col colors) {
 	ui.Modal(c, &a.musicIDOpen, func() {
 		panel := ui.Column(c).Width(376).Padding(18).Gap(14).Radius(16).
-			Material(glass.Glass{}).
-			Shadow(0, 1, 3, 0, col.shadow).
-			Shadow(0, 16, 40, 0, col.floatShadow)
+			Background(col.card)
+		raised(panel, col).Shadow(0, 16, 40, 0, col.floatShadow)
 		panel.Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "查看用户歌单").FontSize(15).FontWeight(600).
