@@ -24,7 +24,7 @@ func (a *app) playlistLoader(c *ui.Context, col colors) {
 			Placeholder("QQ 号 / 微信 ID").
 			Label("QQ 号或微信 ID").
 			Width(190).Height(34).FontSize(13).
-			Background(col.control).InsetShadow(0, 0, 0, 1, ui.RGBA(0, 0, 0, 0.13)).
+			Background(col.control).InsetShadow(0, 0, 0, 1, col.fieldStroke).
 			Radius(8)
 		if a.loadingPlaylists {
 			secondaryButton(c, col, nil, "正在加载…", nil).Disabled(true)
@@ -75,7 +75,7 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 					btn.Background(col.rowSelected)
 					chosen(btn, col)
 				} else if btn.Hovered() {
-					btn.Background(ui.RGBA(255, 255, 255, 0.55))
+					btn.Background(col.sheetHover)
 				}
 				if btn.Clicked() {
 					a.loadPlaylistSongs(i)

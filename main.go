@@ -73,6 +73,8 @@ type app struct {
 	coverSize   string
 	concurrency float64
 	overwrite   bool
+	appearance  string
+	background  string
 
 	loggedIn  bool
 	userID    string
@@ -113,6 +115,8 @@ func newApp() *app {
 		coverSize:        settings.CoverSize,
 		concurrency:      settings.Concurrency,
 		overwrite:        settings.Overwrite,
+		appearance:       settings.Appearance,
+		background:       settings.Background,
 		loggedIn:         api.HasCredential(),
 		userID:           displayUser,
 		loginType:        loginType,
@@ -131,15 +135,16 @@ func defaultDownloadDir() string {
 }
 
 func (a *app) viewRoot(c *ui.Context) {
-	col := themeColors(c)
+	col := a.themeColors(c)
 	if a.toast != "" {
 		msg := a.toast
 		a.toast = ""
 		c.Toast(msg)
 	}
 
-	ui.Column(c).Fill().LinearGradient(backdropGradient()).Children(func() {
-		row := ui.Row(c).Fill().AlignItems(ui.Stretch).LinearGradient(backdropGlow())
+	base, glow := a.backdrop(col.dark)
+	ui.Column(c).Fill().LinearGradient(base).Children(func() {
+		row := ui.Row(c).Fill().AlignItems(ui.Stretch).LinearGradient(glow)
 		row.Children(func() {
 			a.sidebar(c, col)
 			main := ui.Column(c).Grow(1).MinWidth(0).Padding(cardGap, cardGap, cardGap, cardGap)
@@ -299,6 +304,12 @@ func (a *app) refresh() {
 	a.update(func() {})
 }
 
+func (a *app) syncWindowBackground() {
+	if a.win != nil {
+		_ = a.win.SetBackgroundColor(a.backgroundCSS())
+	}
+}
+
 func (a *app) setToast(message string) {
 	a.toast = message
 	a.refresh()
@@ -434,7 +445,11 @@ func (a *app) accountChip(c *ui.Context, col colors) {
 		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("账号设置")
 	g := glass.Glass{}
 	if account.Hovered() {
-		g.Tint = ui.RGBA(255, 255, 255, 0.35)
+		if col.dark {
+			g.Tint = ui.RGBA(255, 255, 255, 0.10)
+		} else {
+			g.Tint = ui.RGBA(255, 255, 255, 0.35)
+		}
 	}
 	account.Material(g)
 	if account.Clicked() {
@@ -622,8 +637,8 @@ func (a *app) qrModal(c *ui.Context, col colors) {
 
 func main() {
 	mygo.App.SetName("Qmdr")
-	mygo.Theme.SetSource(mygo.ThemeLight)
 	a := newApp()
+	mygo.Theme.SetSource(themeSource(a.appearance))
 
 	mygo.App.WhenReady(func() {
 		if err := os.MkdirAll(a.downloadDir, 0o755); err != nil {
@@ -635,7 +650,7 @@ func main() {
 			Height:          800,
 			MinWidth:        1000,
 			MinHeight:       680,
-			BackgroundColor: "#ebe0f3",
+			BackgroundColor: a.backgroundCSS(),
 			Content:         ui.View(a.viewRoot),
 		}
 		if runtime.GOOS == "darwin" {

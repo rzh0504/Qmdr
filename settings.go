@@ -12,6 +12,8 @@ type appSettings struct {
 	CoverSize   string  `json:"cover_size"`
 	Overwrite   bool    `json:"overwrite"`
 	Concurrency float64 `json:"concurrency"`
+	Appearance  string  `json:"appearance"`
+	Background  string  `json:"background"`
 }
 
 func settingsPath() string {
@@ -28,6 +30,8 @@ func loadSettings() appSettings {
 		Quality:     "FLAC 无损",
 		CoverSize:   "800 px",
 		Concurrency: 3,
+		Appearance:  "light",
+		Background:  "rex",
 	}
 	path := settingsPath()
 	if path == "" {
@@ -43,6 +47,8 @@ func loadSettings() appSettings {
 			Quality:     "FLAC 无损",
 			CoverSize:   "800 px",
 			Concurrency: 3,
+			Appearance:  "light",
+			Background:  "rex",
 		}
 	}
 	if settings.DownloadDir == "" {
@@ -56,6 +62,12 @@ func loadSettings() appSettings {
 	}
 	if settings.Concurrency < 1 || settings.Concurrency > 8 {
 		settings.Concurrency = 3
+	}
+	if !validAppearance(settings.Appearance) {
+		settings.Appearance = "light"
+	}
+	if !validBackground(settings.Background) {
+		settings.Background = "rex"
 	}
 	return settings
 }
@@ -71,6 +83,8 @@ func (a *app) saveSettings() {
 		CoverSize:   a.coverSize,
 		Overwrite:   a.overwrite,
 		Concurrency: a.concurrency,
+		Appearance:  a.appearance,
+		Background:  a.background,
 	}
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {

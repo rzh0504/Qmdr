@@ -16,6 +16,7 @@ func (a *app) settingsView(c *ui.Context, col colors) {
 			a.settingsGroup(c, col, "账号", func() {
 				a.accountSettings(c, col)
 			})
+			a.appearanceSettings(c, col)
 			a.settingsGroup(c, col, "下载", func() {
 				a.downloadSettings(c, col)
 			})
@@ -55,7 +56,7 @@ func (a *app) textField(c *ui.Context, col colors, value *string, placeholder st
 		Placeholder(placeholder).
 		Label(placeholder).
 		Width(width).Height(30).FontSize(13).
-		Background(col.control).InsetShadow(0, 0, 0, 1, ui.RGBA(0, 0, 0, 0.13)).
+		Background(col.control).InsetShadow(0, 0, 0, 1, col.fieldStroke).
 		Radius(7)
 }
 
@@ -94,6 +95,67 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 		ghostButton(c, col, iconExternal, "导出 JSON", func() {
 			a.exportCredential()
 		})
+	})
+}
+
+func (a *app) appearanceSettings(c *ui.Context, col colors) {
+	a.settingsGroup(c, col, "外观", func() {
+		a.settingRow(c, col, "主题", "", true, func() {
+			stringSegmented(c, col, &a.appearance,
+				[]string{"light", "dark", "system"},
+				[]string{"亮色", "暗色", "跟随系统"},
+				a.applyAppearance)
+		})
+	})
+	ui.Column(c).FillWidth().Gap(8).Children(func() {
+		groupTitle(c, col, "背景")
+		ui.Row(c).Gap(12).Wrap().Children(func() {
+			for _, w := range backgroundWashes {
+				a.backgroundTile(c, col, w)
+			}
+		})
+	})
+}
+
+func (a *app) applyAppearance() {
+	a.saveSettings()
+	mygo.Theme.SetSource(themeSource(a.appearance))
+	a.syncWindowBackground()
+	a.refresh()
+}
+
+func (a *app) backgroundTile(c *ui.Context, col colors, w wash) {
+	selected := a.background == w.id
+	tile := ui.ButtonBase(c).Column().Width(104).Gap(8).AlignItems(ui.Stretch).
+		Cursor(ui.CursorPointer).Label(w.name)
+	if tile.Clicked() {
+		a.background = w.id
+		a.saveSettings()
+		a.syncWindowBackground()
+		a.refresh()
+	}
+	tile.Children(func() {
+		swatch := raised(ui.Box(c).Size(104, 68).Radius(12), col).Clip()
+		base, glow := w.gradients(col.dark)
+		swatch.LinearGradient(base)
+		swatch.Children(func() {
+			ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).LinearGradient(glow)
+			ui.Box(c).Absolute().Top(12).Left(26).Right(8).Bottom(-6).Radius(7).
+				Background(col.card)
+			ui.Box(c).Absolute().Top(20).Left(8).Width(12).Height(4).Radius(2).
+				Background(col.faint.Alpha(0.5))
+			if selected {
+				ui.Box(c).Absolute().Top(6).Right(6).Size(18, 18).Radius(9).Center().
+					Background(col.accent).Children(func() {
+					ui.Icon(c, iconCheck).Size(10, 10).TextColor(col.accentText)
+				})
+			}
+		})
+		label := ui.Text(c, w.name).FontSize(12.5).TextColor(col.muted).
+			TextAlign(ui.Center)
+		if selected {
+			label.TextColor(col.text).FontWeight(600)
+		}
 	})
 }
 

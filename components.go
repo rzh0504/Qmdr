@@ -13,21 +13,33 @@ func b2f(v bool) float32 {
 	return 0
 }
 
-// raised lifts a surface off the card, as kero's panes and controls do.
+// raised lifts a surface off the card, as its panes and controls do.
 func raised(e ui.Element, col colors) ui.Element {
-	return e.Shadow(0, 1, 2, 0, col.shadow).Shadow(0, 1, 6, 0, ui.RGBA(0, 0, 0, 0.035))
+	if col.dark {
+		return e.Border(1, col.edge).
+			Shadow(0, 1, 1, 0, ui.RGBA(0, 0, 0, 0.20)).
+			Shadow(0, 2, 2, -1, ui.RGBA(0, 0, 0, 0.20)).
+			Shadow(0, 4, 6, -3, ui.RGBA(0, 0, 0, 0.24))
+	}
+	return e.Shadow(0, 1, 2, 0, col.shadow).Shadow(0, 1, 6, 0, col.shadow2)
 }
 
 // chosen lifts a chosen row a hair: a tight ring and a soft hint of a
-// shadow, lighter than a card's.
+// shadow, lighter than a card's. In the dark it rises as a pane does.
 func chosen(e ui.Element, col colors) ui.Element {
+	if col.dark {
+		return raised(e, col)
+	}
 	return e.Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.06)).
 		Shadow(0, 0.5, 2, 0, ui.RGBA(0, 0, 0, 0.05))
 }
 
-// face gives a control its light face: a white fill standing on a soft
-// shadow, with no outline.
+// face gives a control its face: a fill standing on a soft shadow, with no
+// outline in the light and a lit edge in the dark.
 func face(e ui.Element, col colors, bg ui.Color) ui.Element {
+	if col.dark {
+		return raised(e.Background(bg), col)
+	}
 	return e.Background(bg).
 		Shadow(0, 0.5, 1.5, 0, ui.RGBA(0, 0, 0, 0.13)).
 		Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.05))
@@ -76,7 +88,7 @@ func searchBox(c *ui.Context, col colors, query *string, placeholder string, onS
 		}
 	})
 	glow := row.Animate("focus", b2f(input.Focused()), 120*time.Millisecond)
-	row.InsetShadow(0, 0, 0, 1, ui.RGBA(0, 0, 0, 0.13))
+	row.InsetShadow(0, 0, 0, 1, col.fieldStroke)
 	if glow > 0 {
 		row.Shadow(0, 0, 0, 3.5*glow, col.accent.Alpha(0.32*glow)).
 			InsetShadow(0, 0, 0, 1, col.accent.Alpha(0.75*glow))
@@ -253,7 +265,7 @@ func selectControl(c *ui.Context, col colors, value *string, options []string, w
 func segmentedControl(c *ui.Context, col colors, selected *int, labels ...string) ui.Element {
 	seg := ui.SegmentedBase(c, selected, len(labels))
 	seg.Track.Height(28).Padding(2).Radius(7).
-		Background(ui.RGBA(0, 0, 0, 0.06)).AlignItems(ui.Center).Children(func() {
+		Background(col.chip).AlignItems(ui.Center).Children(func() {
 		for n, label := range labels {
 			if n > 0 {
 				sep := ui.Box(c).Width(1).Height(12).Shrink(0)
@@ -263,9 +275,13 @@ func segmentedControl(c *ui.Context, col colors, selected *int, labels ...string
 			}
 			s := seg.Segment(n).FillHeight().Padding(0, 12).Radius(5).Center()
 			if n == *selected {
-				s.Background(ui.RGB(255, 255, 255)).
-					Shadow(0, 0.5, 1.5, 0, ui.RGBA(0, 0, 0, 0.16)).
-					Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.04))
+				s.Background(col.segThumb)
+				if col.dark {
+					s.Shadow(0, 1, 1, 0, ui.RGBA(0, 0, 0, 0.25))
+				} else {
+					s.Shadow(0, 0.5, 1.5, 0, ui.RGBA(0, 0, 0, 0.16)).
+						Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.04))
+				}
 			}
 			s.Children(func() {
 				ui.Text(c, label).FontSize(12.5).SingleLine().TextColor(col.text)
@@ -273,6 +289,24 @@ func segmentedControl(c *ui.Context, col colors, selected *int, labels ...string
 		}
 	})
 	return seg.Track
+}
+
+func stringSegmented(c *ui.Context, col colors, value *string, values, labels []string, onChange func()) ui.Element {
+	index := 0
+	for i, v := range values {
+		if v == *value {
+			index = i
+			break
+		}
+	}
+	control := segmentedControl(c, col, &index, labels...)
+	if control.Changed() && index >= 0 && index < len(values) {
+		*value = values[index]
+		if onChange != nil {
+			onChange()
+		}
+	}
+	return control
 }
 
 func stepperControl(c *ui.Context, col colors, value *float64, lo, hi, step float64, onChange func()) ui.Element {
