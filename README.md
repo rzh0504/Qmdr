@@ -31,16 +31,17 @@ Go 客户端从系统配置目录读取 `qqmusic_cred.json`：
 - macOS：`~/Library/Application Support/Qmdr/qqmusic_cred.json`
 - Linux：`$XDG_CONFIG_HOME/Qmdr/qqmusic_cred.json`
 
-该文件包含登录令牌，不会提交到仓库。设置页可以重新加载或导出 JSON。旧版 Python 的 pickle 凭证已迁移为上述 JSON，`reference/python` 保留旧后端代码用于行为参考。
+该文件包含登录令牌，不会提交到仓库。设置页可以重新加载或导出 JSON。旧版 Python 的 pickle 凭证已迁移为上述 JSON。
 
 ## 目录
 
-- `main.go`、`view_*.go`、`components.go`、`theme.go`：MyGo 原生 UI
-- `download.go`：下载队列、文件命名与落盘
-- `internal/qqmusic`：请求封装、登录、搜索、歌单、歌词、封面、文件下载
+- `app.go`、`main.go`、`sidebar.go`、`header.go`、`view_*.go`、`styles.go`、`buttons.go`、`controls.go`、`rows.go`、`modal.go`、`theme.go`：MyGo 原生 UI
+- `download_queue.go`、`download_worker.go`、`download_files.go`：下载队列、并发执行、文件命名与落盘
+- `internal/qqmusic`：请求封装、登录、搜索、歌单、歌词、封面、榜单、用户资料与文件下载
 - `internal/tag`：FLAC / MP3 标签与封面写入
-- `reference/python`：旧 Python 后端，仅作参考
+- `internal/settings`、`internal/pending`、`internal/playlistcache`、`internal/queue`、`internal/model`、`internal/format`、`internal/apperr`、`internal/fsutil`、`internal/version`、`internal/history`：设置、待下载、缓存、队列转换与通用工具
 - `assets`：应用图标资源
+- `.github/workflows/release.yml`：vtag 三平台发版工作流
 
 ## 免责声明
 
