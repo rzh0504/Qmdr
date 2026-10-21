@@ -6,9 +6,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
 )
@@ -131,25 +133,107 @@ func (a *app) viewRoot(c *ui.Context) {
 		c.Toast(msg)
 	}
 
-	ui.Row(c).Fill().AlignItems(ui.Stretch).Background(col.bg).Children(func() {
-		a.sidebar(c, col)
-		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-			ui.Scroll(c).Grow(1).Padding(16, 24, 24).Gap(16).Children(func() {
-				switch a.view {
-				case viewSearch:
-					a.searchView(c, col)
-				case viewPlaylists:
-					a.playlistsView(c, col)
-				case viewQueue:
-					a.queueView(c, col)
-				case viewSettings:
-					a.settingsView(c, col)
-				}
+	ui.Column(c).Fill().LinearGradient(backdropGradient()).Children(func() {
+		a.titleBar(c, col)
+		ui.Row(c).Grow(1).FillWidth().AlignItems(ui.Stretch).Children(func() {
+			a.sidebar(c, col)
+			ui.Column(c).Grow(1).MinWidth(0).Padding(8).Children(func() {
+				content := ui.Column(c).Fill().Radius(14).Background(col.card).
+					Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.07)).
+					Shadow(0, 1, 6, 0, ui.RGBA(0, 0, 0, 0.035)).Clip()
+				content.Children(func() {
+					ui.Scroll(c).Grow(1).Padding(16, 20, 20).Gap(16).Children(func() {
+						switch a.view {
+						case viewSearch:
+							a.searchView(c, col)
+						case viewPlaylists:
+							a.playlistsView(c, col)
+						case viewQueue:
+							a.queueView(c, col)
+						case viewSettings:
+							a.settingsView(c, col)
+						}
+					})
+				})
 			})
 		})
 	})
 
 	a.qrModal(c, col)
+}
+
+func (a *app) titleBar(c *ui.Context, col colors) {
+	bar := c.TitleBar()
+	height := float32(44)
+	if bar.Height > height {
+		height = bar.Height
+	}
+	row := ui.Row(c).FillWidth().Height(height).AlignItems(ui.Center).
+		Padding(0, 12, 0, bar.Left+12).
+		DragWindow().
+		Material(glass.Glass{Tint: ui.RGBA(59, 108, 246, 0.08)}).
+		BorderWidth(0, 0, 1, 0).BorderColor(ui.RGBA(0, 0, 0, 0.06))
+	row.Children(func() {
+		a.logoMark(c, col, 22)
+		ui.Box(c).Width(8)
+		ui.Text(c, "Qmdr").FontSize(13).Bold().TextColor(col.text)
+		ui.Spacer(c)
+		if runtime.GOOS != "darwin" {
+			a.windowControls(c, col)
+		}
+	})
+}
+
+func (a *app) windowControls(c *ui.Context, col colors) {
+	if a.win == nil {
+		return
+	}
+	ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
+		minimize := ui.ButtonBase(c).Size(28, 24).Radius(6).Center().
+			Label("最小化").Tooltip("最小化").TextColor(col.muted)
+		if minimize.Hovered() {
+			minimize.Background(col.cardHover).TextColor(col.text)
+		}
+		minimize.Children(func() {
+			ui.Icon(c, iconWinMinimize).FontSize(13)
+		})
+		if minimize.Clicked() {
+			a.win.Minimize()
+		}
+
+		maximized := a.win.IsMaximized()
+		label, icon := "最大化", iconWinMaximize
+		if maximized {
+			label, icon = "还原", iconWinRestore
+		}
+		maximize := ui.ButtonBase(c).Size(28, 24).Radius(6).Center().
+			Label(label).Tooltip(label).TextColor(col.muted).MaximizeButton()
+		if maximize.Hovered() {
+			maximize.Background(col.cardHover).TextColor(col.text)
+		}
+		maximize.Children(func() {
+			ui.Icon(c, icon).FontSize(13)
+		})
+		if maximize.Clicked() {
+			if maximized {
+				a.win.Unmaximize()
+			} else {
+				a.win.Maximize()
+			}
+		}
+
+		closeButton := ui.ButtonBase(c).Size(28, 24).Radius(6).Center().
+			Label("关闭").Tooltip("关闭").TextColor(col.muted)
+		if closeButton.Hovered() {
+			closeButton.Background(col.red).TextColor(ui.RGB(255, 255, 255))
+		}
+		closeButton.Children(func() {
+			ui.Icon(c, iconX).FontSize(13)
+		})
+		if closeButton.Clicked() {
+			a.win.Close()
+		}
+	})
 }
 
 func (a *app) update(fn func()) {
@@ -239,14 +323,10 @@ func (a *app) setPage(page string) {
 }
 
 func (a *app) sidebar(c *ui.Context, col colors) {
-	side := ui.Column(c).Width(200).FillHeight().Background(col.sidebar).
-		BorderWidth(0, 1, 0, 0).BorderColor(col.border)
+	side := ui.Column(c).Width(208).FillHeight().Padding(0, 8, 0, 8).Background(col.sidebar)
 
 	side.Children(func() {
-		ui.Row(c).Padding(12, 14).Gap(8).AlignItems(ui.Center).Children(func() {
-			a.logoMark(c, col, 26)
-			ui.Text(c, "Qmdr").FontSize(14).Bold().TextColor(col.text).SingleLine()
-		})
+		ui.Text(c, "资料库").FontSize(10).Bold().TextColor(col.faint).Padding(10, 10)
 
 		page := a.pageKey()
 		_, _, _, active := a.queueCounts()
@@ -266,10 +346,10 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 			a.refresh()
 		}
 
-		divider(c, col)
+		ui.Box(c).Height(6)
 
-		account := ui.ButtonBase(c).Padding(8, 12).Gap(8).
-			AlignItems(ui.Center).Label("账号设置")
+		account := ui.ButtonBase(c).Padding(8, 10).Gap(8).
+			Radius(8).AlignItems(ui.Center).Label("账号设置")
 		if account.Hovered() {
 			account = account.Background(col.cardHover)
 		}
@@ -424,8 +504,8 @@ func (a *app) closeQR() {
 
 func (a *app) qrModal(c *ui.Context, col colors) {
 	ui.Modal(c, &a.qrOpen, func() {
-		panel := ui.Column(c).Width(320).Padding(18).Gap(12).Radius(10).
-			Background(col.card).Border(1, col.border).
+		panel := ui.Column(c).Width(320).Padding(18).Gap(12).Radius(14).
+			Material(glass.Glass{}).Border(1, col.border).
 			Shadow(0, 16, 48, 0, ui.RGBA(0, 0, 0, 0.18))
 		panel.Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
@@ -465,15 +545,25 @@ func main() {
 		if err := os.MkdirAll(a.downloadDir, 0o755); err != nil {
 			a.downloadDir = defaultDownloadDir()
 		}
-		a.win = mygo.NewWindow(mygo.WindowOptions{
+		options := mygo.WindowOptions{
 			Title:           "Qmdr · QQ 音乐下载器",
 			Width:           1200,
 			Height:          800,
 			MinWidth:        1000,
 			MinHeight:       680,
-			BackgroundColor: "#ffffff",
+			BackgroundColor: "#e3e9f4",
 			Content:         ui.View(a.viewRoot),
-		})
+		}
+		if runtime.GOOS == "darwin" {
+			options.TitleBarStyle = mygo.TitleBarHiddenInset
+			options.TitleBarHeight = 44
+			options.TrafficLightPosition = &mygo.Point{X: 16, Y: 14}
+		} else {
+			options.TitleBarStyle = mygo.TitleBarHidden
+			options.HideWindowButtons = true
+			options.AutoHideMenuBar = true
+		}
+		a.win = mygo.NewWindow(options)
 		a.win.OnClosed(func() {
 			a.closed = true
 			if a.cancel != nil {

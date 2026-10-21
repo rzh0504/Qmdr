@@ -19,7 +19,7 @@ func tableCard(c *ui.Context, col colors, fn func()) ui.Element {
 
 func pageHeader(c *ui.Context, col colors, title string, actions func()) {
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-		ui.Text(c, title).FontSize(20).Bold().TextColor(col.text).Grow(1)
+		ui.Text(c, title).FontSize(18).Bold().TextColor(col.text).Grow(1)
 		if actions != nil {
 			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(actions)
 		}

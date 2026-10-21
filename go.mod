@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/bogem/id3v2/v2 v2.1.4
-	github.com/egoist/mygo v0.5.5
+	github.com/egoist/mygo v0.6.0
 	github.com/go-flac/flacpicture/v2 v2.0.2
 	github.com/go-flac/flacvorbis/v2 v2.0.2
 	github.com/go-flac/go-flac/v2 v2.0.4
