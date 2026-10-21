@@ -220,7 +220,7 @@ func (a *app) aboutSettings(c *ui.Context, col colors) {
 			})
 			return
 		}
-		secondaryButton(c, col, iconRefresh, "检查更新", a.checkUpdates)
+		secondaryButton(c, col, iconUpdate, "检查更新", a.checkUpdates)
 	})
 	a.settingRow(c, col, "开源仓库", "github.com/rzh0504/Qmdr", false, func() {
 		secondaryButton(c, col, iconExternal, "打开", func() {
