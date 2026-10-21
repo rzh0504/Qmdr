@@ -21,6 +21,17 @@ func (a *app) settingsView(c *ui.Context, col colors) {
 			a.settingsGroup(c, col, "下载", func() {
 				a.downloadSettings(c, col)
 			})
+			a.settingsGroup(c, col, "搜索", func() {
+				a.settingRow(c, col, "搜索页显示榜单信息", "未搜索时显示热搜与热歌榜、飙升榜、新歌榜；关闭后不请求相关数据", true, func() {
+					toggle := toggleSwitch(c, col, &a.showExplore)
+					if toggle.Changed() {
+						a.saveSettings()
+						if a.showExplore {
+							a.loadExplore(true)
+						}
+					}
+				})
+			})
 			a.settingsGroup(c, col, "关于", func() {
 				a.aboutSettings(c, col)
 			})

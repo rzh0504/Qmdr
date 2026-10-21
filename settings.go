@@ -17,6 +17,7 @@ type appSettings struct {
 	Appearance  string  `json:"appearance"`
 	Background  string  `json:"background"`
 	HistoryKeep string  `json:"history_keep"`
+	ShowExplore bool    `json:"show_explore"`
 }
 
 func settingsPath() string {
@@ -90,6 +91,7 @@ func (a *app) saveSettings() {
 		Appearance:  a.appearance,
 		Background:  a.background,
 		HistoryKeep: a.historyKeep,
+		ShowExplore: a.showExplore,
 	}
 	a.dispatchDisk(func() {
 		data, err := json.MarshalIndent(settings, "", "  ")

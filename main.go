@@ -58,6 +58,7 @@ type app struct {
 	appearance  string
 	background  string
 	historyKeep string
+	showExplore bool
 }
 
 func newApp() *app {
@@ -88,6 +89,7 @@ func newApp() *app {
 		appearance:  settings.Appearance,
 		background:  settings.Background,
 		historyKeep: settings.HistoryKeep,
+		showExplore: settings.ShowExplore,
 	}
 	a.startDiskWorker()
 	a.restorePlaylistCache()
@@ -121,6 +123,13 @@ func (a *app) viewRoot(c *ui.Context) {
 				smoothPanel(content, col, 14, col.card, true)
 				content.Children(func() {
 					a.cardHeader(c, col)
+					if a.view == viewSearch && !a.search.searched && !a.showExplore {
+						ui.Column(c).Grow(1).MinHeight(0).
+							Padding(12, 20, 20, 18).Children(func() {
+							a.searchView(c, col)
+						})
+						return
+					}
 					if a.view == viewPlaylists {
 						ui.Column(c).Grow(1).MinHeight(0).
 							Padding(12, 20, 20, 18).Children(func() {

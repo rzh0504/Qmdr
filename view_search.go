@@ -11,10 +11,18 @@ import (
 )
 
 func (a *app) searchView(c *ui.Context, col colors) {
-	a.loadExplore(false)
+	if a.showExplore {
+		a.loadExplore(false)
+	}
 	a.searchToolbar(c, col)
 	if a.search.searched {
 		a.searchResults(c, col)
+		return
+	}
+	if !a.showExplore {
+		ui.Column(c).Grow(1).FillWidth().Center().Children(func() {
+			emptyState(c, col, iconSearch, "搜索", "支持歌曲、歌手、专辑搜索")
+		})
 		return
 	}
 	a.exploreView(c, col)
@@ -33,7 +41,10 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 			})
 		})
 
-		tags := a.search.hotSearches
+		var tags []string
+		if a.showExplore {
+			tags = a.search.hotSearches
+		}
 		if len(tags) == 0 {
 			tags = []string{"周杰伦", "华语流行", "深夜电台", "G.E.M. 邓紫棋", "陈奕迅"}
 		}
