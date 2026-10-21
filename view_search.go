@@ -41,6 +41,8 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 	})
 }
 
+const searchPageSize = 20
+
 func (a *app) searchResults(c *ui.Context, col colors) {
 	if !a.search.searched {
 		ui.Column(c).Grow(1).FillWidth().Center().Children(func() {
@@ -52,7 +54,11 @@ func (a *app) searchResults(c *ui.Context, col colors) {
 	ui.Column(c).Gap(8).Children(func() {
 		sectionHeader(c, col, "搜索结果", func() {
 			if !a.search.loading && a.search.err == "" {
-				ui.Textf(c, "%d 首", len(a.search.results)).FontSize(12).TextColor(col.faint)
+				if a.search.hasMore {
+					ui.Textf(c, "已加载 %d 首", len(a.search.results)).FontSize(12).TextColor(col.faint)
+				} else {
+					ui.Textf(c, "%d 首", len(a.search.results)).FontSize(12).TextColor(col.faint)
+				}
 			}
 			if len(a.search.results) > 0 && !a.search.loading {
 				secondaryButton(c, col, iconDownload, "全部下载", func() {
@@ -94,6 +100,17 @@ func (a *app) searchResults(c *ui.Context, col colors) {
 					a.openSongMenu(row, song, false)
 				}
 			})
+			if a.search.hasMore || a.search.loadingMore {
+				ui.Row(c).FillWidth().Height(36).Justify(ui.Center).
+					AlignItems(ui.Center).Gap(6).Children(func() {
+					if a.search.loadingMore {
+						ui.Spinner(c).Size(13, 13)
+						ui.Text(c, "正在加载更多…").FontSize(12).TextColor(col.muted)
+					} else {
+						secondaryButton(c, col, iconChevronDown, "加载更多", a.loadMoreSearch)
+					}
+				})
+			}
 		}
 	})
 }
@@ -104,23 +121,21 @@ func (a *app) doSearch() {
 		a.setToast("请输入歌曲关键词")
 		return
 	}
-	var found []Song
+	var page qqmusic.SearchPage
 	a.search.loading = true
 	a.search.searched = true
 	a.search.err = ""
 	a.search.results = nil
+	a.search.searchID = ""
+	a.search.page = 0
+	a.search.hasMore = false
+	a.search.loadingMore = false
 	a.refresh()
 	a.async(&a.search.slot, 20*time.Second,
 		func(ctx context.Context) error {
-			songs, err := a.api.Search(ctx, query, 20)
-			if err != nil {
-				return err
-			}
-			found = make([]Song, 0, len(songs))
-			for _, song := range songs {
-				found = append(found, songFromAPI(song))
-			}
-			return nil
+			fetched, err := a.api.Search(ctx, query, "", 1, searchPageSize)
+			page = fetched
+			return err
 		},
 		func(err error) {
 			a.search.loading = false
@@ -128,13 +143,76 @@ func (a *app) doSearch() {
 				a.search.err = friendlyError(err)
 				return
 			}
-			a.search.results = found
-			if len(found) == 0 {
+			a.search.results = mapSearchSongs(page.Songs)
+			a.search.searchID = page.SearchID
+			a.search.page = 1
+			a.search.hasMore = page.HasMore
+			if len(page.Songs) == 0 {
 				a.toast = "没有找到相关歌曲"
 			} else {
-				a.toast = fmt.Sprintf("找到 %d 首歌曲", len(found))
+				a.toast = fmt.Sprintf("找到 %d 首歌曲", len(page.Songs))
 			}
 		})
+}
+
+func (a *app) loadMoreSearch() {
+	if a.search.loading || a.search.loadingMore || !a.search.hasMore {
+		return
+	}
+	query := strings.TrimSpace(a.search.query)
+	searchID := a.search.searchID
+	if query == "" || searchID == "" {
+		return
+	}
+	next := a.search.page + 1
+	var page qqmusic.SearchPage
+	a.search.loadingMore = true
+	a.refresh()
+	a.async(&a.search.slot, 20*time.Second,
+		func(ctx context.Context) error {
+			fetched, err := a.api.Search(ctx, query, searchID, next, searchPageSize)
+			page = fetched
+			return err
+		},
+		func(err error) {
+			a.search.loadingMore = false
+			if err != nil {
+				a.toast = "加载更多失败：" + friendlyError(err)
+				return
+			}
+			a.search.page = next
+			a.search.hasMore = page.HasMore
+			a.search.results = appendSongs(a.search.results, mapSearchSongs(page.Songs))
+		})
+}
+
+func mapSearchSongs(songs []qqmusic.Song) []Song {
+	mapped := make([]Song, 0, len(songs))
+	for _, song := range songs {
+		mapped = append(mapped, songFromAPI(song))
+	}
+	return mapped
+}
+
+// appendSongs adds songs not already in base, keeping first-seen order, as
+// pages of a search can overlap.
+func appendSongs(base, more []Song) []Song {
+	seen := make(map[string]bool, len(base)+len(more))
+	for _, song := range base {
+		if song.Mid != "" {
+			seen[song.Mid] = true
+		}
+	}
+	for _, song := range more {
+		if song.Mid != "" {
+			if seen[song.Mid] {
+				continue
+			}
+			seen[song.Mid] = true
+		}
+		base = append(base, song)
+	}
+	return base
 }
 
 func songFromAPI(song qqmusic.Song) Song {

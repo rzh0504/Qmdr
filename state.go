@@ -14,11 +14,15 @@ import (
 type searchState struct {
 	slot asyncSlot
 
-	query    string
-	loading  bool
-	searched bool
-	err      string
-	results  []Song
+	query       string
+	loading     bool
+	searched    bool
+	err         string
+	results     []Song
+	searchID    string
+	page        int
+	hasMore     bool
+	loadingMore bool
 }
 
 // playlistState is the playlists page: the list on the left, the songs of

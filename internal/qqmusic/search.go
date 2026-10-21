@@ -74,20 +74,41 @@ func (item songItem) song() Song {
 	}
 }
 
-func (c *Client) Search(ctx context.Context, query string, limit int) ([]Song, error) {
+const (
+	defaultSearchPageSize = 20
+	maxSearchPageSize     = 50
+)
+
+// SearchPage is one page of a search. Pass SearchID back to fetch the next
+// page; HasMore says the server returned a full page, so another may exist.
+type SearchPage struct {
+	Songs    []Song
+	SearchID string
+	HasMore  bool
+}
+
+// Search fetches one page of songs for query. An empty searchID starts a
+// new search; the ID it returns ties the next page to the same search.
+func (c *Client) Search(ctx context.Context, query, searchID string, page, limit int) (SearchPage, error) {
 	query = strings.TrimSpace(query)
 	if query == "" {
-		return nil, fmt.Errorf("搜索关键词不能为空")
+		return SearchPage{}, fmt.Errorf("搜索关键词不能为空")
 	}
-	if limit <= 0 || limit > 50 {
-		limit = 20
+	if page < 1 {
+		page = 1
+	}
+	if limit <= 0 || limit > maxSearchPageSize {
+		limit = defaultSearchPageSize
+	}
+	if searchID == "" {
+		searchID = fmt.Sprintf("%d", time.Now().UnixMilli())
 	}
 	params := map[string]any{
-		"searchid":     fmt.Sprintf("%d", time.Now().UnixMilli()),
+		"searchid":     searchID,
 		"query":        query,
 		"search_type":  0,
 		"num_per_page": limit,
-		"page_num":     1,
+		"page_num":     page,
 		"highlight":    false,
 		"grp":          true,
 	}
@@ -98,14 +119,18 @@ func (c *Client) Search(ctx context.Context, query string, limit int) ([]Song, e
 	}
 	module, method := "music.search.SearchCgiService", "DoSearchForQQMusicMobile"
 	if err := c.call(ctx, module, method, params, &data); err != nil {
-		return nil, err
+		return SearchPage{}, err
 	}
 
 	songs := make([]Song, 0, len(data.Body.ItemSong))
 	for _, item := range data.Body.ItemSong {
 		songs = append(songs, item.song())
 	}
-	return songs, nil
+	return SearchPage{
+		Songs:    songs,
+		SearchID: searchID,
+		HasMore:  len(data.Body.ItemSong) >= limit,
+	}, nil
 }
 
 func cleanText(s string) string {
