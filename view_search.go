@@ -149,8 +149,6 @@ func (a *app) doSearch() {
 			a.search.hasMore = page.HasMore
 			if len(page.Songs) == 0 {
 				a.toast = "没有找到相关歌曲"
-			} else {
-				a.toast = fmt.Sprintf("找到 %d 首歌曲", len(page.Songs))
 			}
 		})
 }
