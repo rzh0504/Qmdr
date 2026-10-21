@@ -19,20 +19,9 @@ func (a *app) queueView(c *ui.Context, col colors) {
 			a.pendingSection(c, col)
 		}
 		if len(a.queue) > 0 {
-			activeDownloads := 0
-			speed := 0.0
-			for _, item := range a.queue {
-				if item.Status == StatusDownloading {
-					activeDownloads++
-					speed += item.Speed
-				}
-			}
 			sectionHeader(c, col, "下载队列", func() {
 				ui.Textf(c, "进行中 %d · 失败 %d", active, failed).FontSize(12).
 					TextColor(col.faint)
-				if activeDownloads > 0 {
-					ui.Textf(c, "· %.1f MB/s", speed).FontSize(12).TextColor(col.muted)
-				}
 			})
 
 			ui.Row(c).Height(32).FillWidth().AlignItems(ui.Center).Children(func() {
@@ -189,7 +178,8 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem) {
 								Radius(2).Background(col.accent)
 						}
 					})
-					ui.Textf(c, "%.0f%%", item.Progress*100).FontSize(11).TextColor(col.muted)
+					ui.Textf(c, "%.0f%%", item.Progress*100).Width(30).FontSize(11).
+						TextColor(col.muted).TextAlign(ui.End)
 				})
 			}
 		})

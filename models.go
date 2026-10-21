@@ -53,7 +53,6 @@ type QueueItem struct {
 	Song     Song
 	Status   QueueStatus
 	Progress float64
-	Speed    float64
 	Quality  string
 	Error    string
 	FilePath string

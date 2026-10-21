@@ -308,7 +308,6 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		}
 		item.Status = StatusDownloading
 		item.Progress = 0
-		item.Speed = 0
 		item.Error = ""
 		a.appendLog("开始下载："+task.Title, "info")
 	})
@@ -336,16 +335,10 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		return
 	}
 
-	started := time.Now()
 	written, err := a.api.Download(ctx, resolved.URL, dest, overwrite, func(received, size int64) {
 		progress := 0.0
 		if size > 0 {
 			progress = min(1, float64(received)/float64(size))
-		}
-		elapsed := time.Since(started).Seconds()
-		speed := 0.0
-		if elapsed > 0 {
-			speed = float64(received) / (1 << 20) / elapsed
 		}
 		a.update(func() {
 			if runID != a.runID {
@@ -356,7 +349,6 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 				return
 			}
 			item.Progress = progress
-			item.Speed = speed
 		})
 	})
 	if err != nil {
@@ -399,7 +391,6 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		}
 		item.Status = StatusDone
 		item.Progress = 1
-		item.Speed = 0
 		item.Quality = resolved.Quality
 		item.FilePath = dest
 		item.FileSize = size
@@ -418,7 +409,6 @@ func (a *app) markCancelled(runID int, task downloadTask) {
 		}
 		if item := a.queueItem(task.ID); item != nil {
 			item.Status = StatusCancelled
-			item.Speed = 0
 		}
 		a.appendLog("已取消："+task.Title, "warning")
 	})
@@ -432,7 +422,6 @@ func (a *app) markFailed(runID int, task downloadTask, err error) {
 		}
 		if item := a.queueItem(task.ID); item != nil {
 			item.Status = StatusFailed
-			item.Speed = 0
 			item.Error = message
 		}
 		a.appendLog("下载失败："+task.Title+"（"+message+"）", "error")
@@ -460,7 +449,6 @@ func (a *app) markSkipped(runID int, task downloadTask, dest, quality string) {
 		if item := a.queueItem(task.ID); item != nil {
 			item.Status = StatusSkipped
 			item.Progress = 1
-			item.Speed = 0
 			item.Quality = quality
 			item.FilePath = dest
 			item.FileSize = size
@@ -511,7 +499,6 @@ func (a *app) retryItem(id int) {
 	}
 	item.Status = StatusWaiting
 	item.Progress = 0
-	item.Speed = 0
 	item.Error = ""
 	item.FileSize = 0
 	a.appendLog("重新加入队列："+item.Song.Title, "info")
