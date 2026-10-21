@@ -36,3 +36,12 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	}
 	return nil
 }
+
+// FileSize returns the size of path, or 0 if it cannot be read.
+func FileSize(path string) int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return info.Size()
+}

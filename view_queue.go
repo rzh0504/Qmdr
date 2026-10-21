@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/egoist/mygo/ui"
+	"github.com/rzh0504/qmdr/internal/format"
 )
 
 func (a *app) queueView(c *ui.Context, col colors) {
@@ -146,7 +147,7 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem) {
 		})
 
 		ui.Text(c, item.Quality).Width(56).FontSize(11).TextColor(col.muted).SingleLine()
-		ui.Text(c, formatFileSize(item.FileSize)).Width(70).FontSize(11).
+		ui.Text(c, format.ByteSize(item.FileSize)).Width(70).FontSize(11).
 			TextColor(col.muted).SingleLine()
 
 		progressBox := ui.Box(c).Width(84)

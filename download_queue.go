@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/rzh0504/qmdr/internal/settings"
 )
 
 func (a *app) addToPending(songs ...Song) {
@@ -169,7 +170,7 @@ func (a *app) startQueue() {
 	runID := a.queue.runID
 	dir := a.downloadDir
 	overwrite := a.overwrite
-	coverSize := coverSizeValue(a.coverSize)
+	coverSize := settings.CoverSizeValue(a.coverSize)
 	// A download that a previous run left unfinished leaves its .part file
 	// behind; start each run with a clean directory.
 	cleanPartFiles(dir)
@@ -313,7 +314,7 @@ func (a *app) filteredQueue() []QueueItem {
 func (a *app) openDownloadDir() {
 	dir := a.downloadDir
 	if dir == "" {
-		dir = defaultDownloadDir()
+		dir = settings.DefaultDownloadDir()
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		a.setToast("无法创建下载目录：" + err.Error())

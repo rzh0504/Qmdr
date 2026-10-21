@@ -54,34 +54,6 @@ func TestRestoreQueueConvertsDownloading(t *testing.T) {
 	}
 }
 
-func TestQueueRecordRoundTrip(t *testing.T) {
-	createdAt := time.Unix(1700000000, 0)
-	original := QueueItem{
-		ID: 7,
-		Song: Song{
-			Mid:      "mid",
-			Title:    "Title",
-			Artist:   "Artist",
-			Album:    "Album",
-			AlbumMid: "album-mid",
-			Duration: "03:00",
-			Quality:  "无损",
-			VIP:      true,
-		},
-		Status:    StatusFailed,
-		Progress:  0.4,
-		Quality:   "FLAC",
-		Error:     "network",
-		FilePath:  `C:\Music\song.flac`,
-		FileSize:  12345,
-		CreatedAt: createdAt,
-	}
-	restored := queueItemFromRecord(queueRecordFromItem(original))
-	if restored != original {
-		t.Fatalf("queue round trip = %+v, want %+v", restored, original)
-	}
-}
-
 func TestQueueFilters(t *testing.T) {
 	a := &app{queue: queueState{items: []QueueItem{
 		{ID: 1, Status: StatusWaiting},

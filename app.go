@@ -2,14 +2,13 @@ package main
 
 import (
 	"log"
-	"os"
-	"path/filepath"
 	"runtime"
 	"sync/atomic"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/rzh0504/qmdr/internal/pending"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
 )
 
@@ -81,7 +80,7 @@ func newApp() *app {
 		brandIcon:   brandIcon,
 		view:        viewSearch,
 		covers:      coverState{cache: map[string]coverEntry{}, loading: map[string]bool{}, sem: make(chan struct{}, coverFetchLimit)},
-		queue:       queueState{pending: loadPending()},
+		queue:       queueState{pending: pending.Load()},
 		playlists:   playlistState{owner: userID, selected: -1, selectedMids: map[string]bool{}},
 		history:     historyState{loading: true},
 		login:       loginState{loggedIn: api.HasCredential(), userID: displayUser, loginType: loginType},
@@ -98,14 +97,6 @@ func newApp() *app {
 	a.startDiskWorker()
 	a.restorePlaylistCache()
 	return a
-}
-
-func defaultDownloadDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "."
-	}
-	return filepath.Join(home, "Music", "Qmdr")
 }
 
 func (a *app) update(fn func()) {

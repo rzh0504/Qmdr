@@ -6,63 +6,8 @@ import (
 	"time"
 
 	"github.com/rzh0504/qmdr/internal/history"
+	"github.com/rzh0504/qmdr/internal/queue"
 )
-
-func queueRecordFromItem(item QueueItem) history.QueueRecord {
-	createdAt := item.CreatedAt
-	if createdAt.IsZero() {
-		createdAt = time.Now()
-	}
-	return history.QueueRecord{
-		ID:          item.ID,
-		SongMID:     item.Song.Mid,
-		Title:       item.Song.Title,
-		Artist:      item.Song.Artist,
-		Album:       item.Song.Album,
-		AlbumMID:    item.Song.AlbumMid,
-		Duration:    item.Song.Duration,
-		SongQuality: item.Song.Quality,
-		VIP:         item.Song.VIP,
-		Status:      int(item.Status),
-		Progress:    item.Progress,
-		Quality:     item.Quality,
-		Error:       item.Error,
-		FilePath:    item.FilePath,
-		FileSize:    item.FileSize,
-		CreatedAt:   createdAt,
-	}
-}
-
-func queueItemFromRecord(record history.QueueRecord) QueueItem {
-	status := QueueStatus(record.Status)
-	if status < StatusWaiting || status > StatusCancelled {
-		status = StatusWaiting
-	}
-	createdAt := record.CreatedAt
-	if createdAt.IsZero() {
-		createdAt = time.Now()
-	}
-	return QueueItem{
-		ID: record.ID,
-		Song: Song{
-			Mid:      record.SongMID,
-			Title:    record.Title,
-			Artist:   record.Artist,
-			Album:    record.Album,
-			AlbumMid: record.AlbumMID,
-			Duration: record.Duration,
-			Quality:  record.SongQuality,
-			VIP:      record.VIP,
-		},
-		Status:    status,
-		Progress:  record.Progress,
-		Quality:   record.Quality,
-		Error:     record.Error,
-		FilePath:  record.FilePath,
-		FileSize:  record.FileSize,
-		CreatedAt: createdAt,
-	}
-}
 
 func (a *app) persistQueueItems(items []QueueItem) {
 	if len(items) == 0 {
@@ -74,7 +19,7 @@ func (a *app) persistQueueItems(items []QueueItem) {
 	}
 	records := make([]history.QueueRecord, 0, len(items))
 	for _, item := range items {
-		records = append(records, queueRecordFromItem(item))
+		records = append(records, queue.RecordFromItem(item))
 	}
 	a.dispatchDisk(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -113,7 +58,7 @@ func (a *app) replaceStoredQueue() {
 	}
 	records := make([]history.QueueRecord, 0, len(a.queue.items))
 	for _, item := range a.queue.items {
-		records = append(records, queueRecordFromItem(item))
+		records = append(records, queue.RecordFromItem(item))
 	}
 	a.dispatchDisk(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -139,7 +84,7 @@ func (a *app) restoreQueue(records []history.QueueRecord) {
 	maxID := 0
 	var changed []QueueItem
 	for _, record := range records {
-		item := queueItemFromRecord(record)
+		item := queue.ItemFromRecord(record)
 		if item.Status == StatusDownloading {
 			item.Status = StatusWaiting
 			item.Progress = 0

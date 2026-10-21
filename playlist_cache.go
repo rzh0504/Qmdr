@@ -1,52 +1,14 @@
 package main
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/rzh0504/qmdr/internal/fsutil"
+	"github.com/rzh0504/qmdr/internal/playlistcache"
 )
 
-const playlistCacheVersion = 1
-
-type playlistCache struct {
-	Version   int        `json:"version"`
-	UserID    string     `json:"user_id"`
-	Playlists []Playlist `json:"playlists"`
-	Selected  int        `json:"selected"`
-	Songs     []Song     `json:"songs"`
-	UpdatedAt time.Time  `json:"updated_at"`
-}
-
-func playlistCachePath() string {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(dir, "Qmdr", "playlists.json")
-}
-
-func loadPlaylistCache() (playlistCache, bool) {
-	path := playlistCachePath()
-	if path == "" {
-		return playlistCache{}, false
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return playlistCache{}, false
-	}
-	var cache playlistCache
-	if err := json.Unmarshal(data, &cache); err != nil || cache.Version != playlistCacheVersion {
-		return playlistCache{}, false
-	}
-	return cache, true
-}
-
 func (a *app) restorePlaylistCache() {
-	cache, ok := loadPlaylistCache()
+	cache, ok := playlistcache.Load()
 	if !ok || !a.api.HasCredential() || cache.UserID != a.api.UserID() || len(cache.Playlists) == 0 {
 		return
 	}
@@ -61,7 +23,7 @@ func (a *app) restorePlaylistCache() {
 }
 
 func (a *app) savePlaylistCache() {
-	path := playlistCachePath()
+	path := playlistcache.Path()
 	if path == "" {
 		return
 	}
@@ -76,10 +38,7 @@ func (a *app) savePlaylistCache() {
 	if selected < 0 || selected >= len(a.playlists.items) {
 		selected = -1
 	}
-	// Snapshot on the caller's thread; the slices are replaced wholesale,
-	// never mutated, so the worker can marshal them safely.
-	cache := playlistCache{
-		Version:   playlistCacheVersion,
+	cache := playlistcache.Cache{
 		UserID:    owner,
 		Playlists: a.playlists.items,
 		Selected:  selected,
@@ -87,11 +46,7 @@ func (a *app) savePlaylistCache() {
 		UpdatedAt: time.Now(),
 	}
 	a.dispatchDisk(func() {
-		data, err := json.MarshalIndent(cache, "", "  ")
-		if err != nil {
-			return
-		}
-		if err := fsutil.WriteFileAtomic(path, data, 0o644); err != nil {
+		if err := playlistcache.Save(path, cache); err != nil {
 			a.update(func() {
 				a.appendLog("歌单缓存保存失败："+friendlyError(err), "warning")
 			})

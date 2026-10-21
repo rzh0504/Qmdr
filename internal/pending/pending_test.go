@@ -1,23 +1,25 @@
-package main
+package pending
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/rzh0504/qmdr/internal/model"
 )
 
-func TestPendingStateRoundTrip(t *testing.T) {
+func TestStateRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "pending.json")
-	songs := []Song{
+	songs := []model.Song{
 		{Mid: "a", Title: "A"},
 		{Mid: "a", Title: "duplicate"},
 		{Mid: "", Title: "missing mid"},
 		{Mid: "b", Title: "B"},
 	}
-	if err := savePendingFile(path, songs); err != nil {
+	if err := SaveFile(path, songs); err != nil {
 		t.Fatal(err)
 	}
-	got := loadPendingFile(path)
+	got := LoadFile(path)
 	if len(got) != 2 {
 		t.Fatalf("loaded %d songs, want 2", len(got))
 	}
@@ -26,12 +28,12 @@ func TestPendingStateRoundTrip(t *testing.T) {
 	}
 }
 
-func TestPendingStateCorruptFile(t *testing.T) {
+func TestCorruptFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "pending.json")
 	if err := os.WriteFile(path, []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := loadPendingFile(path); len(got) != 0 {
+	if got := LoadFile(path); len(got) != 0 {
 		t.Fatalf("corrupt file loaded %d songs, want none", len(got))
 	}
 }

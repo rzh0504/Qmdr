@@ -2,87 +2,32 @@ package main
 
 import (
 	"encoding/json"
-	"os"
-	"path/filepath"
 
 	"github.com/rzh0504/qmdr/internal/fsutil"
+	"github.com/rzh0504/qmdr/internal/settings"
 )
 
-type appSettings struct {
-	DownloadDir string  `json:"download_dir"`
-	Quality     string  `json:"quality"`
-	CoverSize   string  `json:"cover_size"`
-	Overwrite   bool    `json:"overwrite"`
-	Concurrency float64 `json:"concurrency"`
-	Appearance  string  `json:"appearance"`
-	Background  string  `json:"background"`
-	HistoryKeep string  `json:"history_keep"`
-	ShowExplore bool    `json:"show_explore"`
-}
+var qualityOptions = settings.QualityOptions
+var coverSizeOptions = settings.CoverSizeOptions
+var historyKeepOptions = settings.HistoryKeepOptions
 
-func settingsPath() string {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return ""
+func loadSettings() settings.Settings {
+	s := settings.LoadFile(settings.Path())
+	if !validAppearance(s.Appearance) {
+		s.Appearance = "light"
 	}
-	return filepath.Join(dir, "Qmdr", "settings.json")
-}
-
-func defaultSettings() appSettings {
-	return appSettings{
-		DownloadDir: defaultDownloadDir(),
-		Quality:     "FLAC 无损",
-		CoverSize:   "800 px",
-		Concurrency: 3,
-		Appearance:  "light",
-		Background:  "rex",
-		HistoryKeep: "90 天",
+	if !validBackground(s.Background) {
+		s.Background = "rex"
 	}
-}
-
-func loadSettings() appSettings {
-	settings := defaultSettings()
-	path := settingsPath()
-	if path == "" {
-		return settings
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return settings
-	}
-	if err := json.Unmarshal(data, &settings); err != nil {
-		return defaultSettings()
-	}
-	if settings.DownloadDir == "" {
-		settings.DownloadDir = defaultDownloadDir()
-	}
-	if !validQuality(settings.Quality) {
-		settings.Quality = "FLAC 无损"
-	}
-	if !validCoverSize(settings.CoverSize) {
-		settings.CoverSize = "800 px"
-	}
-	if settings.Concurrency < 1 || settings.Concurrency > 8 {
-		settings.Concurrency = 3
-	}
-	if !validAppearance(settings.Appearance) {
-		settings.Appearance = "light"
-	}
-	if !validBackground(settings.Background) {
-		settings.Background = "rex"
-	}
-	if !validHistoryKeep(settings.HistoryKeep) {
-		settings.HistoryKeep = "90 天"
-	}
-	return settings
+	return s
 }
 
 func (a *app) saveSettings() {
-	path := settingsPath()
+	path := settings.Path()
 	if path == "" {
 		return
 	}
-	settings := appSettings{
+	current := settings.Settings{
 		DownloadDir: a.downloadDir,
 		Quality:     a.quality,
 		CoverSize:   a.coverSize,
@@ -94,7 +39,7 @@ func (a *app) saveSettings() {
 		ShowExplore: a.showExplore,
 	}
 	a.dispatchDisk(func() {
-		data, err := json.MarshalIndent(settings, "", "  ")
+		data, err := json.MarshalIndent(current, "", "  ")
 		if err != nil {
 			a.update(func() { a.toast = "保存设置失败：" + friendlyError(err) })
 			return
@@ -103,46 +48,4 @@ func (a *app) saveSettings() {
 			a.update(func() { a.toast = "保存设置失败：" + friendlyError(err) })
 		}
 	})
-}
-
-func validQuality(value string) bool {
-	for _, option := range qualityOptions {
-		if value == option {
-			return true
-		}
-	}
-	return false
-}
-
-func validCoverSize(value string) bool {
-	for _, option := range coverSizeOptions {
-		if value == option {
-			return true
-		}
-	}
-	return false
-}
-
-func validHistoryKeep(value string) bool {
-	for _, option := range historyKeepOptions {
-		if value == option {
-			return true
-		}
-	}
-	return false
-}
-
-func historyKeepDays(value string) int {
-	switch value {
-	case "30 天":
-		return 30
-	case "90 天":
-		return 90
-	case "180 天":
-		return 180
-	case "365 天":
-		return 365
-	default:
-		return 0
-	}
 }

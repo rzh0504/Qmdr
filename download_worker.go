@@ -135,7 +135,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 	metaErr := a.writeMetadataSafely(metaCtx, task, dest, coverSize)
 	metaCancel()
 
-	size := fileSize(dest)
+	size := fsutil.FileSize(dest)
 	if size == 0 {
 		size = written
 	}
@@ -203,7 +203,7 @@ func (a *app) markFailed(runID int, task downloadTask, err error) {
 }
 
 func (a *app) markSkipped(runID int, task downloadTask, dest, quality string) {
-	size := fileSize(dest)
+	size := fsutil.FileSize(dest)
 	record := history.Record{
 		SongMID:     task.Mid,
 		Title:       task.Title,

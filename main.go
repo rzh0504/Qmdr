@@ -10,6 +10,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
+	"github.com/rzh0504/qmdr/internal/settings"
 )
 
 func (a *app) viewRoot(c *ui.Context) {
@@ -382,7 +383,7 @@ func main() {
 
 	mygo.App.WhenReady(func() {
 		if err := os.MkdirAll(a.downloadDir, 0o755); err != nil {
-			a.downloadDir = defaultDownloadDir()
+			a.downloadDir = settings.DefaultDownloadDir()
 		}
 		cleanPartFiles(a.downloadDir)
 		options := mygo.WindowOptions{

@@ -10,7 +10,9 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/rzh0504/qmdr/internal/format"
 	"github.com/rzh0504/qmdr/internal/history"
+	"github.com/rzh0504/qmdr/internal/settings"
 )
 
 const historyPageSize = 200
@@ -71,7 +73,7 @@ func (a *app) pruneHistoryNow() {
 	if store == nil {
 		return
 	}
-	days := historyKeepDays(a.historyKeep)
+	days := settings.HistoryKeepDays(a.historyKeep)
 	if days <= 0 {
 		return
 	}
@@ -294,7 +296,7 @@ func (a *app) historyView(c *ui.Context, col colors) {
 			})
 		}
 
-		sizeText := formatFileSize(a.history.bytes)
+		sizeText := format.ByteSize(a.history.bytes)
 		if sizeText == "" {
 			sizeText = "0 B"
 		}
@@ -337,7 +339,7 @@ func (a *app) historyRow(c *ui.Context, col colors, record history.Record) {
 				TextColor(col.muted).SingleLine()
 		})
 		ui.Text(c, record.Quality).Width(56).FontSize(11).TextColor(col.muted).SingleLine()
-		ui.Text(c, formatFileSize(record.FileSize)).Width(70).FontSize(11).
+		ui.Text(c, format.ByteSize(record.FileSize)).Width(70).FontSize(11).
 			TextColor(col.muted).SingleLine()
 		ui.Text(c, record.CompletedAt.Local().Format("2006-01-02 15:04")).Width(116).
 			FontSize(11).TextColor(col.faint).SingleLine()
