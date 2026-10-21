@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -46,7 +47,42 @@ func (a *app) initHistory() {
 			a.historyErr = "读取统计失败：" + friendlyError(statsErr)
 		}
 		a.flushHistoryBacklog()
+		a.pruneHistoryNow()
 	})
+}
+
+func (a *app) pruneHistoryNow() {
+	store := a.historyStore
+	if store == nil {
+		return
+	}
+	days := historyKeepDays(a.historyKeep)
+	if days <= 0 {
+		return
+	}
+	cutoff := time.Now().AddDate(0, 0, -days)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	removed, err := store.Prune(ctx, cutoff)
+	if err != nil {
+		a.setToast("清理过期下载历史失败：" + friendlyError(err))
+		return
+	}
+	if removed == 0 {
+		return
+	}
+	items := a.historyItems[:0]
+	for _, record := range a.historyItems {
+		if !record.CompletedAt.Before(cutoff) {
+			items = append(items, record)
+		}
+	}
+	a.historyItems = items
+	if stats, err := store.Stats(ctx); err == nil {
+		a.historyCount = stats.Count
+		a.historyBytes = stats.Bytes
+	}
+	a.setToast(fmt.Sprintf("已清理 %d 条过期下载记录", removed))
 }
 
 func (a *app) retryHistory() {

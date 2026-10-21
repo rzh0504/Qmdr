@@ -16,6 +16,7 @@ type appSettings struct {
 	Concurrency float64 `json:"concurrency"`
 	Appearance  string  `json:"appearance"`
 	Background  string  `json:"background"`
+	HistoryKeep string  `json:"history_keep"`
 }
 
 func settingsPath() string {
@@ -34,6 +35,7 @@ func loadSettings() appSettings {
 		Concurrency: 3,
 		Appearance:  "light",
 		Background:  "rex",
+		HistoryKeep: "90 天",
 	}
 	path := settingsPath()
 	if path == "" {
@@ -51,6 +53,7 @@ func loadSettings() appSettings {
 			Concurrency: 3,
 			Appearance:  "light",
 			Background:  "rex",
+			HistoryKeep: "90 天",
 		}
 	}
 	if settings.DownloadDir == "" {
@@ -71,6 +74,9 @@ func loadSettings() appSettings {
 	if !validBackground(settings.Background) {
 		settings.Background = "rex"
 	}
+	if !validHistoryKeep(settings.HistoryKeep) {
+		settings.HistoryKeep = "90 天"
+	}
 	return settings
 }
 
@@ -87,6 +93,7 @@ func (a *app) saveSettings() {
 		Concurrency: a.concurrency,
 		Appearance:  a.appearance,
 		Background:  a.background,
+		HistoryKeep: a.historyKeep,
 	}
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
@@ -114,4 +121,28 @@ func validCoverSize(value string) bool {
 		}
 	}
 	return false
+}
+
+func validHistoryKeep(value string) bool {
+	for _, option := range historyKeepOptions {
+		if value == option {
+			return true
+		}
+	}
+	return false
+}
+
+func historyKeepDays(value string) int {
+	switch value {
+	case "30 天":
+		return 30
+	case "90 天":
+		return 90
+	case "180 天":
+		return 180
+	case "365 天":
+		return 365
+	default:
+		return 0
+	}
 }

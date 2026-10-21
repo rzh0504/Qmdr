@@ -202,6 +202,12 @@ func (a *app) downloadSettings(c *ui.Context, col colors) {
 			a.saveSettings()
 		}
 	})
+	a.settingRow(c, col, "下载历史保留", "超出保存天数的记录会自动清理，不会删除文件", false, func() {
+		selectControl(c, col, &a.historyKeep, historyKeepOptions, 120, col.control, func() {
+			a.saveSettings()
+			a.pruneHistoryNow()
+		})
+	})
 }
 
 func (a *app) aboutSettings(c *ui.Context, col colors) {

@@ -68,3 +68,4 @@ type LogEntry struct {
 
 var qualityOptions = []string{"臻品母带", "FLAC 无损", "MP3 320K", "MP3 128K"}
 var coverSizeOptions = []string{"150 px", "300 px", "500 px", "800 px"}
+var historyKeepOptions = []string{"30 天", "90 天", "180 天", "365 天", "永久"}

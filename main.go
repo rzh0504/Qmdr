@@ -91,6 +91,8 @@ type app struct {
 	historyErr     string
 	historyLoading bool
 
+	historyKeep string
+
 	downloadDir string
 	coverSize   string
 	concurrency float64
@@ -145,6 +147,7 @@ func newApp() *app {
 		overwrite:        settings.Overwrite,
 		appearance:       settings.Appearance,
 		background:       settings.Background,
+		historyKeep:      settings.HistoryKeep,
 		loggedIn:         api.HasCredential(),
 		userID:           displayUser,
 		loginType:        loginType,
@@ -388,6 +391,7 @@ func (a *app) setPage(page string) {
 		a.view = viewQueue
 	case "history":
 		a.view = viewHistory
+		a.pruneHistoryNow()
 	case "settings":
 		a.view = viewSettings
 	default:

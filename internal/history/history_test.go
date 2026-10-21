@@ -67,6 +67,21 @@ func TestStoreRecordsStatsAndClear(t *testing.T) {
 		t.Fatalf("stats = %+v, want count 2 bytes 3072", stats)
 	}
 
+	removed, err := store.Prune(ctx, base.Add(30*time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed != 1 {
+		t.Fatalf("Prune removed %d records, want 1", removed)
+	}
+	stats, err = store.Stats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Count != 1 || stats.Bytes != 2048 {
+		t.Fatalf("stats after prune = %+v, want count 1 bytes 2048", stats)
+	}
+
 	if err := store.Clear(ctx); err != nil {
 		t.Fatal(err)
 	}

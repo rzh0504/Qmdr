@@ -168,6 +168,14 @@ func (s *Store) Clear(ctx context.Context) error {
 	return err
 }
 
+func (s *Store) Prune(ctx context.Context, before time.Time) (int64, error) {
+	result, err := s.db.Execute(ctx, `DELETE FROM downloads WHERE completed_at < ?`, before.Unix())
+	if err != nil {
+		return 0, err
+	}
+	return result.Changes, nil
+}
+
 func (s *Store) Close() error {
 	if s == nil || s.db == nil {
 		return nil
