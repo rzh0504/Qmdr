@@ -403,16 +403,19 @@ func toggleSwitch(c *ui.Context, col colors, on *bool) ui.Element {
 
 func playlistCover(c *ui.Context, col colors, playlist Playlist, size float32) ui.Element {
 	liked := playlist.DirID == 201
-	box := ui.Box(c).Size(size, size).Radius(6).Background(col.chip)
+	box := ui.Box(c).Size(size, size).Radius(6)
 	icon := iconPlaylist
 	tint := col.faint
+	extent := float32(0.36)
 	if liked {
-		box.Background(col.red.Alpha(0.12))
 		icon, tint = iconHeartFilled, col.red
+		extent = 0.46
+	} else {
+		box.Background(col.chip)
 	}
 	box.Children(func() {
 		ui.Row(c).Fill().Center().Children(func() {
-			ui.Icon(c, icon).Size(size*0.36, size*0.36).TextColor(tint)
+			ui.Icon(c, icon).Size(size*extent, size*extent).TextColor(tint)
 		})
 	})
 	return box
