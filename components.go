@@ -249,17 +249,44 @@ func textLink(c *ui.Context, col colors, label string, onClick func()) ui.Elemen
 }
 
 func selectControl(c *ui.Context, col colors, value *string, options []string, width float32, bg ui.Color, onChange func()) ui.Element {
-	box := ui.Row(c).Height(30).Padding(0, 5).Radius(7).Background(bg).AlignItems(ui.Center)
-	if box.Hovered() {
-		box.Background(bg.Mix(col.text, 0.04))
+	sel := ui.SelectBase(c, value)
+	trigger := sel.Trigger.Height(30).Padding(0, 10).Gap(8).Radius(7).
+		Background(bg).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(*value)
+	if width > 0 {
+		trigger.Width(width)
 	}
-	box.Children(func() {
-		sel := ui.Select(c, value, options).Width(width).Height(28)
-		if sel.Changed() && onChange != nil {
-			onChange()
+	switch {
+	case trigger.Pressed():
+		trigger.Background(bg.Mix(col.text, 0.08))
+	case trigger.Hovered():
+		trigger.Background(bg.Mix(col.text, 0.04))
+	}
+	if trigger.Changed() && onChange != nil {
+		onChange()
+	}
+	trigger.Children(func() {
+		ui.Text(c, *value).FontSize(13).TextColor(col.text).Grow(1).MinWidth(0).SingleLine()
+		ui.Icon(c, iconChevronDown).Size(13, 13).TextColor(col.muted)
+	})
+	sel.Popup(func(panel ui.Element) {
+		panel.Padding(4).Radius(10).Background(col.card).Border(1, col.border).
+			Shadow(0, 1, 3, 0, col.shadow).
+			Shadow(0, 8, 24, 0, col.floatShadow)
+		for _, option := range options {
+			item := sel.Item(option).Height(28).Padding(0, 10).Radius(6).AlignItems(ui.Center)
+			fg := col.text
+			if item.Highlighted() {
+				item.Background(col.accent)
+				fg = col.accentText
+			} else if option == *value {
+				item.Background(col.chip)
+			}
+			item.Children(func() {
+				ui.Text(c, option).FontSize(13).TextColor(fg).SingleLine()
+			})
 		}
 	})
-	return box
+	return trigger
 }
 
 func segmentedControl(c *ui.Context, col colors, selected *int, labels ...string) ui.Element {
