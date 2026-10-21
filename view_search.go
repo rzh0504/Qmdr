@@ -44,7 +44,7 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 func (a *app) searchResults(c *ui.Context, col colors) {
 	if !a.hasSearched {
 		ui.Column(c).Grow(1).FillWidth().Center().Children(func() {
-			emptyState(c, col, iconSearch, "搜索并下载", "输入歌曲、歌手或专辑名，结果会直接带上封面。")
+			emptyState(c, col, iconSearch, "搜索", "支持歌曲、歌手、专辑搜索")
 		})
 		return
 	}
