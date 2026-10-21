@@ -6,6 +6,10 @@ func mustIcon(body string) *ui.SVG {
 	return ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">` + body + `</svg>`))
 }
 
+func mustFilledIcon(body string) *ui.SVG {
+	return ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="none">` + body + `</svg>`))
+}
+
 var (
 	iconSearch       = mustIcon(`<circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/>`)
 	iconLibrary      = mustIcon(`<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>`)
@@ -37,6 +41,8 @@ var (
 	iconDisc         = mustIcon(`<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>`)
 	iconGauge        = mustIcon(`<path d="M4.5 19a9 9 0 1 1 15 0"/><path d="m12 13 4-4"/><circle cx="12" cy="13" r="1"/>`)
 	iconHeart        = mustIcon(`<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>`)
+	iconHeartFilled  = mustFilledIcon(`<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>`)
+	iconPlaylist     = mustIcon(`<path d="M21 15V6"/><circle cx="18.5" cy="15.5" r="2.5"/><path d="M12 12H3M16 6H3M12 18H3"/>`)
 	iconPlus         = mustIcon(`<path d="M12 5v14M5 12h14"/>`)
 	iconMinus        = mustIcon(`<path d="M5 12h14"/>`)
 	iconWifi         = mustIcon(`<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5.5 5.5 0 0 1 7 0M12 20h.01"/>`)
