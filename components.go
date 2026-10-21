@@ -188,15 +188,15 @@ func iconButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClick f
 }
 
 func primaryButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClick func()) ui.Element {
-	btn := ui.ButtonBase(c).Height(30).Padding(0, 14).Gap(6).Radius(8).
+	btn := ui.ButtonBase(c).Height(30).Padding(0, 14).Gap(6).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label)
-	bg := col.accent
+	fill := col.accent
 	if btn.Pressed() {
-		bg = col.accentPressed
+		fill = col.accentPressed
 	} else if btn.Hovered() {
-		bg = col.accentHover
+		fill = col.accentHover
 	}
-	btn.Background(bg)
+	smoothFlat(btn, col, 8, fill)
 	if btn.Clicked() && onClick != nil {
 		onClick()
 	}
@@ -260,17 +260,19 @@ func textLink(c *ui.Context, col colors, label string, onClick func()) ui.Elemen
 
 func selectControl(c *ui.Context, col colors, value *string, options []string, width float32, bg ui.Color, onChange func()) ui.Element {
 	sel := ui.SelectBase(c, value)
-	trigger := sel.Trigger.Height(30).Padding(0, 10).Gap(8).Radius(7).
-		Background(bg).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(*value)
+	trigger := sel.Trigger.Height(30).Padding(0, 10).Gap(8).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(*value)
 	if width > 0 {
 		trigger.Width(width)
 	}
+	fill := bg
 	switch {
 	case trigger.Pressed():
-		trigger.Background(bg.Mix(col.text, 0.08))
+		fill = bg.Mix(col.text, 0.08)
 	case trigger.Hovered():
-		trigger.Background(bg.Mix(col.text, 0.04))
+		fill = bg.Mix(col.text, 0.04)
 	}
+	smoothFlat(trigger, col, 7, fill)
 	if trigger.Changed() && onChange != nil {
 		onChange()
 	}
