@@ -206,7 +206,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 						onSelect:    func() { a.toggleSongSelection(song) },
 						onLongPress: longPress,
 					})
-					a.openSongMenu(row, song)
+					a.openSongMenu(row, song, a.playlists.selecting)
 				}
 			})
 		}

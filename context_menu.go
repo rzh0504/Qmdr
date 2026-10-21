@@ -5,7 +5,6 @@ import (
 )
 
 const (
-	contextMenuWidth     = 188
 	contextMenuItemH     = 30
 	contextMenuSeparator = 9
 	contextMenuPadding   = 4
@@ -13,8 +12,10 @@ const (
 )
 
 // songMenuItems lists the actions a song row's context menu offers.
-func (a *app) songMenuItems(song Song) []menuAction {
-	if a.playlists.selecting {
+// selecting is passed by the playlists page only, so a hidden selection
+// mode there never changes the menu of another list.
+func (a *app) songMenuItems(song Song, selecting bool) []menuAction {
+	if selecting {
 		return []menuAction{
 			{label: "下载选中歌曲", disabled: a.selectedSongCount() == 0, run: a.downloadSelectedSongs},
 			{label: "选中项加入待下载队列", run: a.addSelectedToPending},
@@ -30,7 +31,7 @@ func (a *app) songMenuItems(song Song) []menuAction {
 }
 
 // openSongMenu opens the menu at the pointer when row was right-clicked.
-func (a *app) openSongMenu(row ui.Element, song Song) {
+func (a *app) openSongMenu(row ui.Element, song Song, selecting bool) {
 	if !row.RightClicked() {
 		return
 	}
@@ -39,8 +40,21 @@ func (a *app) openSongMenu(row ui.Element, song Song) {
 	if !over {
 		x, y = b.W/2, b.H/2
 	}
-	a.contextMenu = contextMenuState{open: true, x: b.X + x, y: b.Y + y, items: a.songMenuItems(song)}
+	a.contextMenu = contextMenuState{open: true, x: b.X + x, y: b.Y + y, items: a.songMenuItems(song, selecting)}
 	a.refresh()
+}
+
+// contextMenuWidthFor fits the menu to its longest label, so short menus
+// do not carry the width of the longest selection item.
+func contextMenuWidthFor(items []menuAction) float32 {
+	width := float32(0)
+	for _, item := range items {
+		if item.separator {
+			continue
+		}
+		width = max(width, 40+13*float32(len([]rune(item.label))))
+	}
+	return max(140, min(width, 220))
 }
 
 func (a *app) closeMenu() {
@@ -66,7 +80,7 @@ func (a *app) menuView(c *ui.Context, col colors) {
 			height += contextMenuItemH
 		}
 	}
-	width := float32(contextMenuWidth)
+	width := contextMenuWidthFor(menu.items)
 	winW, winH := c.Size()
 	x := min(max(menu.x, 8), max(8, winW-width-8))
 	y := min(max(menu.y, 8), max(8, winH-height-8))
@@ -91,7 +105,7 @@ func (a *app) menuView(c *ui.Context, col colors) {
 					continue
 				}
 				row := ui.ButtonBase(c).Height(contextMenuItemH).FillWidth().Radius(7).
-					Padding(0, 10).AlignItems(ui.Center)
+					Padding(0, 10).Justify(ui.Start).AlignItems(ui.Center)
 				if !item.disabled {
 					row.Cursor(ui.CursorPointer)
 					if row.Hovered() {
