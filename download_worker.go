@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rzh0504/qmdr/internal/fsutil"
 	"github.com/rzh0504/qmdr/internal/history"
 )
 
@@ -94,7 +95,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		return
 	}
 
-	base := sanitizeFilename(task.Artist + " - " + task.Title)
+	base := fsutil.SanitizeFilename(task.Artist + " - " + task.Title)
 	dest, claim := claims.reserve(dir, base, resolved.Ext, overwrite)
 	switch claim {
 	case claimSkip:

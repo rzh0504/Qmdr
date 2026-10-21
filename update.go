@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/version"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"time"
 
@@ -57,7 +57,7 @@ func (a *app) checkUpdates() {
 			return
 		}
 		latest := strings.TrimPrefix(strings.TrimSpace(release.TagName), "v")
-		if compareVersions(latest, appVersion) <= 0 {
+		if version.Compare(latest, appVersion) <= 0 {
 			a.update(func() { a.toast = "已是最新版本 v" + appVersion })
 			return
 		}
@@ -168,45 +168,4 @@ func fetchLatestReleaseAPI(ctx context.Context) (releaseInfo, error) {
 		return releaseInfo{}, fmt.Errorf("无法读取更新信息：%w", err)
 	}
 	return release, nil
-}
-
-func compareVersions(a, b string) int {
-	av, bv := versionParts(a), versionParts(b)
-	n := max(len(av), len(bv))
-	for i := 0; i < n; i++ {
-		var x, y int
-		if i < len(av) {
-			x = av[i]
-		}
-		if i < len(bv) {
-			y = bv[i]
-		}
-		if x != y {
-			if x > y {
-				return 1
-			}
-			return -1
-		}
-	}
-	return 0
-}
-
-func versionParts(v string) []int {
-	v = strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(v, "v"), "V"))
-	if i := strings.IndexAny(v, "-+ "); i >= 0 {
-		v = v[:i]
-	}
-	if v == "" {
-		return nil
-	}
-	fields := strings.Split(v, ".")
-	parts := make([]int, len(fields))
-	for i, field := range fields {
-		n, err := strconv.Atoi(field)
-		if err != nil {
-			n = 0
-		}
-		parts[i] = n
-	}
-	return parts
 }

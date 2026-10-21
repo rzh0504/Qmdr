@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/rzh0504/qmdr/internal/fsutil"
 	"github.com/rzh0504/qmdr/internal/tag"
 )
 
@@ -50,7 +50,7 @@ func (c *downloadClaims) reserve(dir, base, ext string, overwrite bool) (string,
 		if i > 1 {
 			name = fmt.Sprintf("%s (%d)%s", base, i, ext)
 		}
-		dest, err := safeDownloadPath(dir, name)
+		dest, err := fsutil.SafePath(dir, name)
 		if err != nil {
 			return "", claimExhausted
 		}
@@ -146,55 +146,4 @@ func formatFileSize(size int64) string {
 	default:
 		return fmt.Sprintf("%d B", size)
 	}
-}
-
-func sanitizeFilename(name string) string {
-	name = strings.Map(func(r rune) rune {
-		switch r {
-		case '\\', '/', ':', '*', '?', '"', '<', '>', '|':
-			return '_'
-		}
-		if r < 32 {
-			return -1
-		}
-		return r
-	}, name)
-	// Windows drops trailing dots and spaces when it saves the file, so
-	// trim them here to keep the stored path equal to the real one;
-	// leading whitespace goes too, as the reference backend trims it.
-	name = strings.TrimRight(strings.TrimSpace(name), " .")
-	if name == "" {
-		name = "未知歌曲"
-	}
-	base := strings.ToUpper(strings.TrimSuffix(name, filepath.Ext(name)))
-	switch base {
-	case "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
-		name = "_" + name
-	}
-	runes := []rune(name)
-	const maxRunes = 160
-	if len(runes) > maxRunes {
-		name = strings.TrimRight(strings.TrimSpace(string(runes[:maxRunes])), " .")
-		if name == "" {
-			name = "未知歌曲"
-		}
-	}
-	return name
-}
-
-func safeDownloadPath(base, name string) (string, error) {
-	if strings.TrimSpace(base) == "" {
-		return "", errors.New("未设置下载目录")
-	}
-	absBase, err := filepath.Abs(base)
-	if err != nil {
-		return "", err
-	}
-	dest := filepath.Join(absBase, name)
-	rel, err := filepath.Rel(absBase, dest)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", errors.New("无效的下载路径")
-	}
-	return dest, nil
 }

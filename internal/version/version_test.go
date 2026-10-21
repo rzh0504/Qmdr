@@ -1,8 +1,8 @@
-package main
+package version
 
 import "testing"
 
-func TestCompareVersions(t *testing.T) {
+func TestCompare(t *testing.T) {
 	tests := []struct {
 		a, b string
 		want int
@@ -16,8 +16,8 @@ func TestCompareVersions(t *testing.T) {
 		{"", "0.2.0", -1},
 	}
 	for _, tt := range tests {
-		if got := compareVersions(tt.a, tt.b); got != tt.want {
-			t.Errorf("compareVersions(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+		if got := Compare(tt.a, tt.b); got != tt.want {
+			t.Errorf("Compare(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
 		}
 	}
 }
