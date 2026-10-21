@@ -10,6 +10,9 @@ wheels/
 .venv
 .agents
 
+# Qoder agent worktrees
+.delta/
+
 # Go build output
 /build/
 /qmdr.exe
