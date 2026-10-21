@@ -10,52 +10,63 @@ import (
 )
 
 func (a *app) settingsView(c *ui.Context, col colors) {
-	pageHeader(c, col, "设置", func() {
-		secondaryButton(c, col, iconFolder, "打开下载目录", func() {
-			a.openDownloadDir()
+	ui.Row(c).FillWidth().Justify(ui.Center).Children(func() {
+		form := ui.Column(c).FillWidth().MaxWidth(720).Gap(22)
+		form.Children(func() {
+			a.settingsGroup(c, col, "账号", func() {
+				a.accountSettings(c, col)
+			})
+			a.settingsGroup(c, col, "下载", func() {
+				a.downloadSettings(c, col)
+			})
+			a.settingsGroup(c, col, "关于", func() {
+				a.aboutSettings(c, col)
+			})
 		})
-	})
-
-	form := ui.Column(c).FillWidth().MaxWidth(760).Gap(16)
-	form.Children(func() {
-		a.settingsSection(c, col, "账号", func() {
-			a.accountSettings(c, col)
-		})
-		divider(c, col)
-		a.settingsSection(c, col, "下载", func() {
-			a.downloadSettings(c, col)
-		})
-		divider(c, col)
-		a.settingsSection(c, col, "高级", func() {
-			a.advancedSettings(c, col)
-		})
-		divider(c, col)
-		a.aboutSettings(c, col)
 	})
 }
 
-func (a *app) settingsSection(c *ui.Context, col colors, title string, fn func()) {
-	ui.Column(c).Gap(8).Children(func() {
-		ui.Text(c, title).FontSize(11).Bold().TextColor(col.muted)
-		fn()
+func (a *app) settingsGroup(c *ui.Context, col colors, title string, fn func()) {
+	ui.Column(c).FillWidth().Gap(8).Children(func() {
+		groupTitle(c, col, title)
+		ui.Column(c).FillWidth().Radius(12).Background(col.chip).Padding(2, 16).
+			Children(fn)
 	})
 }
 
-func (a *app) settingsRow(c *ui.Context, col colors, label string, control func()) {
-	ui.Row(c).FillWidth().MinHeight(32).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, label).Width(130).FontSize(11).TextColor(col.muted)
-		ui.Row(c).Grow(1).AlignItems(ui.Center).Children(control)
+func (a *app) settingRow(c *ui.Context, col colors, label, detail string, first bool, control func()) {
+	if !first {
+		divider(c, col)
+	}
+	ui.Row(c).FillWidth().MinHeight(46).Padding(11, 0).Gap(16).
+		AlignItems(ui.Center).Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() {
+			ui.Text(c, label).FontSize(13).TextColor(col.text)
+			if detail != "" {
+				ui.Text(c, detail).FontSize(12).TextColor(col.muted).LineHeight(1.35)
+			}
+		})
+		ui.Row(c).Shrink(0).Gap(8).AlignItems(ui.Center).Children(control)
 	})
+}
+
+func (a *app) textField(c *ui.Context, col colors, value *string, placeholder string, width float32) ui.Element {
+	return ui.TextInput(c, value).
+		Placeholder(placeholder).
+		Label(placeholder).
+		Width(width).Height(30).FontSize(13).
+		Background(col.control).InsetShadow(0, 0, 0, 1, ui.RGBA(0, 0, 0, 0.13)).
+		Radius(7)
 }
 
 func (a *app) accountSettings(c *ui.Context, col colors) {
-	ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+	ui.Row(c).FillWidth().MinHeight(58).Padding(11, 0).Gap(10).
+		AlignItems(ui.Center).Children(func() {
 		a.avatar(c, col, 34)
-		ui.Box(c).Width(8)
-		ui.Column(c).Gap(1).Grow(1).Children(func() {
-			ui.Text(c, "Qmdr 账号").FontSize(12).Bold().TextColor(col.text)
+		ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+			ui.Text(c, "Qmdr 账号").FontSize(13).FontWeight(500).TextColor(col.text)
 			ui.Textf(c, "%s · %s 登录", a.userID, a.loginType).
-				FontSize(10).TextColor(col.muted)
+				FontSize(12).TextColor(col.muted)
 		})
 		status := "未登录"
 		dot := col.faint
@@ -63,20 +74,21 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 			status = "已登录"
 			dot = col.green
 		}
-		ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Size(6, 6).Radius(3).Background(dot)
-			ui.Text(c, status).FontSize(10).TextColor(col.muted)
+			ui.Text(c, status).FontSize(12).TextColor(col.muted)
 		})
 	})
-
-	ui.Row(c).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
+	a.settingRow(c, col, "登录方式", "", false, func() {
 		primaryButton(c, col, iconLogin, "QQ 登录", func() {
 			a.openQR("QQ")
 		})
 		secondaryButton(c, col, iconLogin, "微信登录", func() {
 			a.openQR("微信")
 		})
-		ghostButton(c, col, iconRefresh, "重新加载凭证", func() {
+	})
+	a.settingRow(c, col, "本地凭证", "重新读取或导出保存的登录凭证", false, func() {
+		ghostButton(c, col, iconRefresh, "重新加载", func() {
 			a.reloadCredential()
 		})
 		ghostButton(c, col, iconExternal, "导出 JSON", func() {
@@ -86,12 +98,8 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 }
 
 func (a *app) downloadSettings(c *ui.Context, col colors) {
-	a.settingsRow(c, col, "下载目录", func() {
-		input := ui.TextInput(c, &a.downloadDir).
-			Placeholder("选择下载目录").
-			Label("下载目录").
-			Grow(1).Height(30).
-			Background(col.cardAlt).Border(1, col.border).Radius(6)
+	a.settingRow(c, col, "下载目录", "", true, func() {
+		input := a.textField(c, col, &a.downloadDir, "选择下载目录", 300)
 		if input.Changed() {
 			a.saveSettings()
 		}
@@ -99,57 +107,38 @@ func (a *app) downloadSettings(c *ui.Context, col colors) {
 			a.pickDir()
 		})
 	})
-	a.settingsRow(c, col, "默认音质", func() {
-		selectInput := ui.Select(c, &a.quality, qualityOptions).Width(180)
-		if selectInput.Changed() {
+	a.settingRow(c, col, "默认音质", "", false, func() {
+		selectControl(c, col, &a.quality, qualityOptions, 160, col.control, func() {
 			a.saveSettings()
-		}
-	})
-	a.settingsRow(c, col, "封面尺寸", func() {
-		selectInput := ui.Select(c, &a.coverSize, coverSizeOptions).Width(120)
-		if selectInput.Changed() {
-			a.saveSettings()
-		}
-	})
-	a.settingsRow(c, col, "下载并发", func() {
-		input := ui.NumberInput(c, &a.concurrency, 1, 8, 1).Label("下载并发").Width(100)
-		if input.Changed() {
-			a.saveSettings()
-		}
-	})
-	a.settingsRow(c, col, "覆盖文件", func() {
-		checkbox := ui.Checkbox(c, &a.overwrite, "覆盖已存在的文件")
-		if checkbox.Changed() {
-			a.saveSettings()
-		}
-	})
-}
-
-func (a *app) advancedSettings(c *ui.Context, col colors) {
-	a.settingsRow(c, col, "外部凭证 API", func() {
-		ui.TextInput(c, &a.externalAPI).
-			Placeholder("https://example.com").
-			Label("外部凭证 API").
-			Grow(1).Height(30).
-			Background(col.cardAlt).Border(1, col.border).Radius(6)
-		secondaryButton(c, col, iconRefresh, "重新加载", func() {
-			a.reloadExternalAPI()
 		})
+	})
+	a.settingRow(c, col, "封面尺寸", "", false, func() {
+		selectControl(c, col, &a.coverSize, coverSizeOptions, 100, col.control, func() {
+			a.saveSettings()
+		})
+	})
+	a.settingRow(c, col, "下载并发", "同时下载的歌曲数量", false, func() {
+		stepperControl(c, col, &a.concurrency, 1, 8, 1, func() {
+			a.saveSettings()
+		})
+	})
+	a.settingRow(c, col, "覆盖已存在的文件", "关闭时，同名文件会自动跳过", false, func() {
+		toggle := toggleSwitch(c, col, &a.overwrite)
+		if toggle.Changed() {
+			a.saveSettings()
+		}
 	})
 }
 
 func (a *app) aboutSettings(c *ui.Context, col colors) {
-	ui.Column(c).Gap(8).Children(func() {
-		ui.Text(c, "关于").FontSize(11).Bold().TextColor(col.muted)
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			a.logoMark(c, col, 22)
-			ui.Box(c).Width(8)
-			ui.Text(c, "Qmdr").FontSize(12).Bold().TextColor(col.text)
-			ui.Box(c).Width(8)
-			ui.Text(c, "版本 0.2.0 · GPL-3.0").FontSize(10).TextColor(col.faint)
-			ui.Spacer(c)
-			ui.Text(c, "MyGo 原生 UI").FontSize(10).TextColor(col.faint)
+	ui.Row(c).FillWidth().MinHeight(56).Padding(11, 0).AlignItems(ui.Center).Children(func() {
+		a.logoMark(c, col, 24)
+		ui.Column(c).Gap(2).Padding(0, 0, 0, 10).Children(func() {
+			ui.Text(c, "Qmdr").FontSize(13).FontWeight(500).TextColor(col.text)
+			ui.Text(c, "版本 0.2.0 · GPL-3.0").FontSize(12).TextColor(col.muted)
 		})
+		ui.Spacer(c)
+		ui.Text(c, "MyGo 原生 UI").FontSize(11.5).TextColor(col.faint)
 	})
 }
 
@@ -241,12 +230,4 @@ func (a *app) exportCredential() {
 		}
 		a.update(func() { a.toast = "凭证已导出" })
 	}()
-}
-
-func (a *app) reloadExternalAPI() {
-	if strings.TrimSpace(a.externalAPI) == "" {
-		a.setToast("请先输入外部凭证 API 地址")
-		return
-	}
-	a.setToast("已重新加载外部凭证（UI 演示）")
 }

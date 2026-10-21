@@ -11,31 +11,25 @@ import (
 )
 
 func (a *app) searchView(c *ui.Context, col colors) {
-	pageHeader(c, col, "搜索下载", func() {
-		secondaryButton(c, col, iconFolder, "打开下载目录", func() {
-			a.openDownloadDir()
-		})
-	})
-
 	a.searchToolbar(c, col)
 	a.searchResults(c, col)
 }
 
 func (a *app) searchToolbar(c *ui.Context, col colors) {
-	ui.Column(c).Gap(8).Children(func() {
+	ui.Column(c).Gap(10).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 			searchBox(c, col, &a.query, "搜索歌曲、歌手或专辑",
 				func() { a.doSearch() },
 				func() { a.query = ""; a.refresh() },
 			).Grow(1)
-			ui.Select(c, &a.quality, qualityOptions).Width(150)
+			selectControl(c, col, &a.quality, qualityOptions, 140, col.chip, nil)
 			primaryButton(c, col, iconSearch, "搜索", func() {
 				a.doSearch()
 			})
 		})
 
-		ui.Row(c).Gap(6).AlignItems(ui.Center).Wrap().Children(func() {
-			ui.Text(c, "热门搜索").FontSize(11).TextColor(col.muted)
+		ui.Row(c).Gap(2).AlignItems(ui.Center).Wrap().Children(func() {
+			ui.Text(c, "试试").FontSize(11.5).TextColor(col.faint).Padding(0, 6, 0, 0)
 			for _, tag := range []string{"周杰伦", "华语流行", "深夜电台", "G.E.M. 邓紫棋", "陈奕迅"} {
 				tag := tag
 				textLink(c, col, tag, func() {
@@ -49,66 +43,53 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 
 func (a *app) searchResults(c *ui.Context, col colors) {
 	if !a.hasSearched {
-		sectionHeader(c, col, "搜索歌曲", nil)
-		emptyState(c, col, iconSearch, "还没有搜索", "在上方输入歌曲、歌手或专辑名开始搜索。")
-		return
-	}
-
-	sectionHeader(c, col, "搜索结果", func() {
-		if !a.searching && a.searchErr == "" {
-			ui.Textf(c, "%d 首", len(a.results)).FontSize(10).TextColor(col.muted)
-		}
-		if len(a.results) > 0 && !a.searching {
-			secondaryButton(c, col, iconDownload, "全部下载", func() {
-				a.enqueueSongs(a.results)
-			})
-		}
-	})
-
-	if a.searching {
-		softCard(c, col, func() {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Spinner(c).Size(16, 16)
-				ui.Text(c, "正在搜索…").FontSize(11).TextColor(col.muted)
-			})
+		ui.Column(c).Grow(1).FillWidth().Center().Children(func() {
+			emptyState(c, col, iconSearch, "搜索并下载", "输入歌曲、歌手或专辑名，结果会直接带上封面。")
 		})
 		return
 	}
 
-	if a.searchErr != "" {
-		softCard(c, col, func() {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Icon(c, iconAlert).FontSize(14).TextColor(col.red)
-				ui.Text(c, a.searchErr).FontSize(11).TextColor(col.muted).Grow(1).MaxLines(2)
-				secondaryButton(c, col, iconRefresh, "重试", func() {
-					a.doSearch()
+	ui.Column(c).Gap(8).Children(func() {
+		sectionHeader(c, col, "搜索结果", func() {
+			if !a.searching && a.searchErr == "" {
+				ui.Textf(c, "%d 首", len(a.results)).FontSize(11.5).TextColor(col.faint)
+			}
+			if len(a.results) > 0 && !a.searching {
+				secondaryButton(c, col, iconDownload, "全部下载", func() {
+					a.enqueueSongs(a.results)
+				})
+			}
+		})
+
+		switch {
+		case a.searching:
+			softCard(c, col, func() {
+				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
+					ui.Spinner(c).Size(15, 15)
+					ui.Text(c, "正在搜索…").FontSize(12).TextColor(col.muted)
 				})
 			})
-		})
-		return
-	}
-
-	if len(a.results) == 0 {
-		emptyState(c, col, iconSearch, "没有找到相关歌曲", "换一个关键词试试。")
-		return
-	}
-
-	tableCard(c, col, func() {
-		ui.Row(c).FillWidth().Padding(4, 10).Children(func() {
-			ui.Text(c, "#").Width(24).FontSize(10).TextColor(col.muted)
-			ui.Text(c, "歌曲").Grow(1).FontSize(10).TextColor(col.muted)
-			ui.Text(c, "时长").Width(42).FontSize(10).TextColor(col.muted)
-			ui.Box(c).Width(28)
-		})
-		divider(c, col)
-		for i, song := range a.results {
-			song := song
-			a.songRow(c, col, song, i, true, func() {
-				a.enqueueSongs([]Song{song})
+		case a.searchErr != "":
+			softCard(c, col, func() {
+				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
+					ui.Icon(c, iconAlert).Size(15, 15).TextColor(col.red)
+					ui.Text(c, a.searchErr).FontSize(12).TextColor(col.muted).Grow(1).MaxLines(2)
+					secondaryButton(c, col, iconRefresh, "重试", func() {
+						a.doSearch()
+					})
+				})
 			})
-			if i < len(a.results)-1 {
-				divider(c, col)
-			}
+		case len(a.results) == 0:
+			emptyState(c, col, iconSearch, "没有找到相关歌曲", "换一个关键词试试。")
+		default:
+			sheet(c, col, func() {
+				for i, song := range a.results {
+					song := song
+					a.songRow(c, col, song, i, true, func() {
+						a.enqueueSongs([]Song{song})
+					})
+				}
+			})
 		}
 	})
 }

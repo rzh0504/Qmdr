@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -22,6 +21,13 @@ const (
 	viewPlaylists
 	viewQueue
 	viewSettings
+)
+
+const (
+	barMid  = 30
+	topBar  = barMid * 2
+	cardGap = 8
+	headerH = (barMid - cardGap) * 2
 )
 
 type app struct {
@@ -67,7 +73,6 @@ type app struct {
 	coverSize   string
 	concurrency float64
 	overwrite   bool
-	externalAPI string
 
 	loggedIn  bool
 	userID    string
@@ -134,15 +139,24 @@ func (a *app) viewRoot(c *ui.Context) {
 	}
 
 	ui.Column(c).Fill().LinearGradient(backdropGradient()).Children(func() {
-		a.titleBar(c, col)
-		ui.Row(c).Grow(1).FillWidth().AlignItems(ui.Stretch).Children(func() {
+		row := ui.Row(c).Fill().AlignItems(ui.Stretch).LinearGradient(backdropGlow())
+		row.Children(func() {
 			a.sidebar(c, col)
-			ui.Column(c).Grow(1).MinWidth(0).Padding(8).Children(func() {
-				content := ui.Column(c).Fill().Radius(14).Background(col.card).
-					Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, 0.07)).
-					Shadow(0, 1, 6, 0, ui.RGBA(0, 0, 0, 0.035)).Clip()
+			main := ui.Column(c).Grow(1).MinWidth(0).Padding(cardGap, cardGap, cardGap, cardGap)
+			main.Children(func() {
+				content := ui.Column(c).Fill().Radius(14).Background(col.card)
+				raised(content, col).Clip()
 				content.Children(func() {
-					ui.Scroll(c).Grow(1).Padding(16, 20, 20).Gap(16).Children(func() {
+					a.cardHeader(c, col)
+					if a.view == viewSearch && !a.hasSearched {
+						ui.Column(c).Grow(1).MinHeight(0).
+							Padding(12, 20, 20, 18).Children(func() {
+							a.searchView(c, col)
+						})
+						return
+					}
+					ui.Scroll(c).Grow(1).MinHeight(0).
+						Padding(12, 20, 20, 18).Gap(18).Children(func() {
 						switch a.view {
 						case viewSearch:
 							a.searchView(c, col)
@@ -162,40 +176,76 @@ func (a *app) viewRoot(c *ui.Context) {
 	a.qrModal(c, col)
 }
 
-func (a *app) titleBar(c *ui.Context, col colors) {
-	bar := c.TitleBar()
-	height := float32(44)
-	if bar.Height > height {
-		height = bar.Height
-	}
-	row := ui.Row(c).FillWidth().Height(height).AlignItems(ui.Center).
-		Padding(0, 12, 0, bar.Left+12).
-		DragWindow().
-		Material(glass.Glass{Tint: ui.RGBA(59, 108, 246, 0.08)}).
-		BorderWidth(0, 0, 1, 0).BorderColor(ui.RGBA(0, 0, 0, 0.06))
-	row.Children(func() {
-		a.logoMark(c, col, 22)
-		ui.Box(c).Width(8)
-		ui.Text(c, "Qmdr").FontSize(13).Bold().TextColor(col.text)
+func (a *app) cardHeader(c *ui.Context, col colors) {
+	ui.Row(c).FillWidth().Height(headerH).Shrink(0).AlignItems(ui.Center).
+		Padding(0, 8, 0, 16).DragWindow().Children(func() {
+		ui.Text(c, a.pageTitle()).FontSize(14.5).FontWeight(650).TextColor(col.text)
 		ui.Spacer(c)
+		a.headerActions(c, col)
 		if runtime.GOOS != "darwin" {
+			ui.Box(c).Width(6)
 			a.windowControls(c, col)
 		}
 	})
+}
+
+func (a *app) pageTitle() string {
+	switch a.view {
+	case viewPlaylists:
+		return "歌单"
+	case viewQueue:
+		return "队列"
+	case viewSettings:
+		return "设置"
+	default:
+		return "搜索"
+	}
+}
+
+func (a *app) headerActions(c *ui.Context, col colors) {
+	switch a.view {
+	case viewSearch, viewSettings:
+		iconButton(c, col, iconFolder, "打开下载目录", a.openDownloadDir)
+	case viewPlaylists:
+		if a.loadingPlaylists {
+			ui.Spinner(c).Size(14, 14).Margin(4, 0, 4, 0)
+		} else {
+			iconButton(c, col, iconRefresh, "刷新歌单", a.loadPlaylists)
+		}
+	case viewQueue:
+		_, done, _, active := a.queueCounts()
+		skipped := 0
+		for _, item := range a.queue {
+			if item.Status == StatusSkipped {
+				skipped++
+			}
+		}
+		if a.downloading {
+			ghostDangerButton(c, col, iconX, "取消", a.cancelQueue)
+		}
+		if done+skipped > 0 && !a.downloading {
+			iconButton(c, col, iconTrash, "清理已完成", a.clearCompleted)
+		}
+		if !a.downloading && active > 0 {
+			primaryButton(c, col, iconPlay, "开始", a.startQueue)
+		}
+	}
 }
 
 func (a *app) windowControls(c *ui.Context, col colors) {
 	if a.win == nil {
 		return
 	}
-	ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
-		minimize := ui.ButtonBase(c).Size(28, 24).Radius(6).Center().
-			Label("最小化").Tooltip("最小化").TextColor(col.muted)
-		if minimize.Hovered() {
+	ui.Row(c).Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
+		minimize := ui.ButtonBase(c).Size(28, 26).Radius(6).Justify(ui.Center).
+			AlignItems(ui.Center).Label("最小化").Tooltip("最小化").TextColor(col.muted)
+		if minimize.Pressed() {
+			minimize.Background(col.cardHover.Alpha(0.12))
+		} else if minimize.Hovered() {
 			minimize.Background(col.cardHover).TextColor(col.text)
 		}
 		minimize.Children(func() {
-			ui.Icon(c, iconWinMinimize).FontSize(13)
+			ui.Icon(c, iconWinMinimize).Size(15, 15)
 		})
 		if minimize.Clicked() {
 			a.win.Minimize()
@@ -206,13 +256,15 @@ func (a *app) windowControls(c *ui.Context, col colors) {
 		if maximized {
 			label, icon = "还原", iconWinRestore
 		}
-		maximize := ui.ButtonBase(c).Size(28, 24).Radius(6).Center().
-			Label(label).Tooltip(label).TextColor(col.muted).MaximizeButton()
-		if maximize.Hovered() {
+		maximize := ui.ButtonBase(c).Size(28, 26).Radius(6).Justify(ui.Center).
+			AlignItems(ui.Center).Label(label).TextColor(col.muted).MaximizeButton()
+		if maximize.Pressed() {
+			maximize.Background(col.cardHover.Alpha(0.12))
+		} else if maximize.Hovered() {
 			maximize.Background(col.cardHover).TextColor(col.text)
 		}
 		maximize.Children(func() {
-			ui.Icon(c, icon).FontSize(13)
+			ui.Icon(c, icon).Size(15, 15)
 		})
 		if maximize.Clicked() {
 			if maximized {
@@ -222,13 +274,13 @@ func (a *app) windowControls(c *ui.Context, col colors) {
 			}
 		}
 
-		closeButton := ui.ButtonBase(c).Size(28, 24).Radius(6).Center().
-			Label("关闭").Tooltip("关闭").TextColor(col.muted)
-		if closeButton.Hovered() {
+		closeButton := ui.ButtonBase(c).Size(28, 26).Radius(6).Justify(ui.Center).
+			AlignItems(ui.Center).Label("关闭").Tooltip("关闭").TextColor(col.muted)
+		if closeButton.Hovered() || closeButton.Pressed() {
 			closeButton.Background(col.red).TextColor(ui.RGB(255, 255, 255))
 		}
 		closeButton.Children(func() {
-			ui.Icon(c, iconX).FontSize(13)
+			ui.Icon(c, iconX).Size(15, 15)
 		})
 		if closeButton.Clicked() {
 			a.win.Close()
@@ -323,70 +375,100 @@ func (a *app) setPage(page string) {
 }
 
 func (a *app) sidebar(c *ui.Context, col colors) {
-	side := ui.Column(c).Width(208).FillHeight().Padding(0, 8, 0, 8).Background(col.sidebar)
+	bar := c.TitleBar()
+	side := ui.Column(c).Width(216).Shrink(0).FillHeight().Padding(0, 10, 10, 10)
 
 	side.Children(func() {
-		ui.Text(c, "资料库").FontSize(10).Bold().TextColor(col.faint).Padding(10, 10)
-
-		page := a.pageKey()
-		_, _, _, active := a.queueCounts()
-		nav := ui.Sidebar(c, &page, func() {
-			ui.SidebarItem(c, "search", iconSearch, "搜索下载")
-			ui.SidebarItem(c, "playlists", iconLibrary, "歌单下载")
-			item := ui.SidebarItem(c, "queue", iconQueue, "下载队列")
-			if active > 0 {
-				item.Children(func() {
-					ui.Badge(c, fmt.Sprint(active))
-				})
-			}
-			ui.SidebarItem(c, "settings", iconSettings, "设置")
-		}).Grow(1).Label("导航")
-		if nav.Changed() {
-			a.setPage(page)
-			a.refresh()
-		}
-
-		ui.Box(c).Height(6)
-
-		account := ui.ButtonBase(c).Padding(8, 10).Gap(8).
-			Radius(8).AlignItems(ui.Center).Label("账号设置")
-		if account.Hovered() {
-			account = account.Background(col.cardHover)
-		}
-		if account.Clicked() {
-			a.view = viewSettings
-			a.refresh()
-		}
-		account.Children(func() {
-			a.avatar(c, col, 24)
-			ui.Column(c).Gap(1).Grow(1).Children(func() {
-				status := "未登录"
-				if a.loggedIn {
-					status = "已登录"
-				}
-				ui.Text(c, status).FontSize(10).Bold().TextColor(col.text).SingleLine()
-				ui.Text(c, a.userID).FontSize(9).TextColor(col.muted).SingleLine()
-			})
-			ui.Icon(c, iconChevronRight).FontSize(12).TextColor(col.faint)
+		ui.Row(c).Height(topBar).Shrink(0).AlignItems(ui.Center).
+			Padding(0, bar.Left+10, 0, 10).Gap(8).DragWindow().Children(func() {
+			a.logoMark(c, col, 22)
+			ui.Text(c, "Qmdr").FontSize(13).FontWeight(600).TextColor(col.text)
 		})
+
+		ui.Column(c).Gap(2).Children(func() {
+			ui.Text(c, "资料库").FontSize(11).FontWeight(600).TextColor(col.faint).
+				Padding(0, 9, 6, 9)
+			a.navItem(c, col, "search", iconSearch, "搜索下载")
+			a.navItem(c, col, "playlists", iconLibrary, "歌单下载")
+			a.navItem(c, col, "queue", iconQueue, "下载队列")
+			a.navItem(c, col, "settings", iconSettings, "设置")
+		})
+
+		ui.Spacer(c)
+
+		a.accountChip(c, col)
+	})
+}
+
+func (a *app) navItem(c *ui.Context, col colors, key string, icon *ui.SVG, label string) {
+	active := a.pageKey() == key
+	row := ui.ButtonBase(c).FillWidth().Height(30).Padding(0, 9).Gap(9).
+		Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label)
+	if active {
+		row.Background(col.rowSelected)
+		row = chosen(row, col)
+	} else if row.Hovered() {
+		row.Background(col.cardHover)
+	}
+	if row.Clicked() {
+		a.setPage(key)
+		a.refresh()
+	}
+	fg := col.muted
+	if active {
+		fg = col.text
+	}
+	row.Children(func() {
+		ui.Icon(c, icon).Size(15, 15).TextColor(fg)
+		ui.Text(c, label).FontSize(12.5).FontWeight(500).TextColor(fg).Grow(1)
+		if key == "queue" {
+			if _, _, _, active := a.queueCounts(); active > 0 {
+				ui.Textf(c, "%d", active).FontSize(11).TextColor(col.muted)
+			}
+		}
+	})
+}
+
+func (a *app) accountChip(c *ui.Context, col colors) {
+	account := ui.Row(c).Height(50).Padding(0, 10).Gap(9).Radius(10).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("账号设置")
+	g := glass.Glass{}
+	if account.Hovered() {
+		g.Tint = ui.RGBA(255, 255, 255, 0.35)
+	}
+	account.Material(g)
+	if account.Clicked() {
+		a.view = viewSettings
+		a.refresh()
+	}
+	account.Children(func() {
+		a.avatar(c, col, 26)
+		ui.Column(c).Gap(1).Grow(1).MinWidth(0).Children(func() {
+			status := "未登录"
+			if a.loggedIn {
+				status = "已登录"
+			}
+			ui.Text(c, status).FontSize(12).FontWeight(500).TextColor(col.text).SingleLine()
+			ui.Text(c, a.userID).FontSize(11).TextColor(col.muted).SingleLine().Ellipsis("…")
+		})
+		ui.Icon(c, iconChevronRight).Size(13, 13).TextColor(col.faint)
 	})
 }
 
 func (a *app) logoMark(c *ui.Context, col colors, size float32) {
-	ui.Box(c).Size(size, size).Radius(size * 0.24).Background(col.accent).
+	ui.Box(c).Size(size, size).Radius(size * 0.26).Background(col.accent).
 		Children(func() {
 			ui.Row(c).Fill().Center().Children(func() {
-				ui.Icon(c, iconMusic).FontSize(size * 0.46).TextColor(col.accentText)
+				ui.Icon(c, iconMusic).Size(size*0.5, size*0.5).TextColor(col.accentText)
 			})
 		})
 }
 
 func (a *app) avatar(c *ui.Context, col colors, size float32) {
-	ui.Box(c).Size(size, size).Radius(size/2).
-		Background(col.cardAlt).Border(1, col.border).
+	ui.Box(c).Size(size, size).Radius(size / 2).Background(col.chip).
 		Children(func() {
 			ui.Row(c).Fill().Center().Children(func() {
-				ui.Text(c, "Q").FontSize(size * 0.38).Bold().TextColor(col.text)
+				ui.Text(c, "Q").FontSize(size * 0.4).FontWeight(600).TextColor(col.text)
 			})
 		})
 }
@@ -504,26 +586,28 @@ func (a *app) closeQR() {
 
 func (a *app) qrModal(c *ui.Context, col colors) {
 	ui.Modal(c, &a.qrOpen, func() {
-		panel := ui.Column(c).Width(320).Padding(18).Gap(12).Radius(14).
-			Material(glass.Glass{}).Border(1, col.border).
-			Shadow(0, 16, 48, 0, ui.RGBA(0, 0, 0, 0.18))
+		panel := ui.Column(c).Width(336).Padding(18).Gap(14).Radius(16).
+			Material(glass.Glass{}).
+			Shadow(0, 1, 3, 0, col.shadow).
+			Shadow(0, 16, 40, 0, col.floatShadow)
 		panel.Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-				ui.Textf(c, "%s登录", a.qrType).FontSize(16).Bold().TextColor(col.text).Grow(1)
+				ui.Textf(c, "%s登录", a.qrType).FontSize(15).FontWeight(650).
+					TextColor(col.text).Grow(1)
 				iconButton(c, col, iconX, "关闭", a.closeQR)
 			})
 
-			qr := ui.Box(c).Size(196, 196).Radius(6).Padding(8).
-				Background(ui.RGB(255, 255, 255)).Center().Border(1, col.border)
+			qr := ui.Box(c).Size(208, 208).Radius(10).Padding(10).
+				Background(ui.RGB(255, 255, 255)).Center()
 			qr.Children(func() {
 				if a.qrBitmap != nil {
-					ui.Image(c, a.qrBitmap).Size(180, 180)
+					ui.Image(c, a.qrBitmap).Size(188, 188)
 				} else {
 					ui.Spinner(c).Size(22, 22)
 				}
 			})
 
-			ui.Text(c, a.qrStatus).FontSize(11).TextColor(col.muted)
+			ui.Text(c, a.qrStatus).FontSize(12).TextColor(col.muted)
 			ui.Row(c).Gap(6).Justify(ui.End).Children(func() {
 				secondaryButton(c, col, nil, "关闭", a.closeQR)
 				if a.qrBitmap != nil {
@@ -551,13 +635,13 @@ func main() {
 			Height:          800,
 			MinWidth:        1000,
 			MinHeight:       680,
-			BackgroundColor: "#e3e9f4",
+			BackgroundColor: "#ebe0f3",
 			Content:         ui.View(a.viewRoot),
 		}
 		if runtime.GOOS == "darwin" {
 			options.TitleBarStyle = mygo.TitleBarHiddenInset
-			options.TitleBarHeight = 44
-			options.TrafficLightPosition = &mygo.Point{X: 16, Y: 14}
+			options.TitleBarHeight = topBar
+			options.TrafficLightPosition = &mygo.Point{X: 18, Y: barMid - 7}
 		} else {
 			options.TitleBarStyle = mygo.TitleBarHidden
 			options.HideWindowButtons = true

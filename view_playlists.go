@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -10,12 +9,6 @@ import (
 )
 
 func (a *app) playlistsView(c *ui.Context, col colors) {
-	pageHeader(c, col, "歌单下载", func() {
-		secondaryButton(c, col, iconRefresh, "刷新歌单", func() {
-			a.loadPlaylists()
-		})
-	})
-
 	a.playlistLoader(c, col)
 
 	ui.Row(c).Gap(16).AlignItems(ui.Start).Children(func() {
@@ -25,106 +18,101 @@ func (a *app) playlistsView(c *ui.Context, col colors) {
 }
 
 func (a *app) playlistLoader(c *ui.Context, col colors) {
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(4, 0).Children(func() {
-		ui.Icon(c, iconLibrary).FontSize(14).TextColor(col.muted)
-		ui.Text(c, "读取歌单").FontSize(12).Bold().TextColor(col.text)
-		ui.Spacer(c)
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Wrap().Children(func() {
+		ui.Text(c, "QQ 号 / 微信 ID").FontSize(12).TextColor(col.muted)
 		ui.TextInput(c, &a.musicID).
 			Placeholder("QQ 号 / 微信 ID").
 			Label("QQ 号或微信 ID").
-			Width(200).Height(30).
-			Background(col.cardAlt).Border(1, col.border).Radius(6)
+			Width(190).Height(34).FontSize(13).
+			Background(col.control).InsetShadow(0, 0, 0, 1, ui.RGBA(0, 0, 0, 0.13)).
+			Radius(8)
 		if a.loadingPlaylists {
-			btn := ui.PrimaryButton(c, "").Label("正在加载").Disabled(true).
-				Padding(0, 10).Height(30).Radius(6)
-			btn.Children(func() {
-				ui.Spinner(c).Size(12, 12)
-				ui.Text(c, "正在加载…").FontSize(11).Bold()
-			})
+			secondaryButton(c, col, nil, "正在加载…", nil).Disabled(true)
 		} else {
-			primaryButton(c, col, iconRefresh, "加载歌单", func() {
+			secondaryButton(c, col, iconRefresh, "加载歌单", func() {
 				a.loadPlaylists()
 			})
 		}
+		ui.Spacer(c)
+		if len(a.playlists) > 0 {
+			ui.Textf(c, "%d 个歌单", len(a.playlists)).FontSize(11.5).TextColor(col.faint)
+		}
 	})
-	divider(c, col)
 }
 
 func (a *app) playlistSidebar(c *ui.Context, col colors) {
-	box := ui.Column(c).Width(280).Padding(12).Gap(6).Radius(8).
-		Background(col.card).Border(1, col.border)
-	box.Children(func() {
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "我的歌单").FontSize(13).Bold().TextColor(col.text)
-			ui.Box(c).Width(6)
-			pill(c, fmt.Sprintf("%d", len(a.playlists)), col.muted, col.cardAlt)
-			ui.Spacer(c)
-			if a.loadingPlaylists {
-				ui.Spinner(c).Size(14, 14)
+	ui.Column(c).Width(264).Gap(8).Children(func() {
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Padding(0, 4).Children(func() {
+			ui.Text(c, "我的歌单").FontSize(12).FontWeight(600).TextColor(col.muted).Grow(1)
+			if len(a.playlists) > 0 {
+				ui.Textf(c, "%d", len(a.playlists)).FontSize(11.5).TextColor(col.faint)
 			}
 		})
 
 		if len(a.playlists) == 0 {
-			title := "还没有歌单"
-			hint := "登录后点击“加载歌单”。"
-			if !a.loggedIn {
-				title = "未登录"
-				hint = "请先在设置页登录。"
-			}
-			emptyState(c, col, iconLibrary, title, hint)
+			sheet(c, col, func() {
+				title := "还没有歌单"
+				hint := "登录后点击“加载歌单”。"
+				if !a.loggedIn {
+					title = "未登录"
+					hint = "请先在设置页登录。"
+				}
+				emptyState(c, col, iconLibrary, title, hint)
+			})
 			if a.playlistErr != "" {
-				ui.Text(c, a.playlistErr).FontSize(9).TextColor(col.red).MaxLines(2)
+				ui.Text(c, a.playlistErr).FontSize(11).TextColor(col.red).MaxLines(2).Padding(0, 4)
 			}
 			return
 		}
 
-		for i, playlist := range a.playlists {
-			i, playlist := i, playlist
-			selected := i == a.selectedPlaylist
-			btn := ui.ButtonBase(c).Gap(8).Padding(5).Radius(5).
-				AlignItems(ui.Center).Label(playlist.Name)
-			if selected {
-				btn = btn.Background(col.cardHover)
-			} else if btn.Hovered() {
-				btn = btn.Background(col.cardHover)
-			}
-			if btn.Clicked() {
-				a.loadPlaylistSongs(i)
-			}
-			btn.Children(func() {
-				playlistCover(c, col, i+1, 32)
-				ui.Column(c).Gap(1).Grow(1).Children(func() {
-					ui.Text(c, playlist.Name).FontSize(11).
-						TextColor(col.text).SingleLine()
-					ui.Textf(c, "%d 首", playlist.Count).FontSize(9).
-						TextColor(col.muted).SingleLine()
-				})
+		sheet(c, col, func() {
+			for i, playlist := range a.playlists {
+				i, playlist := i, playlist
+				selected := i == a.selectedPlaylist
+				btn := ui.ButtonBase(c).Gap(9).Padding(6, 8).Height(46).Radius(8).
+					AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(playlist.Name)
 				if selected {
-					ui.Icon(c, iconChevronRight).FontSize(13).TextColor(col.accent)
+					btn.Background(col.rowSelected)
+					chosen(btn, col)
+				} else if btn.Hovered() {
+					btn.Background(ui.RGBA(255, 255, 255, 0.55))
 				}
-			})
-		}
+				if btn.Clicked() {
+					a.loadPlaylistSongs(i)
+				}
+				btn.Children(func() {
+					playlistCover(c, col, i+1, 30)
+					ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
+						ui.Text(c, playlist.Name).FontSize(12.5).FontWeight(500).
+							TextColor(col.text).SingleLine()
+						ui.Textf(c, "%d 首", playlist.Count).FontSize(11).
+							TextColor(col.muted).SingleLine()
+					})
+				})
+			}
+		})
 	})
 }
 
 func (a *app) playlistPreview(c *ui.Context, col colors) {
-	box := ui.Column(c).Grow(1).Padding(14).Gap(10).Radius(8).
-		Background(col.card).Border(1, col.border)
-	box.Children(func() {
+	ui.Column(c).Grow(1).MinWidth(0).Gap(12).Children(func() {
 		if len(a.playlists) == 0 || a.selectedPlaylist < 0 || a.selectedPlaylist >= len(a.playlists) {
-			emptyState(c, col, iconPlay, "选择一个歌单", "左侧选择歌单后，这里会显示歌曲。")
+			sheet(c, col, func() {
+				emptyState(c, col, iconPlay, "选择一个歌单", "左侧选择歌单后，这里会显示歌曲。")
+			})
 			return
 		}
 		playlist := a.playlists[a.selectedPlaylist]
 
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-			playlistCover(c, col, a.selectedPlaylist+1, 40)
-			ui.Column(c).Gap(1).Grow(1).Children(func() {
-				ui.Text(c, playlist.Name).FontSize(15).Bold().TextColor(col.text).SingleLine()
-				ui.Textf(c, "%d 首", playlist.Count).FontSize(10).TextColor(col.muted)
+			playlistCover(c, col, a.selectedPlaylist+1, 44)
+			ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
+				ui.Text(c, playlist.Name).FontSize(16).FontWeight(650).
+					TextColor(col.text).SingleLine()
+				ui.Textf(c, "%d 首", playlist.Count).FontSize(11.5).TextColor(col.muted)
 			})
 			if a.loadingSongs {
-				ui.Spinner(c).Size(14, 14)
+				ui.Spinner(c).Size(15, 15)
 			} else if len(a.playlistSongs) > 0 {
 				primaryButton(c, col, iconDownload, "下载歌单", func() {
 					a.enqueueSongs(a.playlistSongs)
@@ -132,36 +120,32 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 			}
 		})
 
-		divider(c, col)
-
 		switch {
 		case a.loadingSongs:
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Spinner(c).Size(14, 14)
-				ui.Text(c, "正在加载歌曲…").FontSize(10).TextColor(col.muted)
+			softCard(c, col, func() {
+				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
+					ui.Spinner(c).Size(15, 15)
+					ui.Text(c, "正在加载歌曲…").FontSize(12).TextColor(col.muted)
+				})
 			})
 		case a.playlistErr != "":
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-				ui.Icon(c, iconAlert).FontSize(13).TextColor(col.red)
-				ui.Text(c, a.playlistErr).FontSize(10).TextColor(col.red).Grow(1).MaxLines(2)
-				secondaryButton(c, col, iconRefresh, "重试", func() {
-					a.loadPlaylistSongs(a.selectedPlaylist)
+			softCard(c, col, func() {
+				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
+					ui.Icon(c, iconAlert).Size(15, 15).TextColor(col.red)
+					ui.Text(c, a.playlistErr).FontSize(12).TextColor(col.red).Grow(1).MaxLines(2)
+					secondaryButton(c, col, iconRefresh, "重试", func() {
+						a.loadPlaylistSongs(a.selectedPlaylist)
+					})
 				})
 			})
 		case len(a.playlistSongs) == 0:
-			emptyState(c, col, iconMusic, "歌单为空", "这个歌单暂时没有可下载的歌曲。")
-		default:
-			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "歌曲").FontSize(10).TextColor(col.muted)
-				ui.Spacer(c)
-				ui.Textf(c, "%d 首", len(a.playlistSongs)).FontSize(10).TextColor(col.muted)
+			sheet(c, col, func() {
+				emptyState(c, col, iconMusic, "歌单为空", "这个歌单暂时没有可下载的歌曲。")
 			})
-			ui.Column(c).Gap(0).Children(func() {
+		default:
+			sheet(c, col, func() {
 				for i, song := range a.playlistSongs {
 					a.songRow(c, col, song, i, true, nil)
-					if i < len(a.playlistSongs)-1 {
-						divider(c, col)
-					}
 				}
 			})
 		}

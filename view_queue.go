@@ -13,61 +13,35 @@ func (a *app) queueView(c *ui.Context, col colors) {
 		}
 	}
 
-	pageHeader(c, col, "下载队列", func() {
-		if a.downloading {
-			ghostDangerButton(c, col, iconX, "取消下载", func() {
-				a.cancelQueue()
-			})
-		}
-		if done+skipped > 0 {
-			ghostButton(c, col, iconTrash, "清理已完成", func() {
-				a.clearCompleted()
-			})
-		}
-		if !a.downloading && active > 0 {
-			primaryButton(c, col, iconPlay, "开始队列", func() {
-				a.startQueue()
-			})
-		}
-	})
-
 	if total == 0 {
-		emptyState(c, col, iconQueue, "队列为空", "从搜索结果下载歌曲后，任务会显示在这里。")
+		emptyState(c, col, iconQueue, "队列为空", "从搜索结果或歌单下载歌曲后，任务会显示在这里。")
 		return
 	}
 
-	a.queueSummary(c, col, total, done, failed, skipped, active)
-
-	ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-		filter := ui.Segmented(c, &a.queueFilter, "全部", "进行中", "已完成", "失败").Label("筛选")
-		if filter.Changed() {
-			a.refresh()
-		}
-		ui.Spacer(c)
-		ui.Textf(c, "%d 个任务", len(a.filteredQueue())).FontSize(9).TextColor(col.faint)
-	})
-
 	items := a.filteredQueue()
-	if len(items) == 0 {
-		emptyState(c, col, iconQueue, "没有符合条件的任务", "切换筛选条件查看其他任务。")
-	} else {
-		tableCard(c, col, func() {
-			ui.Row(c).FillWidth().Padding(3, 8).Children(func() {
-				ui.Text(c, "状态").Width(68).FontSize(9).TextColor(col.muted)
-				ui.Text(c, "歌曲").Grow(1).FontSize(9).TextColor(col.muted)
-				ui.Text(c, "音质").Width(58).FontSize(9).TextColor(col.muted)
-				ui.Text(c, "进度").Width(80).FontSize(9).TextColor(col.muted)
-				ui.Box(c).Width(26)
-			})
-			divider(c, col)
-			for i, item := range items {
-				a.queueRow(c, col, item, i)
-				if i < len(items)-1 {
-					divider(c, col)
-				}
+
+	ui.Column(c).Gap(10).Children(func() {
+		a.queueSummary(c, col, total, done, failed, skipped, active)
+
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+			filter := segmentedControl(c, col, &a.queueFilter, "全部", "进行中", "已完成", "失败")
+			if filter.Changed() {
+				a.refresh()
+			}
+			ui.Spacer(c)
+			ui.Textf(c, "%d 个任务", len(items)).FontSize(11.5).TextColor(col.faint)
+		})
+
+		if len(items) == 0 {
+			emptyState(c, col, iconQueue, "没有符合条件的任务", "切换筛选条件查看其他任务。")
+			return
+		}
+		sheet(c, col, func() {
+			for _, item := range items {
+				a.queueRow(c, col, item)
 			}
 		})
-	}
+	})
 
 	a.queueLogs(c, col)
 }
@@ -86,20 +60,20 @@ func (a *app) queueSummary(c *ui.Context, col colors, total, done, failed, skipp
 
 	ui.Row(c).FillWidth().AlignItems(ui.End).Children(func() {
 		ui.Column(c).Gap(2).Grow(1).Children(func() {
-			ui.Row(c).Gap(8).AlignItems(ui.End).Children(func() {
-				ui.Textf(c, "%.0f%%", percent).FontSize(24).Bold().TextColor(col.text)
-				ui.Textf(c, "%d / %d", processed, total).FontSize(9).TextColor(col.faint)
+			ui.Row(c).Gap(9).AlignItems(ui.End).Children(func() {
+				ui.Textf(c, "%.0f%%", percent).FontSize(24).FontWeight(650).TextColor(col.text)
+				ui.Textf(c, "%d / %d", processed, total).FontSize(11).TextColor(col.faint)
 			})
 			ui.Textf(c, "完成 %d · 跳过 %d · 失败 %d · 进行中 %d", done, skipped, failed, active).
-				FontSize(9).TextColor(col.muted)
+				FontSize(11.5).TextColor(col.muted)
 		})
 		if activeDownloads > 0 {
 			ui.Textf(c, "%d 个下载中 · %.1f MB/s", activeDownloads, speed).
-				FontSize(9).TextColor(col.muted)
+				FontSize(11.5).TextColor(col.muted)
 		}
 	})
 
-	track := ui.Box(c).Height(4).FillWidth().Radius(2).Background(col.cardAlt)
+	track := ui.Box(c).Height(4).FillWidth().Radius(2).Background(col.chip)
 	track.Children(func() {
 		if percent > 0 {
 			ui.Box(c).Height(4).WidthPercent(float32(percent)).Radius(2).
@@ -108,10 +82,11 @@ func (a *app) queueSummary(c *ui.Context, col colors, total, done, failed, skipp
 	})
 }
 
-func (a *app) queueRow(c *ui.Context, col colors, item QueueItem, index int) {
-	row := ui.Row(c).Gap(8).Padding(5, 8).Radius(3).AlignItems(ui.Center)
+func (a *app) queueRow(c *ui.Context, col colors, item QueueItem) {
+	row := ui.Row(c).Gap(9).Padding(6, 10).Height(54).Radius(8).AlignItems(ui.Center)
 	if row.Hovered() {
-		row = row.Background(col.cardHover)
+		row.Background(col.rowSelected)
+		row = chosen(row, col)
 	}
 	row.Children(func() {
 		fg := col.muted
@@ -125,43 +100,43 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem, index int) {
 		case StatusCancelled:
 			fg = col.gold
 		}
-		ui.Row(c).Gap(5).Width(68).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Gap(6).Width(66).AlignItems(ui.Center).Children(func() {
 			statusIcon(c, col, item.Status)
-			ui.Text(c, item.Status.Label()).FontSize(9).TextColor(fg).SingleLine()
+			ui.Text(c, item.Status.Label()).FontSize(11).TextColor(fg).SingleLine()
 		})
 
-		ui.Row(c).Gap(8).Grow(1).AlignItems(ui.Center).Children(func() {
-			a.cover(c, col, item.Song.AlbumMid, 28)
-			ui.Column(c).Gap(1).Grow(1).Children(func() {
-				ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, item.Song.Title).FontSize(11).Bold().
+		ui.Row(c).Gap(9).Grow(1).MinWidth(0).AlignItems(ui.Center).Children(func() {
+			a.cover(c, col, item.Song.AlbumMid, 30)
+			ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, item.Song.Title).FontSize(12.5).FontWeight(500).
 						TextColor(col.text).SingleLine()
 					if item.Song.VIP {
-						ui.Text(c, "VIP").FontSize(8).Bold().TextColor(col.gold)
+						ui.Text(c, "VIP").FontSize(9).FontWeight(600).TextColor(col.gold)
 					}
 				})
 				if item.Error != "" {
-					ui.Text(c, item.Error).FontSize(9).TextColor(col.red).SingleLine()
+					ui.Text(c, item.Error).FontSize(11).TextColor(col.red).SingleLine()
 				} else {
-					ui.Text(c, item.Song.Artist).FontSize(9).TextColor(col.muted).SingleLine()
+					ui.Text(c, item.Song.Artist).FontSize(11.5).TextColor(col.muted).SingleLine()
 				}
 			})
 		})
 
-		ui.Text(c, item.Quality).Width(58).FontSize(9).TextColor(col.muted).SingleLine()
+		ui.Text(c, item.Quality).Width(56).FontSize(11).TextColor(col.muted).SingleLine()
 
-		progressBox := ui.Box(c).Width(80)
+		progressBox := ui.Box(c).Width(84)
 		progressBox.Children(func() {
 			if item.Status == StatusDownloading {
-				ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-					track := ui.Box(c).Height(3).Grow(1).Radius(2).Background(col.cardAlt)
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					track := ui.Box(c).Height(3).Grow(1).Radius(2).Background(col.chip)
 					track.Children(func() {
 						if item.Progress > 0 {
 							ui.Box(c).Height(3).WidthPercent(float32(item.Progress * 100)).
 								Radius(2).Background(col.accent)
 						}
 					})
-					ui.Textf(c, "%.0f%%", item.Progress*100).FontSize(8).TextColor(col.muted)
+					ui.Textf(c, "%.0f%%", item.Progress*100).FontSize(10.5).TextColor(col.muted)
 				})
 			}
 		})
@@ -188,17 +163,15 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem, index int) {
 }
 
 func (a *app) queueLogs(c *ui.Context, col colors) {
-	divider(c, col)
-
-	toggle := ui.ButtonBase(c).FillWidth().Padding(4, 0).
-		AlignItems(ui.Center).Label("任务日志")
+	toggle := ui.ButtonBase(c).FillWidth().Padding(2, 4).Gap(6).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("任务日志")
 	if toggle.Clicked() {
 		a.showLogs = !a.showLogs
 		a.refresh()
 	}
 	toggle.Children(func() {
-		ui.Text(c, "任务日志").FontSize(11).Bold().TextColor(col.muted)
-		ui.Textf(c, "%d", len(a.logs)).FontSize(9).TextColor(col.faint)
+		ui.Text(c, "任务日志").FontSize(12).FontWeight(600).TextColor(col.muted)
+		ui.Textf(c, "%d", len(a.logs)).FontSize(11.5).TextColor(col.faint)
 		ui.Spacer(c)
 		label := "展开"
 		icon := iconChevronDown
@@ -206,33 +179,38 @@ func (a *app) queueLogs(c *ui.Context, col colors) {
 			label = "收起"
 			icon = iconChevronUp
 		}
-		ui.Text(c, label).FontSize(9).TextColor(col.faint)
-		ui.Icon(c, icon).FontSize(11).TextColor(col.faint)
+		ui.Text(c, label).FontSize(11.5).TextColor(col.faint)
+		ui.Icon(c, icon).Size(13, 13).TextColor(col.faint)
 	})
 
 	if !a.showLogs {
 		return
 	}
 	if len(a.logs) == 0 {
-		ui.Text(c, "暂无日志").FontSize(10).TextColor(col.faint).Padding(4, 0)
+		ui.Text(c, "暂无日志").FontSize(11.5).TextColor(col.faint).Padding(4, 4)
 		return
 	}
 
-	ui.Scroll(c).Height(160).Gap(4).Children(func() {
-		for _, entry := range a.logs {
-			fg := col.muted
-			switch entry.Level {
-			case "success":
-				fg = col.green
-			case "error":
-				fg = col.red
-			case "warning":
-				fg = col.gold
+	panel := ui.Column(c).FillWidth().Padding(10, 12).Radius(10).Background(col.chip)
+	panel.Children(func() {
+		ui.Scroll(c).MaxHeight(160).Gap(3).Children(func() {
+			for _, entry := range a.logs {
+				fg := col.muted
+				switch entry.Level {
+				case "success":
+					fg = col.green
+				case "error":
+					fg = col.red
+				case "warning":
+					fg = col.gold
+				}
+				ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
+					ui.Text(c, entry.Time).Width(58).Font("monospace").FontSize(10.5).
+						TextColor(col.faint).SingleLine()
+					ui.Text(c, entry.Message).Font("monospace").FontSize(11).
+						TextColor(fg).Grow(1).MaxLines(2).LineHeight(1.45)
+				})
 			}
-			ui.Row(c).Gap(6).AlignItems(ui.Start).Children(func() {
-				ui.Text(c, entry.Time).Width(40).FontSize(8).TextColor(col.faint)
-				ui.Text(c, entry.Message).FontSize(9).TextColor(fg).Grow(1).MaxLines(2)
-			})
-		}
+		})
 	})
 }

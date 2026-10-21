@@ -38,5 +38,6 @@ var (
 	iconGauge        = mustIcon(`<path d="M4.5 19a9 9 0 1 1 15 0"/><path d="m12 13 4-4"/><circle cx="12" cy="13" r="1"/>`)
 	iconHeart        = mustIcon(`<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/>`)
 	iconPlus         = mustIcon(`<path d="M12 5v14M5 12h14"/>`)
+	iconMinus        = mustIcon(`<path d="M5 12h14"/>`)
 	iconWifi         = mustIcon(`<path d="M5 12.5a10 10 0 0 1 14 0M8.5 16a5.5 5.5 0 0 1 7 0M12 20h.01"/>`)
 )
