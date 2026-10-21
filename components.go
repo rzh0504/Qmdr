@@ -119,6 +119,31 @@ func statusIcon(c *ui.Context, col colors, status QueueStatus) ui.Element {
 	return ui.Icon(c, icon).Size(14, 14).TextColor(fg)
 }
 
+// modal draws a dialog in the app's own look: a dimmed backdrop and a
+// smooth panel with a title and close button, around body. close dismisses
+// it, for the body's own buttons.
+func (a *app) modal(c *ui.Context, col colors, open *bool, title string, width float32, body func(close func())) {
+	ui.DialogBase(c, open, func(backdrop, panel ui.Element) {
+		backdrop.Background(ui.RGBA(0, 0, 0, 0.4))
+		panel.Width(width).Padding(18)
+		smoothPanel(panel, col, 16, col.card, false)
+		panel.Shadow(0, 16, 40, 0, col.floatShadow)
+		close := func() {
+			*open = false
+			a.refresh()
+		}
+		panel.Children(func() {
+			ui.Column(c).FillWidth().Gap(14).Children(func() {
+				ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+					ui.Text(c, title).FontSize(15).FontWeight(600).TextColor(col.text).Grow(1)
+					iconButton(c, col, iconX, "关闭", close)
+				})
+				body(close)
+			})
+		})
+	})
+}
+
 func ghostButton(c *ui.Context, col colors, icon *ui.SVG, label string, onClick func()) ui.Element {
 	btn := ui.ButtonBase(c).Gap(5).Padding(3, 8).Radius(6).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label)
@@ -215,6 +240,29 @@ func primaryButtonDisabled(c *ui.Context, col colors, icon *ui.SVG, label string
 			ui.Icon(c, icon).Size(14, 14).TextColor(col.faint)
 		}
 		ui.Text(c, label).FontSize(13).FontWeight(400).TextColor(col.faint).SingleLine()
+	})
+	return btn
+}
+
+func dangerButton(c *ui.Context, col colors, label string, onClick func()) ui.Element {
+	btn := ui.ButtonBase(c).Height(30).Padding(0, 14).Gap(6).Radius(8).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label)
+	fill := col.red
+	if btn.Pressed() {
+		fill = col.red.Alpha(0.82)
+	} else if btn.Hovered() {
+		fill = col.red.Alpha(0.9)
+	}
+	btn.Background(fill)
+	if btn.Clicked() && onClick != nil {
+		onClick()
+	}
+	fg := ui.RGB(255, 255, 255)
+	if col.dark {
+		fg = ui.RGB(29, 29, 31)
+	}
+	btn.Children(func() {
+		ui.Text(c, label).FontSize(13).FontWeight(400).TextColor(fg).SingleLine()
 	})
 	return btn
 }

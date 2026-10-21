@@ -4,6 +4,7 @@ import (
 	"runtime"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 )
 
 func (a *app) menu() *mygo.Menu {
@@ -71,20 +72,25 @@ func (a *app) openProjectPage() {
 }
 
 func (a *app) showAbout() {
-	win := a.win
-	go func() {
-		result, err := mygo.Dialog.Message(mygo.MessageOptions{
-			Parent:        win,
-			Type:          mygo.MessageInfo,
-			Title:         "关于 Qmdr",
-			Message:       "Qmdr " + appVersion,
-			Detail:        "QQ 音乐下载器\nGPL-3.0 · MyGo 原生 UI",
-			Buttons:       []string{"项目主页", "关闭"},
-			DefaultButton: 0,
-			CancelButton:  1,
+	a.update(func() { a.aboutOpen = true })
+}
+
+func (a *app) aboutModal(c *ui.Context, col colors) {
+	a.modal(c, col, &a.aboutOpen, "关于 Qmdr", 400, func(close func()) {
+		ui.Row(c).Gap(12).AlignItems(ui.Start).Children(func() {
+			a.logoMark(c, col, 40)
+			ui.Column(c).Gap(3).Grow(1).MinWidth(0).Children(func() {
+				ui.Textf(c, "Qmdr %s", appVersion).FontSize(14).TextColor(col.text)
+				ui.Text(c, "QQ 音乐下载器").FontSize(12).TextColor(col.muted)
+				ui.Text(c, "GPL-3.0 · MyGo 原生 UI").FontSize(12).TextColor(col.faint)
+			})
 		})
-		if err == nil && result.Button == 0 {
-			a.openProjectPage()
-		}
-	}()
+		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+			secondaryButton(c, col, nil, "关闭", close)
+			primaryButton(c, col, iconExternal, "项目主页", func() {
+				close()
+				a.openProjectPage()
+			})
+		})
+	})
 }

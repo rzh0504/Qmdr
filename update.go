@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 )
 
 const (
@@ -37,7 +37,6 @@ func (a *app) checkUpdates() {
 	}
 	a.updating = true
 	a.setToast("正在检查更新…")
-	win := a.win
 
 	go func() {
 		defer func() {
@@ -67,27 +66,33 @@ func (a *app) checkUpdates() {
 		if release.Name != "" && !strings.EqualFold(release.Name, release.TagName) {
 			detail = release.Name + "\n\n" + detail
 		}
-		result, err := mygo.Dialog.Message(mygo.MessageOptions{
-			Parent:        win,
-			Type:          mygo.MessageInfo,
-			Title:         "发现新版本",
-			Message:       "Qmdr " + latest + " 已发布",
-			Detail:        detail,
-			Buttons:       []string{"打开发布页", "稍后"},
-			DefaultButton: 0,
-			CancelButton:  1,
+		url := release.HTMLURL
+		if url == "" {
+			url = repoURL + "/releases/latest"
+		}
+		a.update(func() {
+			a.updateInfo = updatePrompt{open: true, version: latest, detail: detail, url: url}
 		})
-		if err != nil {
-			return
-		}
-		if result.Button == 0 {
-			url := release.HTMLURL
-			if url == "" {
-				url = repoURL + "/releases/latest"
-			}
-			a.openURL(url)
-		}
 	}()
+}
+
+func (a *app) updateModal(c *ui.Context, col colors) {
+	a.modal(c, col, &a.updateInfo.open, "发现新版本", 420, func(close func()) {
+		ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
+			ui.Icon(c, iconUpdate).Size(20, 20).TextColor(col.accent)
+			ui.Column(c).Gap(4).Grow(1).MinWidth(0).Children(func() {
+				ui.Textf(c, "Qmdr v%s 已发布", a.updateInfo.version).FontSize(14).TextColor(col.text)
+				ui.Text(c, a.updateInfo.detail).FontSize(12).TextColor(col.muted).MaxLines(4).LineHeight(1.45)
+			})
+		})
+		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+			secondaryButton(c, col, nil, "稍后", close)
+			primaryButton(c, col, iconExternal, "打开发布页", func() {
+				close()
+				a.openURL(a.updateInfo.url)
+			})
+		})
+	})
 }
 
 func fetchLatestRelease(ctx context.Context) (releaseInfo, error) {

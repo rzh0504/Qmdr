@@ -210,23 +210,27 @@ func (a *app) confirmClearHistory() {
 	if a.history.store == nil || a.history.count == 0 {
 		return
 	}
-	win := a.win
-	go func() {
-		result, err := mygo.Dialog.Message(mygo.MessageOptions{
-			Parent:        win,
-			Type:          mygo.MessageWarning,
-			Title:         "清空下载历史",
-			Message:       "确定清空所有下载历史吗？",
-			Detail:        "只删除记录，不会删除已下载的文件。",
-			Buttons:       []string{"清空", "取消"},
-			DefaultButton: 1,
-			CancelButton:  1,
+	a.history.confirmClear = true
+	a.refresh()
+}
+
+func (a *app) clearHistoryModal(c *ui.Context, col colors) {
+	a.modal(c, col, &a.history.confirmClear, "清空下载历史", 380, func(close func()) {
+		ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
+			ui.Icon(c, iconAlert).Size(20, 20).TextColor(col.gold)
+			ui.Column(c).Gap(4).Grow(1).MinWidth(0).Children(func() {
+				ui.Text(c, "确定清空所有下载历史吗？").FontSize(14).TextColor(col.text).LineHeight(1.35)
+				ui.Text(c, "只删除记录，不会删除已下载的文件。").FontSize(12).TextColor(col.muted).LineHeight(1.35)
+			})
 		})
-		if err != nil || result.Button != 0 {
-			return
-		}
-		a.clearHistory()
-	}()
+		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+			secondaryButton(c, col, nil, "取消", close)
+			dangerButton(c, col, "清空", func() {
+				close()
+				a.clearHistory()
+			})
+		})
+	})
 }
 
 func (a *app) clearHistory() {

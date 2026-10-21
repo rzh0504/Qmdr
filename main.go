@@ -40,6 +40,8 @@ type app struct {
 	closed   atomic.Bool
 	toast    string
 	updating bool
+	aboutOpen bool
+	updateInfo updatePrompt
 
 	diskJobs chan func()
 
@@ -166,6 +168,9 @@ func (a *app) viewRoot(c *ui.Context) {
 
 	a.qrModal(c, col)
 	a.musicIDModal(c, col)
+	a.clearHistoryModal(c, col)
+	a.aboutModal(c, col)
+	a.updateModal(c, col)
 	a.menuView(c, col)
 }
 
@@ -429,16 +434,14 @@ func (a *app) accountChip(c *ui.Context, col colors) {
 	account.Children(func() {
 		a.avatar(c, col, 26)
 		ui.Column(c).Gap(1).Grow(1).MinWidth(0).Children(func() {
-			status := "未登录"
-			if a.login.loggedIn {
-				status = "已登录"
-			}
-			ui.Text(c, status).FontSize(12).FontWeight(400).TextColor(col.text).SingleLine()
 			name := a.login.userID
 			if a.login.nick != "" {
 				name = a.login.nick
 			}
-			ui.Text(c, name).FontSize(11).TextColor(col.muted).SingleLine().Ellipsis("…")
+			ui.Text(c, name).FontSize(12).FontWeight(400).TextColor(col.text).SingleLine().Ellipsis("…")
+			if a.login.loggedIn {
+				ui.Text(c, "已登录").FontSize(11).TextColor(col.muted).SingleLine()
+			}
 		})
 		ui.Icon(c, iconChevronRight).Size(13, 13).TextColor(col.faint)
 	})

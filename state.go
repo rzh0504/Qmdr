@@ -107,16 +107,25 @@ type menuAction struct {
 	run       func()
 }
 
+// updatePrompt is the in-app "new version available" dialog.
+type updatePrompt struct {
+	open    bool
+	version string
+	detail  string
+	url     string
+}
+
 // historyState is the download history page and its store handle.
 type historyState struct {
-	store      *history.Store
-	items      []history.Record
-	backlog    []history.Record
-	logBacklog []LogEntry
-	count      int
-	bytes      int64
-	err        string
-	loading    bool
+	store        *history.Store
+	items        []history.Record
+	backlog      []history.Record
+	logBacklog   []LogEntry
+	count        int
+	bytes        int64
+	err          string
+	loading      bool
+	confirmClear bool
 }
 
 // coverState caches fetched cover bitmaps and throttles their fetches.
