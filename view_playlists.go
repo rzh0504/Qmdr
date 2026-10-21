@@ -49,6 +49,14 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 						SingleLine().Ellipsis("…")
 				}
 			})
+			if a.loadingPlaylists {
+				ui.Row(c).Gap(4).AlignItems(ui.Center).Padding(2, 6).Children(func() {
+					ui.Spinner(c).Size(12, 12)
+					ui.Text(c, "刷新中").FontSize(12).TextColor(col.faint)
+				})
+			} else {
+				chipButton(c, col, iconRefresh, "刷新", a.loadPlaylists)
+			}
 			if a.viewingOtherPlaylists() {
 				chipButton(c, col, iconChevronLeft, "返回我的", a.loadOwnPlaylists)
 			} else {
@@ -59,7 +67,7 @@ func (a *app) playlistSidebar(c *ui.Context, col colors) {
 		if len(a.playlists) == 0 {
 			sheet(c, col, func() {
 				title := "还没有歌单"
-				hint := "点击右上角刷新读取歌单。"
+				hint := "点击刷新按钮读取歌单。"
 				switch {
 				case !a.loggedIn:
 					title = "未登录"

@@ -224,12 +224,6 @@ func (a *app) headerActions(c *ui.Context, col colors) {
 	switch a.view {
 	case viewSearch, viewSettings:
 		iconButton(c, col, iconFolder, "打开下载目录", a.openDownloadDir)
-	case viewPlaylists:
-		if a.loadingPlaylists {
-			ui.Spinner(c).Size(14, 14).Margin(4, 0, 4, 0)
-		} else {
-			iconButton(c, col, iconRefresh, "刷新歌单", a.loadPlaylists)
-		}
 	case viewQueue:
 		_, done, _, active := a.queueCounts()
 		skipped := 0
