@@ -24,14 +24,14 @@ const (
 
 var coverMidPattern = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 
-// coverEntry is a fetched cover or a remembered failure with a time, so a
-// failing album does not retry every frame yet does not stay dark for the
-// whole session.
+// coverEntry is a fetched cover, or a failure remembered until its retry
+// time passes: a nil bitmap means the fetch failed at at, so a failing
+// album does not retry every frame yet does not stay dark for the whole
+// session.
 type coverEntry struct {
-	bitmap   *ui.Bitmap
-	failedAt time.Time
+	bitmap *ui.Bitmap
+	at     time.Time
 }
-// for the whole session.
 
 func coverCachePath(albumMid string) string {
 	if !coverMidPattern.MatchString(albumMid) {
@@ -88,7 +88,7 @@ func (a *app) coverBitmap(albumMid string) *ui.Bitmap {
 		if entry.bitmap != nil {
 			return entry.bitmap
 		}
-		if time.Since(entry.failedAt) < coverRetryAfter {
+		if time.Since(entry.at) < coverRetryAfter {
 			return nil
 		}
 		delete(a.covers, albumMid)
@@ -135,10 +135,29 @@ func (a *app) finishCover(albumMid string, data []byte, err error) {
 	}
 	a.update(func() {
 		delete(a.coverLoading, albumMid)
+		if len(a.covers) >= maxCachedCovers {
+			a.evictOldestCover()
+		}
 		if err != nil {
-			a.covers[albumMid] = coverEntry{failedAt: time.Now()}
+			a.covers[albumMid] = coverEntry{at: time.Now()}
 			return
 		}
-		a.covers[albumMid] = coverEntry{bitmap: bitmap}
+		a.covers[albumMid] = coverEntry{bitmap: bitmap, at: time.Now()}
 	})
+}
+
+// evictOldestCover drops the oldest entry when the cache is full, so a
+// long session keeps fetching covers instead of freezing at the cap. A
+// row whose cover is evicted refills from the disk cache within a frame
+// or two.
+func (a *app) evictOldestCover() {
+	oldest, oldestAt := "", time.Time{}
+	for mid, entry := range a.covers {
+		if oldest == "" || entry.at.Before(oldestAt) {
+			oldest, oldestAt = mid, entry.at
+		}
+	}
+	if oldest != "" {
+		delete(a.covers, oldest)
+	}
 }
