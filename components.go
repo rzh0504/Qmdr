@@ -494,8 +494,11 @@ func (a *app) songRow(c *ui.Context, col colors, song Song, opts songRowOptions)
 	row := ui.Row(c).Gap(10).Padding(7, 10).Height(52).Radius(8).AlignItems(ui.Center)
 	switch {
 	case opts.selectMode && opts.selected:
-		row.Background(col.accentSoft).Cursor(ui.CursorPointer)
-		row = chosen(row, col)
+		fill := col.accent.Alpha(0.06)
+		if col.dark {
+			fill = col.accent.Alpha(0.12)
+		}
+		row.Background(fill).Cursor(ui.CursorPointer)
 	case opts.selectMode:
 		row.Cursor(ui.CursorPointer)
 		if row.Hovered() {
