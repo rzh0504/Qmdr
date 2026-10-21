@@ -13,15 +13,23 @@ func b2f(v bool) float32 {
 	return 0
 }
 
-// raised lifts a surface off the card, as its panes and controls do.
-func raised(e ui.Element, col colors) ui.Element {
+// lift raises a surface off the card with shadows alone.
+func lift(e ui.Element, col colors) ui.Element {
 	if col.dark {
-		return e.Border(1, col.edge).
-			Shadow(0, 1, 1, 0, ui.RGBA(0, 0, 0, 0.20)).
+		return e.Shadow(0, 1, 1, 0, ui.RGBA(0, 0, 0, 0.20)).
 			Shadow(0, 2, 2, -1, ui.RGBA(0, 0, 0, 0.20)).
 			Shadow(0, 4, 6, -3, ui.RGBA(0, 0, 0, 0.24))
 	}
 	return e.Shadow(0, 1, 2, 0, col.shadow).Shadow(0, 1, 6, 0, col.shadow2)
+}
+
+// raised lifts a surface off the card, with a lit edge in the dark.
+func raised(e ui.Element, col colors) ui.Element {
+	e = lift(e, col)
+	if col.dark {
+		e = e.Border(1, col.edge)
+	}
+	return e
 }
 
 // chosen lifts a chosen row a hair: a tight ring and a soft hint of a

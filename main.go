@@ -150,8 +150,8 @@ func (a *app) viewRoot(c *ui.Context) {
 			a.sidebar(c, col)
 			main := ui.Column(c).Grow(1).MinWidth(0).Padding(cardGap, cardGap, cardGap, cardGap)
 			main.Children(func() {
-				content := ui.Column(c).Fill().Radius(14).Background(col.card)
-				raised(content, col).Clip()
+				content := ui.Column(c).Fill()
+				smoothPanel(content, col, 14, col.card, true)
 				content.Children(func() {
 					a.cardHeader(c, col)
 					if a.view == viewSearch && !a.hasSearched {
@@ -442,12 +442,13 @@ func (a *app) navItem(c *ui.Context, col colors, key string, icon *ui.SVG, label
 }
 
 func (a *app) accountChip(c *ui.Context, col colors) {
-	account := ui.Row(c).Height(50).Padding(0, 10).Gap(9).Radius(10).
-		Background(col.card).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("账号设置")
+	account := ui.Row(c).Height(50).Padding(0, 10).Gap(9).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("账号设置")
+	fill := col.card
 	if account.Hovered() {
-		account.Background(col.controlHover)
+		fill = col.controlHover
 	}
-	raised(account, col)
+	smoothPanel(account, col, 10, fill, false)
 	if account.Clicked() {
 		a.view = viewSettings
 		a.refresh()
