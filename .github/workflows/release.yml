@@ -57,7 +57,7 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags "-s -w -X main.appVersion=${VERSION}" \
+          go build -trimpath -ldflags "-s -w -H=windowsgui -X main.appVersion=${VERSION}" \
             -o "dist/qmdr-${VERSION}-windows-amd64.exe" .
 
       - name: Build Linux

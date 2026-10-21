@@ -22,8 +22,8 @@ Qmdr 是一个使用 Go + MyGo 原生 UI 的 QQ 音乐桌面下载工具，目�
 
 ```powershell
 go run .
-# 或
-go build -o build/qmdr.exe .
+# 或构建不带控制台窗口的 Windows 程序
+go build -ldflags "-H=windowsgui" -o build/qmdr.exe .
 ```
 
 ## 凭证
