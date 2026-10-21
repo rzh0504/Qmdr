@@ -77,11 +77,10 @@ type app struct {
 	queue       []QueueItem
 	queueFilter int
 	queueSeq    int
-	showLogs    bool
 	downloading bool
 	runID       int
 	cancel      context.CancelFunc
-	logs        []LogEntry
+	logBacklog  []LogEntry
 
 	historyStore   *history.Store
 	historyItems   []history.Record
@@ -352,14 +351,15 @@ func (a *app) setToast(message string) {
 }
 
 func (a *app) appendLog(message, level string) {
-	a.logs = append(a.logs, LogEntry{
-		Time:    time.Now().Format("15:04:05"),
-		Message: message,
-		Level:   level,
-	})
-	if len(a.logs) > 120 {
-		a.logs = a.logs[len(a.logs)-120:]
+	entry := LogEntry{At: time.Now(), Level: level, Message: message}
+	if a.historyStore == nil {
+		a.logBacklog = append(a.logBacklog, entry)
+		if len(a.logBacklog) > 500 {
+			a.logBacklog = a.logBacklog[len(a.logBacklog)-500:]
+		}
+		return
 	}
+	a.storeLog(entry)
 }
 
 func (a *app) queueCounts() (total, done, failed, active int) {

@@ -40,10 +40,6 @@ func (a *app) queueView(c *ui.Context, col colors) {
 			}
 		}
 	})
-
-	if total > 0 || len(a.logs) > 0 {
-		a.queueLogs(c, col)
-	}
 }
 
 func (a *app) queueFilterTabs(c *ui.Context, col colors) ui.Element {
@@ -164,8 +160,8 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem) {
 								Radius(2).Background(col.accent)
 						}
 					})
-					ui.Textf(c, "%.0f%%", item.Progress*100).Width(30).FontSize(11).
-						TextColor(col.muted).TextAlign(ui.End)
+					ui.Textf(c, "%.0f%%", item.Progress*100).Width(38).FontSize(11).
+						TextColor(col.muted).TextAlign(ui.End).SingleLine()
 				})
 			}
 		})
@@ -188,58 +184,5 @@ func (a *app) queueRow(c *ui.Context, col colors, item QueueItem) {
 				a.removeItem(item.ID)
 			})
 		}
-	})
-}
-
-func (a *app) queueLogs(c *ui.Context, col colors) {
-	toggle := ui.ButtonBase(c).FillWidth().Padding(2, 4).Gap(6).
-		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("任务日志")
-	if toggle.Clicked() {
-		a.showLogs = !a.showLogs
-		a.refresh()
-	}
-	toggle.Children(func() {
-		ui.Text(c, "任务日志").FontSize(12).FontWeight(600).TextColor(col.muted)
-		ui.Textf(c, "%d", len(a.logs)).FontSize(12).TextColor(col.faint)
-		ui.Spacer(c)
-		label := "展开"
-		icon := iconChevronDown
-		if a.showLogs {
-			label = "收起"
-			icon = iconChevronUp
-		}
-		ui.Text(c, label).FontSize(12).TextColor(col.faint)
-		ui.Icon(c, icon).Size(13, 13).TextColor(col.faint)
-	})
-
-	if !a.showLogs {
-		return
-	}
-	if len(a.logs) == 0 {
-		ui.Text(c, "暂无日志").FontSize(12).TextColor(col.faint).Padding(4, 4)
-		return
-	}
-
-	panel := ui.Column(c).FillWidth().Padding(10, 12).Radius(10).Background(col.chip)
-	panel.Children(func() {
-		ui.Scroll(c).MaxHeight(160).Gap(3).Children(func() {
-			for _, entry := range a.logs {
-				fg := col.muted
-				switch entry.Level {
-				case "success":
-					fg = col.green
-				case "error":
-					fg = col.red
-				case "warning":
-					fg = col.gold
-				}
-				ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
-					ui.Text(c, entry.Time).Width(58).Font("monospace").FontSize(11).
-						TextColor(col.faint).SingleLine()
-					ui.Text(c, entry.Message).Font("monospace").FontSize(11).
-						TextColor(fg).Grow(1).MaxLines(2).LineHeight(1.45)
-				})
-			}
-		})
 	})
 }

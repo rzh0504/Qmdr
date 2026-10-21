@@ -63,9 +63,9 @@ type QueueItem struct {
 }
 
 type LogEntry struct {
-	Time    string
-	Message string
+	At      time.Time
 	Level   string
+	Message string
 }
 
 var qualityOptions = []string{"臻品母带", "FLAC 无损", "MP3 320K", "MP3 128K"}

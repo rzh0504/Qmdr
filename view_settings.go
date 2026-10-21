@@ -208,6 +208,9 @@ func (a *app) downloadSettings(c *ui.Context, col colors) {
 			a.pruneHistoryNow()
 		})
 	})
+	a.settingRow(c, col, "任务日志", "导出最近 7 天的下载与错误日志", false, func() {
+		secondaryButton(c, col, iconExternal, "导出 txt", a.exportLogs)
+	})
 }
 
 func (a *app) aboutSettings(c *ui.Context, col colors) {

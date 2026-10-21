@@ -33,6 +33,9 @@ func (a *app) initHistory() {
 	if err := store.PruneQueue(ctx, dayStart); err != nil {
 		log.Printf("prune download queue: %v", err)
 	}
+	if err := store.PruneLogs(ctx, now.AddDate(0, 0, -logRetentionDays)); err != nil {
+		log.Printf("prune task logs: %v", err)
+	}
 	queueRecords, queueErr := store.LoadQueue(ctx, dayStart)
 	records, recentErr := store.Recent(ctx, historyPageSize)
 	stats, statsErr := store.Stats(ctx)
@@ -42,6 +45,7 @@ func (a *app) initHistory() {
 	}
 	a.update(func() {
 		a.historyStore = store
+		a.flushLogBacklog()
 		a.historyLoading = false
 		a.historyItems = records
 		a.historyCount = stats.Count

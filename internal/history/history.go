@@ -107,8 +107,21 @@ func (s *Store) migrate(ctx context.Context) error {
 		)`); err != nil {
 		return err
 	}
+	if _, err := s.db.Execute(ctx,
+		`CREATE INDEX IF NOT EXISTS idx_queue_items_created_at ON queue_items(created_at)`); err != nil {
+		return err
+	}
+	if _, err := s.db.Execute(ctx, `
+		CREATE TABLE IF NOT EXISTS logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			level TEXT NOT NULL,
+			message TEXT NOT NULL,
+			created_at INTEGER NOT NULL
+		)`); err != nil {
+		return err
+	}
 	_, err := s.db.Execute(ctx,
-		`CREATE INDEX IF NOT EXISTS idx_queue_items_created_at ON queue_items(created_at)`)
+		`CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at)`)
 	return err
 }
 

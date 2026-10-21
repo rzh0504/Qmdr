@@ -210,3 +210,40 @@ func TestQueueStorage(t *testing.T) {
 		t.Fatalf("after replace = %+v, want old record", loaded)
 	}
 }
+
+func TestLogStorage(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "qmdr.db")
+	store, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	base := time.Now().Add(-2 * time.Hour)
+	if err := store.AddLog(ctx, LogRecord{At: base, Level: "info", Message: "first"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddLog(ctx, LogRecord{At: base.Add(time.Minute), Level: "warning", Message: "second"}); err != nil {
+		t.Fatal(err)
+	}
+
+	records, err := store.LogsSince(ctx, base.Add(-time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 2 || records[0].Message != "first" || records[1].Level != "warning" {
+		t.Fatalf("LogsSince = %+v, want first then warning second", records)
+	}
+
+	if err := store.PruneLogs(ctx, base.Add(30*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	records, err = store.LogsSince(ctx, base.Add(-time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 || records[0].Message != "second" {
+		t.Fatalf("after prune = %+v, want only second", records)
+	}
+}

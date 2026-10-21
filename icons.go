@@ -18,7 +18,6 @@ var (
 	iconChevronLeft  = mustIcon(`<path d="m15 18-6-6 6-6"/>`)
 	iconChevronRight = mustIcon(`<path d="m9 18 6-6-6-6"/>`)
 	iconChevronDown  = mustIcon(`<path d="m6 9 6 6 6-6"/>`)
-	iconChevronUp    = mustIcon(`<path d="m18 15-6-6-6 6"/>`)
 	iconWinMinimize  = mustIcon(`<path d="M5 12h14"/>`)
 	iconWinMaximize  = mustIcon(`<rect x="5" y="5" width="14" height="14" rx="2"/>`)
 	iconWinRestore   = mustIcon(`<rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M9 5h8a2 2 0 0 1 2 2v8"/>`)
