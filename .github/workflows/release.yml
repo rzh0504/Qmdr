@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+          cache: true
+      - run: go vet ./...
+      - run: go test ./...
+
+  build:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-amd64
+          - os: ubuntu-latest
+            target: linux-amd64
+          - os: macos-latest
+            target: macos-universal
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+          cache: true
+      - name: Read version
+        id: version
+        shell: bash
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags "-s -w -X main.appVersion=${VERSION}" \
+            -o "dist/qmdr-${VERSION}-windows-amd64.exe" .
+
+      - name: Build Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p build dist
+          GOOS=linux GOARCH=amd64 go build -trimpath \
+            -ldflags "-s -w -X main.appVersion=${VERSION}" \
+            -o "build/qmdr-${VERSION}-linux-amd64" .
+          tar -czf "dist/qmdr-${VERSION}-linux-amd64.tar.gz" \
+            -C build "qmdr-${VERSION}-linux-amd64"
+
+      - name: Build macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p build dist
+          GOOS=darwin GOARCH=arm64 go build -trimpath \
+            -ldflags "-s -w -X main.appVersion=${VERSION}" \
+            -o build/qmdr-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -trimpath \
+            -ldflags "-s -w -X main.appVersion=${VERSION}" \
+            -o build/qmdr-amd64 .
+          lipo -create -output build/qmdr build/qmdr-arm64 build/qmdr-amd64
+
+          app="dist/Qmdr.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+          cp build/qmdr "$app/Contents/MacOS/Qmdr"
+          chmod +x "$app/Contents/MacOS/Qmdr"
+          cp assets/qmdr.icns "$app/Contents/Resources/qmdr.icns"
+          cat > "$app/Contents/Info.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>Qmdr</string>
+            <key>CFBundleDisplayName</key><string>Qmdr</string>
+            <key>CFBundleIdentifier</key><string>com.rzh0504.qmdr</string>
+            <key>CFBundleVersion</key><string>${VERSION}</string>
+            <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+            <key>CFBundleExecutable</key><string>Qmdr</string>
+            <key>CFBundleIconFile</key><string>qmdr</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          EOF
+          (cd dist && zip -qry "qmdr-${VERSION}-macos-universal.zip" "Qmdr.app")
+          rm -rf "$app"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Qmdr ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: dist/*

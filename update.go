@@ -17,8 +17,9 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+var appVersion = "0.2.0"
+
 const (
-	appVersion        = "0.2.0"
 	repoURL           = "https://github.com/rzh0504/Qmdr"
 	latestReleasePage = repoURL + "/releases/latest"
 	latestReleaseAPI  = "https://api.github.com/repos/rzh0504/Qmdr/releases/latest"
