@@ -163,12 +163,7 @@ func (a *app) playlistPreview(c *ui.Context, col colors) {
 
 		switch {
 		case a.playlists.loadingSongs:
-			softCard(c, col, func() {
-				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c).Size(15, 15)
-					ui.Text(c, "正在加载歌曲…").FontSize(12).TextColor(col.muted)
-				})
-			})
+			loadingState(c, col, "正在加载歌曲…")
 		case a.playlists.err != "":
 			softCard(c, col, func() {
 				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {

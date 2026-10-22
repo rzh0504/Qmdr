@@ -46,24 +46,20 @@ func (a *app) viewRoot(c *ui.Context) {
 						})
 						return
 					}
+					if a.fullPageLoading() {
+						ui.Column(c).Grow(1).MinHeight(0).
+							Padding(12, 20, 20, 18).Children(func() {
+							a.viewBody(c, col)
+						})
+						return
+					}
 					scroll := ui.Scroll(c).Grow(1).MinHeight(0).
 						Padding(12, 20, 20, 18).Gap(18)
 					if a.view == viewSearch {
 						scroll = scroll.TrackScroll(&a.search.scroll)
 					}
 					scroll.Children(func() {
-						switch a.view {
-						case viewSearch:
-							a.searchView(c, col)
-						case viewPlaylists:
-							a.playlistsView(c, col)
-						case viewQueue:
-							a.queueView(c, col)
-						case viewHistory:
-							a.historyView(c, col)
-						case viewSettings:
-							a.settingsView(c, col)
-						}
+						a.viewBody(c, col)
 					})
 				})
 			})
@@ -76,6 +72,37 @@ func (a *app) viewRoot(c *ui.Context) {
 	a.aboutModal(c, col)
 	a.updateModal(c, col)
 	a.menuView(c, col)
+}
+
+func (a *app) viewBody(c *ui.Context, col colors) {
+	switch a.view {
+	case viewSearch:
+		a.searchView(c, col)
+	case viewPlaylists:
+		a.playlistsView(c, col)
+	case viewQueue:
+		a.queueView(c, col)
+	case viewHistory:
+		a.historyView(c, col)
+	case viewSettings:
+		a.settingsView(c, col)
+	}
+}
+
+// fullPageLoading reports whether the view shows nothing but a loading state,
+// which is centered rather than scrolled from the top.
+func (a *app) fullPageLoading() bool {
+	switch a.view {
+	case viewSearch:
+		if !a.search.searched {
+			return a.showExplore && len(a.search.charts) == 0 &&
+				(!a.search.exploreLoaded || a.search.exploreLoading)
+		}
+		return a.search.loading
+	case viewHistory:
+		return a.history.loading && a.history.store == nil
+	}
+	return false
 }
 
 func (a *app) openQR(kind string) {

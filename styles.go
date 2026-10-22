@@ -62,6 +62,16 @@ func softCard(c *ui.Context, col colors, fn func()) ui.Element {
 	return e.Children(fn)
 }
 
+// loadingState fills the room left in its parent with a centered indicator.
+func loadingState(c *ui.Context, col colors, label string) ui.Element {
+	return ui.Column(c).Grow(1).MinHeight(0).FillWidth().Center().Children(func() {
+		ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
+			ui.Spinner(c).Size(16, 16)
+			ui.Text(c, label).FontSize(12).TextColor(col.muted)
+		})
+	})
+}
+
 func groupTitle(c *ui.Context, col colors, title string) ui.Element {
 	return ui.Text(c, title).FontSize(12).FontWeight(600).TextColor(col.muted).Padding(0, 4)
 }

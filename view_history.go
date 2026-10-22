@@ -263,12 +263,7 @@ func (a *app) clearHistory() {
 
 func (a *app) historyView(c *ui.Context, col colors) {
 	if a.history.loading && a.history.store == nil {
-		softCard(c, col, func() {
-			ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
-				ui.Spinner(c).Size(15, 15)
-				ui.Text(c, "正在加载下载历史…").FontSize(12).TextColor(col.muted)
-			})
-		})
+		loadingState(c, col, "正在加载下载历史…")
 		return
 	}
 	if a.history.err != "" && len(a.history.items) == 0 {

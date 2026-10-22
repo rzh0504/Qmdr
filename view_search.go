@@ -16,6 +16,10 @@ func (a *app) searchView(c *ui.Context, col colors) {
 		a.ensureExplore()
 	}
 	a.searchToolbar(c, col)
+	if a.search.loading {
+		loadingState(c, col, "正在搜索…")
+		return
+	}
 	if a.search.searched {
 		a.searchResults(c, col)
 		return
@@ -181,12 +185,7 @@ func (a *app) loadExplore(force, quiet bool) {
 func (a *app) exploreView(c *ui.Context, col colors) {
 	if len(a.search.charts) == 0 {
 		if a.search.exploreLoading {
-			softCard(c, col, func() {
-				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c).Size(15, 15)
-					ui.Text(c, "正在加载热门榜单…").FontSize(12).TextColor(col.muted)
-				})
-			})
+			loadingState(c, col, "正在加载热门榜单…")
 			return
 		}
 		softCard(c, col, func() {
@@ -270,13 +269,6 @@ func (a *app) searchResults(c *ui.Context, col colors) {
 		})
 
 		switch {
-		case a.search.loading:
-			softCard(c, col, func() {
-				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c).Size(15, 15)
-					ui.Text(c, "正在搜索…").FontSize(12).TextColor(col.muted)
-				})
-			})
 		case a.search.err != "":
 			softCard(c, col, func() {
 				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
