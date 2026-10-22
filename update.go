@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"go/version"
 	"io"
 	"log"
 	"net/http"
@@ -15,9 +14,12 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/rzh0504/qmdr/internal/version"
 )
 
-var appVersion = "0.2.0"
+// appVersion is the version local builds report; release builds override it
+// with -X main.appVersion=<tag>.
+var appVersion = "0.3.1"
 
 const (
 	repoURL           = "https://github.com/rzh0504/Qmdr"
@@ -58,7 +60,7 @@ func (a *app) checkUpdates() {
 			return
 		}
 		latest := strings.TrimPrefix(strings.TrimSpace(release.TagName), "v")
-		if version.Compare(latest, appVersion) <= 0 {
+		if !isUpdateAvailable(latest, appVersion) {
 			a.update(func() { a.toast = "已是最新版本 v" + appVersion })
 			return
 		}
@@ -75,6 +77,10 @@ func (a *app) checkUpdates() {
 			a.updateInfo = updatePrompt{open: true, version: latest, detail: detail, url: url}
 		})
 	}()
+}
+
+func isUpdateAvailable(latest, current string) bool {
+	return version.Compare(latest, current) > 0
 }
 
 func (a *app) updateModal(c *ui.Context, col colors) {
