@@ -78,7 +78,7 @@ func newApp() *app {
 	a := &app{
 		api:         api,
 		brandIcon:   brandIcon,
-		view:        viewSearch,
+		view:        viewPlaylists,
 		covers:      coverState{cache: map[string]coverEntry{}, loading: map[string]bool{}, sem: make(chan struct{}, coverFetchLimit)},
 		queue:       queueState{pending: pending.Load()},
 		playlists:   playlistState{owner: userID, selected: -1, selectedMids: map[string]bool{}},
@@ -96,6 +96,7 @@ func newApp() *app {
 	}
 	a.startDiskWorker()
 	a.restorePlaylistCache()
+	a.restoreExploreCache()
 	return a
 }
 

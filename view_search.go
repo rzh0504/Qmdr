@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/rzh0504/qmdr/internal/explorecache"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
 )
 
 func (a *app) searchView(c *ui.Context, col colors) {
 	if a.showExplore {
-		a.loadExplore(false)
+		a.ensureExplore()
 	}
 	a.searchToolbar(c, col)
 	if a.search.searched {
@@ -78,12 +79,30 @@ var exploreChartSpecs = []struct {
 	{427, "新歌榜"},
 }
 
-// loadExplore fills the page shown before a search with hot terms and the
-// three toplist cards. It fetches once per session, and again when asked.
-func (a *app) loadExplore(force bool) {
+// ensureExplore fills the page shown before a search with hot terms and the
+// three toplist cards once per session. A same-day cache is shown as is;
+// stale cached charts stay on screen while they refresh in the background.
+func (a *app) ensureExplore() {
+	if a.search.exploreLoading || a.search.exploreLoaded {
+		return
+	}
+	if len(a.search.charts) > 0 {
+		a.search.exploreLoaded = true
+		if a.search.exploreDay != explorecache.Day(time.Now()) {
+			a.loadExplore(true, true)
+		}
+		return
+	}
+	a.loadExplore(false, false)
+}
+
+// loadExplore fetches the explore content. quiet keeps cached charts on
+// screen and suppresses failure toasts, so a background refresh is silent.
+func (a *app) loadExplore(force, quiet bool) {
 	if a.search.exploreLoading || (a.search.exploreLoaded && !force) {
 		return
 	}
+	a.search.exploreLoaded = true
 	previous := append([]chartPreview(nil), a.search.charts...)
 	a.search.exploreLoading = true
 	var hot []string
@@ -114,6 +133,9 @@ func (a *app) loadExplore(force bool) {
 			a.search.exploreLoading = false
 			a.search.exploreLoaded = true
 			if err != nil {
+				if !quiet {
+					a.toast = "加载热门内容失败：" + friendlyError(err)
+				}
 				return
 			}
 			if len(hot) > 0 {
@@ -128,14 +150,25 @@ func (a *app) loadExplore(force bool) {
 				if charts[i].err == "" {
 					continue
 				}
+				failed++
 				if prev, ok := old[charts[i].id]; ok && len(prev.songs) > 0 {
 					charts[i] = prev
-					continue
 				}
-				failed++
 			}
 			a.search.charts = charts
-			if failed > 0 && len(previous) > 0 {
+			complete := failed == 0 && len(charts) == len(exploreChartSpecs)
+			for _, chart := range charts {
+				if len(chart.songs) == 0 {
+					complete = false
+					break
+				}
+			}
+			if complete {
+				day := explorecache.Day(time.Now())
+				a.search.exploreDay = day
+				a.saveExploreCache(day)
+			}
+			if !quiet && failed > 0 && len(previous) > 0 {
 				if failed == len(charts) {
 					a.toast = "榜单刷新失败"
 				} else {
@@ -161,7 +194,7 @@ func (a *app) exploreView(c *ui.Context, col colors) {
 				ui.Icon(c, iconAlert).Size(15, 15).TextColor(col.red)
 				ui.Text(c, "热门内容暂时不可用").FontSize(12).TextColor(col.muted).Grow(1).MaxLines(2)
 				secondaryButton(c, col, iconRefresh, "重试", func() {
-					a.loadExplore(true)
+					a.loadExplore(true, false)
 				})
 			})
 		})
@@ -183,7 +216,7 @@ func (a *app) chartCard(c *ui.Context, col colors, chart chartPreview) {
 		if chart.err != "" {
 			ui.Text(c, chart.err).FontSize(11).TextColor(col.muted).MaxLines(2)
 			textLink(c, col, "重试", func() {
-				a.loadExplore(true)
+				a.loadExplore(true, false)
 			})
 			return
 		}

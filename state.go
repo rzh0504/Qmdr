@@ -28,6 +28,7 @@ type searchState struct {
 
 	hotSearches    []string
 	charts         []chartPreview
+	exploreDay     string
 	exploreSlot    asyncSlot
 	exploreLoading bool
 	exploreLoaded  bool

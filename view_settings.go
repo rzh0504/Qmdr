@@ -27,7 +27,7 @@ func (a *app) settingsView(c *ui.Context, col colors) {
 					if toggle.Changed() {
 						a.saveSettings()
 						if a.showExplore {
-							a.loadExplore(true)
+							a.ensureExplore()
 						}
 					}
 				})
