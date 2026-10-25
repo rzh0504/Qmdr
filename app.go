@@ -97,7 +97,34 @@ func newApp() *app {
 	a.startDiskWorker()
 	a.restorePlaylistCache()
 	a.restoreExploreCache()
+	api.SetCredentialExpiredHandler(a.handleCredentialExpired)
 	return a
+}
+
+// handleCredentialExpired resets the signed-in UI after the server rejects
+// the saved credential, so every page stops showing stale account data.
+func (a *app) handleCredentialExpired() {
+	a.update(func() {
+		a.login.loggedIn = false
+		a.login.userID = "未登录"
+		a.login.loginType = "QQ"
+		a.resetUserProfile()
+		a.playlists.owner = ""
+		a.playlists.resetFetches()
+		a.playlists.loading = false
+		a.playlists.refreshing = false
+		a.playlists.loadingSongs = false
+		a.playlists.musicIDOpen = false
+		a.playlists.musicIDInput = ""
+		a.playlists.musicIDErr = ""
+		a.playlists.err = ""
+		a.playlists.notice = ""
+		a.playlists.items = nil
+		a.playlists.selected = -1
+		a.playlists.songs = nil
+		a.resetSongSelection()
+		a.toast = "登录已过期，请重新登录"
+	})
 }
 
 func (a *app) update(fn func()) {

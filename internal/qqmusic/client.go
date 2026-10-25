@@ -29,6 +29,9 @@ const (
 	placeholderUID  = "0"
 	versionCode     = 13020508
 	maxResponseSize = 32 << 20
+
+	// Refresh slightly early so a request cannot race the expiry timestamp.
+	credentialExpiryMargin = 10 * time.Minute
 )
 
 type APIError struct {
@@ -63,13 +66,31 @@ func (c Credential) Valid() bool {
 	return c.MusicID != 0 && c.Musickey != ""
 }
 
+// Expired reports whether the credential is close enough to its recorded
+// expiry that it should no longer be sent. expired_at is normally in
+// seconds; millisecond values are accepted too.
+func (c Credential) Expired(now time.Time) bool {
+	if c.ExpiredAt <= 0 {
+		return false
+	}
+	expires := c.ExpiredAt
+	if expires > 1e12 {
+		expires /= 1000
+	}
+	if expires < 1e9 {
+		return false
+	}
+	return !now.Add(credentialExpiryMargin).Before(time.Unix(expires, 0))
+}
+
 type Client struct {
 	http *http.Client
 
-	mu         sync.RWMutex
-	credential Credential
-	saveErr    error
-	QIMEI      string
+	mu                  sync.RWMutex
+	credential          Credential
+	onCredentialExpired func()
+	saveErr             error
+	QIMEI               string
 }
 
 func New() *Client {
@@ -97,6 +118,32 @@ func (c *Client) setCredentialSaveError(err error) {
 	c.mu.Lock()
 	c.saveErr = err
 	c.mu.Unlock()
+}
+
+func (c *Client) SetCredentialExpiredHandler(fn func()) {
+	c.mu.Lock()
+	c.onCredentialExpired = fn
+	c.mu.Unlock()
+}
+
+// expireCredential drops a credential the server rejected and lets the UI
+// switch to the signed-out state. The saved file is removed so the next
+// start does not retry a token that is already known to be dead.
+func (c *Client) expireCredential() {
+	c.mu.Lock()
+	if !c.credential.Valid() {
+		c.mu.Unlock()
+		return
+	}
+	c.credential = Credential{}
+	handler := c.onCredentialExpired
+	c.mu.Unlock()
+	if path := CredentialPath(); path != "" {
+		_ = os.Remove(path)
+	}
+	if handler != nil {
+		handler()
+	}
 }
 
 func (c *Client) CredentialSaveError() error {
@@ -155,16 +202,27 @@ func (c *Client) SaveCredential() error {
 func (c *Client) ReloadCredential() bool {
 	credential := loadCredential()
 	c.setCredential(credential)
-	return credential.Valid()
+	return c.HasCredential()
 }
 
 func (c *Client) HasCredential() bool {
-	return c.Credential().Valid()
+	_, ok := c.usableCredential()
+	return ok
+}
+
+// usableCredential hides credentials that are missing or already expired
+// locally, so callers never send a token past its recorded lifetime.
+func (c *Client) usableCredential() (Credential, bool) {
+	credential := c.Credential()
+	if !credential.Valid() || credential.Expired(time.Now()) {
+		return Credential{}, false
+	}
+	return credential, true
 }
 
 func (c *Client) UserID() string {
-	credential := c.Credential()
-	if credential.MusicID == 0 {
+	credential, ok := c.usableCredential()
+	if !ok {
 		return ""
 	}
 	return strconv.FormatInt(credential.MusicID, 10)
@@ -186,8 +244,11 @@ func (c *Client) callWith(ctx context.Context, hc *http.Client, module, method s
 		"outCharset": "utf-8",
 		"uid":        placeholderUID,
 	}
-	credential := c.Credential()
-	hasCredential := credential.Valid()
+	stored := c.Credential()
+	if stored.Valid() && stored.Expired(time.Now()) {
+		c.expireCredential()
+	}
+	credential, hasCredential := c.usableCredential()
 	if hasCredential {
 		comm["qq"] = strconv.FormatInt(credential.MusicID, 10)
 		comm["authst"] = credential.Musickey
@@ -254,6 +315,9 @@ func (c *Client) callWith(ctx context.Context, hc *http.Client, module, method s
 		return fmt.Errorf("qqmusic: decode %s: %w", key, err)
 	}
 	if result.Code != 0 {
+		if result.Code == 1000 && hasCredential {
+			c.expireCredential()
+		}
 		return &APIError{Module: module, Method: method, Code: result.Code, Message: result.Message}
 	}
 	if out != nil && len(result.Data) > 0 {
