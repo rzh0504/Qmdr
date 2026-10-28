@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,7 +23,6 @@ import (
 )
 
 const (
-	apiEndpoint     = "https://u.y.qq.com/cgi-bin/musicu.fcg"
 	cdnBase         = "https://isure.stream.qqmusic.qq.com/"
 	defaultUA       = "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.54"
 	fallbackQIMEI   = "6c9d3cd110abca9b16311cee10001e717614"
@@ -33,6 +33,8 @@ const (
 	// Refresh slightly early so a request cannot race the expiry timestamp.
 	credentialExpiryMargin = 10 * time.Minute
 )
+
+var apiEndpoint = "https://u.y.qq.com/cgi-bin/musicu.fcg"
 
 type APIError struct {
 	Module  string
@@ -60,15 +62,17 @@ type Credential struct {
 	RefreshKey   string `json:"refresh_key"`
 	EncryptUin   string `json:"encrypt_uin"`
 	LoginType    int    `json:"login_type"`
+
+	MusickeyCreateTime int64 `json:"musickeyCreateTime"`
+	KeyExpiresIn       int64 `json:"keyExpiresIn"`
 }
 
 func (c Credential) Valid() bool {
 	return c.MusicID != 0 && c.Musickey != ""
 }
 
-// Expired reports whether the credential is close enough to its recorded
-// expiry that it should no longer be sent. expired_at is normally in
-// seconds; millisecond values are accepted too.
+// Expired reports whether the refresh window recorded in expired_at has
+// closed. expired_at is normally in seconds; millisecond values are accepted.
 func (c Credential) Expired(now time.Time) bool {
 	if c.ExpiredAt <= 0 {
 		return false
@@ -83,14 +87,28 @@ func (c Credential) Expired(now time.Time) bool {
 	return !now.Add(credentialExpiryMargin).Before(time.Unix(expires, 0))
 }
 
+// NeedsRefresh reports whether the musickey is about to expire. The lifetime
+// comes from keyExpiresIn, which is only a few days long.
+func (c Credential) NeedsRefresh(now time.Time) bool {
+	if c.MusickeyCreateTime <= 0 || c.KeyExpiresIn <= 0 {
+		return false
+	}
+	expires := c.MusickeyCreateTime + c.KeyExpiresIn
+	return !now.Add(credentialExpiryMargin).Before(time.Unix(expires, 0))
+}
+
 type Client struct {
 	http *http.Client
 
 	mu                  sync.RWMutex
 	credential          Credential
+	credentialSeq       uint64
 	onCredentialExpired func()
 	saveErr             error
-	QIMEI               string
+
+	refreshMu sync.Mutex
+
+	QIMEI string
 }
 
 func New() *Client {
@@ -111,7 +129,14 @@ func (c *Client) Credential() Credential {
 func (c *Client) setCredential(credential Credential) {
 	c.mu.Lock()
 	c.credential = credential
+	c.credentialSeq++
 	c.mu.Unlock()
+}
+
+func (c *Client) credentialVersion() uint64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.credentialSeq
 }
 
 func (c *Client) setCredentialSaveError(err error) {
@@ -136,6 +161,7 @@ func (c *Client) expireCredential() {
 		return
 	}
 	c.credential = Credential{}
+	c.credentialSeq++
 	handler := c.onCredentialExpired
 	c.mu.Unlock()
 	if path := CredentialPath(); path != "" {
@@ -233,6 +259,37 @@ func (c *Client) call(ctx context.Context, module, method string, params any, ou
 }
 
 func (c *Client) callWith(ctx context.Context, hc *http.Client, module, method string, params any, extraCommon map[string]any, out any) error {
+	if stored := c.Credential(); stored.Valid() && stored.Expired(time.Now()) {
+		c.expireCredential()
+	}
+	version := c.credentialVersion()
+	err := c.callOnce(ctx, hc, module, method, params, extraCommon, out)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Code != 1000 {
+		return err
+	}
+	refreshed, refreshErr := c.refreshCredential(ctx, version)
+	if refreshed {
+		err = c.callOnce(ctx, hc, module, method, params, extraCommon, out)
+		var retryErr *APIError
+		if errors.As(err, &retryErr) && retryErr.Code == 1000 {
+			c.expireCredential()
+		}
+		return err
+	}
+	if refreshErr == nil {
+		c.expireCredential()
+		return err
+	}
+	var refreshAPIErr *APIError
+	if errors.As(refreshErr, &refreshAPIErr) && refreshAPIErr.Code == 1000 {
+		c.expireCredential()
+		return err
+	}
+	return refreshErr
+}
+
+func (c *Client) callOnce(ctx context.Context, hc *http.Client, module, method string, params any, extraCommon map[string]any, out any) error {
 	comm := map[string]any{
 		"cv":         versionCode,
 		"v":          versionCode,
@@ -243,10 +300,6 @@ func (c *Client) callWith(ctx context.Context, hc *http.Client, module, method s
 		"inCharset":  "utf-8",
 		"outCharset": "utf-8",
 		"uid":        placeholderUID,
-	}
-	stored := c.Credential()
-	if stored.Valid() && stored.Expired(time.Now()) {
-		c.expireCredential()
 	}
 	credential, hasCredential := c.usableCredential()
 	if hasCredential {
@@ -315,9 +368,6 @@ func (c *Client) callWith(ctx context.Context, hc *http.Client, module, method s
 		return fmt.Errorf("qqmusic: decode %s: %w", key, err)
 	}
 	if result.Code != 0 {
-		if result.Code == 1000 && hasCredential {
-			c.expireCredential()
-		}
 		return &APIError{Module: module, Method: method, Code: result.Code, Message: result.Message}
 	}
 	if out != nil && len(result.Data) > 0 {
@@ -326,6 +376,110 @@ func (c *Client) callWith(ctx context.Context, hc *http.Client, module, method s
 		}
 	}
 	return nil
+}
+
+// EnsureCredential refreshes a musickey that is about to expire before the
+// app starts using it. It makes no request when the credential is fresh.
+func (c *Client) EnsureCredential(ctx context.Context) error {
+	credential, ok := c.usableCredential()
+	if !ok || !credential.NeedsRefresh(time.Now()) {
+		return nil
+	}
+	refreshed, err := c.refreshCredential(ctx, c.credentialVersion())
+	if refreshed {
+		return nil
+	}
+	if err == nil {
+		c.expireCredential()
+		return errors.New("登录已过期，请重新登录")
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) && apiErr.Code == 1000 {
+		c.expireCredential()
+	}
+	return err
+}
+
+// refreshCredential trades refresh_key and refresh_token for a new musickey.
+// expectedVersion prevents concurrent 1000 responses from refreshing twice.
+func (c *Client) refreshCredential(ctx context.Context, expectedVersion uint64) (bool, error) {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	if c.credentialVersion() != expectedVersion {
+		return c.HasCredential(), nil
+	}
+	old := c.Credential()
+	if !old.Valid() || old.Expired(time.Now()) {
+		return false, nil
+	}
+	if old.RefreshKey == "" || old.RefreshToken == "" {
+		return false, nil
+	}
+	var payload credentialPayload
+	params := map[string]any{
+		"refresh_key":   old.RefreshKey,
+		"refresh_token": old.RefreshToken,
+		"musickey":      old.Musickey,
+		"musicid":       old.MusicID,
+	}
+	extra := map[string]any{"tmeLoginType": strconv.Itoa(old.LoginType)}
+	if err := c.callOnce(ctx, c.http, "music.login.LoginServer", "Login", params, extra, &payload); err != nil {
+		return false, err
+	}
+	fresh := payload.credential(old.LoginType)
+	if !fresh.Valid() {
+		return false, errors.New("刷新登录状态响应缺少凭证字段")
+	}
+	c.setCredential(mergeCredential(old, fresh))
+	c.setCredentialSaveError(c.SaveCredential())
+	return true, nil
+}
+
+func mergeCredential(old, fresh Credential) Credential {
+	if fresh.OpenID == "" {
+		fresh.OpenID = old.OpenID
+	}
+	if fresh.RefreshToken == "" {
+		fresh.RefreshToken = old.RefreshToken
+	}
+	if fresh.AccessToken == "" {
+		fresh.AccessToken = old.AccessToken
+	}
+	if fresh.ExpiredAt == 0 {
+		fresh.ExpiredAt = old.ExpiredAt
+	}
+	if fresh.MusicID == 0 {
+		fresh.MusicID = old.MusicID
+	}
+	if fresh.Musickey == "" {
+		fresh.Musickey = old.Musickey
+	}
+	if fresh.UnionID == "" {
+		fresh.UnionID = old.UnionID
+	}
+	if fresh.StrMusicID == "" {
+		fresh.StrMusicID = old.StrMusicID
+	}
+	if fresh.RefreshKey == "" {
+		fresh.RefreshKey = old.RefreshKey
+	}
+	if fresh.EncryptUin == "" {
+		fresh.EncryptUin = old.EncryptUin
+	}
+	if fresh.LoginType == 0 {
+		fresh.LoginType = old.LoginType
+	}
+	if fresh.MusickeyCreateTime == 0 {
+		if fresh.Musickey != old.Musickey {
+			fresh.MusickeyCreateTime = time.Now().Unix()
+		} else {
+			fresh.MusickeyCreateTime = old.MusickeyCreateTime
+		}
+	}
+	if fresh.KeyExpiresIn == 0 {
+		fresh.KeyExpiresIn = old.KeyExpiresIn
+	}
+	return fresh
 }
 
 func randomHex(n int) string {

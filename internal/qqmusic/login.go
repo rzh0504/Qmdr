@@ -391,21 +391,25 @@ type credentialPayload struct {
 	EncryptUinCamel string `json:"encryptUin"`
 	LoginTypeSnake  int    `json:"login_type"`
 	LoginTypeCamel  int    `json:"loginType"`
+	MusickeyCreate  int64  `json:"musickeyCreateTime"`
+	KeyExpiresIn    int64  `json:"keyExpiresIn"`
 }
 
 func (p credentialPayload) credential(fallbackType int) Credential {
 	c := Credential{
-		OpenID:       p.OpenID,
-		RefreshToken: p.RefreshToken,
-		AccessToken:  p.AccessToken,
-		ExpiredAt:    p.ExpiredAt,
-		MusicID:      p.MusicID,
-		Musickey:     p.Musickey,
-		UnionID:      p.UnionID,
-		StrMusicID:   p.StrMusicID,
-		RefreshKey:   p.RefreshKey,
-		EncryptUin:   p.EncryptUinSnake,
-		LoginType:    p.LoginTypeSnake,
+		OpenID:             p.OpenID,
+		RefreshToken:       p.RefreshToken,
+		AccessToken:        p.AccessToken,
+		ExpiredAt:          p.ExpiredAt,
+		MusicID:            p.MusicID,
+		Musickey:           p.Musickey,
+		UnionID:            p.UnionID,
+		StrMusicID:         p.StrMusicID,
+		RefreshKey:         p.RefreshKey,
+		EncryptUin:         p.EncryptUinSnake,
+		LoginType:          p.LoginTypeSnake,
+		MusickeyCreateTime: p.MusickeyCreate,
+		KeyExpiresIn:       p.KeyExpiresIn,
 	}
 	if c.EncryptUin == "" {
 		c.EncryptUin = p.EncryptUinCamel

@@ -450,6 +450,13 @@ func main() {
 			}
 		})
 		a.loadUserProfile()
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			if err := a.api.EnsureCredential(ctx); err != nil {
+				log.Printf("refresh credential: %v", err)
+			}
+		}()
 		go a.initHistory()
 	})
 	if err := mygo.App.Run(); err != nil {
