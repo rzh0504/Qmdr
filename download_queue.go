@@ -240,6 +240,28 @@ func (a *app) clearCompleted() {
 	a.setToast(fmt.Sprintf("已清理 %d 个已完成任务", removed))
 }
 
+func (a *app) clearFailed() {
+	out := a.queue.items[:0]
+	removed := 0
+	var removedIDs []int
+	for _, item := range a.queue.items {
+		if item.Status == StatusFailed || item.Status == StatusCancelled {
+			removed++
+			removedIDs = append(removedIDs, item.ID)
+			continue
+		}
+		out = append(out, item)
+	}
+	a.queue.items = out
+	if removed == 0 {
+		a.setToast("没有失败的任务")
+		return
+	}
+	a.deleteStoredQueueItems(removedIDs)
+	a.appendLog(fmt.Sprintf("已清理 %d 个失败任务", removed), "info")
+	a.setToast(fmt.Sprintf("已清理 %d 个失败任务", removed))
+}
+
 func (a *app) retryItem(id int) {
 	if a.queue.downloading {
 		a.setToast("请先等待当前任务结束")

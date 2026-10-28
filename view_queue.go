@@ -24,9 +24,12 @@ func (a *app) queueView(c *ui.Context, col colors) {
 					TextColor(col.faint)
 			})
 
-			ui.Row(c).Height(32).FillWidth().AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Height(32).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 				a.queueFilterTabs(c, col)
 				ui.Spacer(c)
+				if !a.queue.downloading && failed > 0 {
+					ghostButton(c, col, iconTrash, "清理失败", a.clearFailed)
+				}
 				ui.Textf(c, "%d 个任务", len(items)).FontSize(12).TextColor(col.faint)
 			})
 

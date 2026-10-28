@@ -85,6 +85,28 @@ func TestQueueFilters(t *testing.T) {
 	}
 }
 
+func TestClearFailedQueue(t *testing.T) {
+	a := &app{queue: queueState{items: []QueueItem{
+		{ID: 1, Status: StatusWaiting},
+		{ID: 2, Status: StatusFailed, Error: "boom"},
+		{ID: 3, Status: StatusCancelled},
+		{ID: 4, Status: StatusDone},
+	}}}
+	a.clearFailed()
+	if len(a.queue.items) != 2 || a.queue.items[0].ID != 1 || a.queue.items[1].ID != 4 {
+		t.Fatalf("queue after clear = %+v, want waiting item 1 and done item 4", a.queue.items)
+	}
+	if a.toast != "已清理 2 个失败任务" {
+		t.Fatalf("toast = %q", a.toast)
+	}
+
+	a = &app{queue: queueState{items: []QueueItem{{ID: 1, Status: StatusDone}}}}
+	a.clearFailed()
+	if len(a.queue.items) != 1 || a.toast != "没有失败的任务" {
+		t.Fatalf("queue = %+v, toast = %q", a.queue.items, a.toast)
+	}
+}
+
 func TestDownloadClaims(t *testing.T) {
 	dir := t.TempDir()
 	claims := newDownloadClaims()
