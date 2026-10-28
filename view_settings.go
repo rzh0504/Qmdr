@@ -90,24 +90,24 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 		AlignItems(ui.Center).Children(func() {
 		a.avatar(c, col, 34)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-			title := "Qmdr 账号"
-			if a.login.nick != "" {
-				title = a.login.nick
+			title := "未登录"
+			detail := "登录后可读取歌单并下载"
+			if a.login.loggedIn {
+				title = "Qmdr 账号"
+				if a.login.nick != "" {
+					title = a.login.nick
+				}
+				detail = a.login.userID + " · " + a.login.loginType + " 登录"
 			}
 			ui.Text(c, title).FontSize(13).FontWeight(400).TextColor(col.text)
-			ui.Textf(c, "%s · %s 登录", a.login.userID, a.login.loginType).
-				FontSize(12).TextColor(col.muted)
+			ui.Text(c, detail).FontSize(12).TextColor(col.muted)
 		})
-		status := "未登录"
-		dot := col.faint
 		if a.login.loggedIn {
-			status = "已登录"
-			dot = col.green
+			ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
+				ui.Box(c).Size(6, 6).Radius(3).Background(col.green)
+				ui.Text(c, "已登录").FontSize(12).TextColor(col.muted)
+			})
 		}
-		ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(6, 6).Radius(3).Background(dot)
-			ui.Text(c, status).FontSize(12).TextColor(col.muted)
-		})
 	})
 	a.settingRow(c, col, "登录方式", "", false, func() {
 		primaryButton(c, col, iconLogin, "QQ 登录", func() {

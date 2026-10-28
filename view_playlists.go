@@ -12,9 +12,31 @@ import (
 )
 
 func (a *app) playlistsView(c *ui.Context, col colors) {
+	if !a.login.loggedIn {
+		a.playlistsSignedOut(c, col)
+		return
+	}
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Gap(16).Children(func() {
 		a.playlistSidebar(c, col)
 		a.playlistPreview(c, col)
+	})
+}
+
+// playlistsSignedOut replaces the empty two-pane layout with a single login
+// prompt, since the page has nothing usable before signing in.
+func (a *app) playlistsSignedOut(c *ui.Context, col colors) {
+	ui.Column(c).Fill().Center().Children(func() {
+		ui.Column(c).Width(420).Children(func() {
+			emptyState(c, col, iconLogin, "登录后读取歌单", "QQ 音乐歌单需要登录后才能读取和下载。")
+			ui.Row(c).Gap(8).Justify(ui.Center).Children(func() {
+				primaryButton(c, col, iconLogin, "QQ 登录", func() {
+					a.openQR("QQ")
+				})
+				secondaryButton(c, col, iconLogin, "微信登录", func() {
+					a.openQR("微信")
+				})
+			})
+		})
 	})
 }
 
