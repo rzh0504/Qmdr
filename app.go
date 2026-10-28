@@ -105,26 +105,44 @@ func newApp() *app {
 // the saved credential, so every page stops showing stale account data.
 func (a *app) handleCredentialExpired() {
 	a.update(func() {
-		a.login.loggedIn = false
-		a.login.userID = "未登录"
-		a.login.loginType = "QQ"
-		a.resetUserProfile()
-		a.playlists.owner = ""
-		a.playlists.resetFetches()
-		a.playlists.loading = false
-		a.playlists.refreshing = false
-		a.playlists.loadingSongs = false
-		a.playlists.musicIDOpen = false
-		a.playlists.musicIDInput = ""
-		a.playlists.musicIDErr = ""
-		a.playlists.err = ""
-		a.playlists.notice = ""
-		a.playlists.items = nil
-		a.playlists.selected = -1
-		a.playlists.songs = nil
-		a.resetSongSelection()
+		a.clearAccountState()
 		a.toast = "登录已过期，请重新登录"
 	})
+}
+
+// clearAccountState drops the account and everything fetched for it.
+func (a *app) clearAccountState() {
+	a.login.loggedIn = false
+	a.login.userID = "未登录"
+	a.login.loginType = "QQ"
+	a.resetUserProfile()
+	a.playlists.owner = ""
+	a.playlists.resetFetches()
+	a.playlists.loading = false
+	a.playlists.refreshing = false
+	a.playlists.loadingSongs = false
+	a.playlists.musicIDOpen = false
+	a.playlists.musicIDInput = ""
+	a.playlists.musicIDErr = ""
+	a.playlists.err = ""
+	a.playlists.notice = ""
+	a.playlists.items = nil
+	a.playlists.selected = -1
+	a.playlists.songs = nil
+	a.resetSongSelection()
+}
+
+// logout signs out after the user confirms; the saved credential is deleted
+// so a restart does not sign back in.
+func (a *app) logout() {
+	err := a.api.Logout()
+	a.clearAccountState()
+	if err != nil {
+		a.toast = "已退出登录，但本地凭证删除失败：" + friendlyError(err)
+	} else {
+		a.toast = "已退出登录并清除本地凭据"
+	}
+	a.refresh()
 }
 
 func (a *app) update(fn func()) {

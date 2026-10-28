@@ -26,6 +26,7 @@ var (
 	iconRefresh      = mustIcon(`<path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18.7 7M17.9 15A7 7 0 0 1 5.3 17"/>`)
 	iconUpdate       = mustIcon(`<circle cx="12" cy="12" r="9"/><path d="m8 12 4-4 4 4M12 16V8"/>`)
 	iconLogin        = mustIcon(`<path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/><path d="m10 17 5-5-5-5M15 12H3"/>`)
+	iconLogout       = mustIcon(`<path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5"/><path d="m16 17 5-5-5-5M21 12H9"/>`)
 	iconExternal     = mustIcon(`<path d="M14 3h7v7M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>`)
 	iconCheck        = mustIcon(`<path d="m20 6-11 11-5-5"/>`)
 	iconX            = mustIcon(`<path d="M18 6 6 18M6 6l12 12"/>`)

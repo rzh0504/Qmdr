@@ -69,6 +69,7 @@ func (a *app) viewRoot(c *ui.Context) {
 	a.qrModal(c, col)
 	a.musicIDModal(c, col)
 	a.clearHistoryModal(c, col)
+	a.logoutModal(c, col)
 	a.aboutModal(c, col)
 	a.updateModal(c, col)
 	a.menuView(c, col)

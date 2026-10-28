@@ -156,4 +156,6 @@ type loginState struct {
 	qrStatus string
 	qrBitmap *ui.Bitmap
 	qrCancel context.CancelFunc
+
+	confirmLogout bool
 }

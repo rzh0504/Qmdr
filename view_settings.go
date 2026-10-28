@@ -125,6 +125,33 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 			a.exportCredential()
 		})
 	})
+	if a.login.loggedIn {
+		a.settingRow(c, col, "退出登录并清除本地凭据", "删除本地保存的登录凭证，下次启动需重新扫码登录", false, func() {
+			ghostDangerButton(c, col, iconLogout, "退出登录", func() {
+				a.login.confirmLogout = true
+				a.refresh()
+			})
+		})
+	}
+}
+
+func (a *app) logoutModal(c *ui.Context, col colors) {
+	a.modal(c, col, &a.login.confirmLogout, "退出登录", 380, func(close func()) {
+		ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
+			ui.Icon(c, iconAlert).Size(20, 20).TextColor(col.gold)
+			ui.Column(c).Gap(4).Grow(1).MinWidth(0).Children(func() {
+				ui.Text(c, "确定退出登录并清除本地凭据吗？").FontSize(14).TextColor(col.text).LineHeight(1.35)
+				ui.Text(c, "本地保存的登录凭证会被删除，之后需要重新扫码登录。").FontSize(12).TextColor(col.muted).LineHeight(1.35)
+			})
+		})
+		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+			secondaryButton(c, col, nil, "取消", close)
+			dangerButton(c, col, "退出登录", func() {
+				close()
+				a.logout()
+			})
+		})
+	})
 }
 
 func (a *app) appearanceSettings(c *ui.Context, col colors) {

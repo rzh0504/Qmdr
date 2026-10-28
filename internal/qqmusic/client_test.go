@@ -3,6 +3,7 @@ package qqmusic
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -107,6 +108,31 @@ func TestMergeCredentialKeepsOldValues(t *testing.T) {
 	withoutTime := mergeCredential(old, Credential{MusicID: 42, Musickey: "newer-key"})
 	if withoutTime.MusickeyCreateTime <= old.MusickeyCreateTime {
 		t.Fatalf("MusickeyCreateTime = %d, want a fresh timestamp", withoutTime.MusickeyCreateTime)
+	}
+}
+
+func TestLogoutClearsSavedCredential(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AppData", dir)
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("HOME", dir)
+
+	client := &Client{}
+	client.setCredential(Credential{MusicID: 42, Musickey: "key", ExpiredAt: time.Now().Add(time.Hour).Unix()})
+	if err := client.SaveCredential(); err != nil {
+		t.Fatalf("save credential: %v", err)
+	}
+	if _, err := os.Stat(CredentialPath()); err != nil {
+		t.Fatalf("credential file missing before logout: %v", err)
+	}
+	if err := client.Logout(); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+	if client.HasCredential() || client.UserID() != "" {
+		t.Fatalf("credential survived logout: %+v", client.Credential())
+	}
+	if _, err := os.Stat(CredentialPath()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("credential file still exists: %v", err)
 	}
 }
 

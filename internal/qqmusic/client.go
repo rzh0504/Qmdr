@@ -231,6 +231,26 @@ func (c *Client) ReloadCredential() bool {
 	return c.HasCredential()
 }
 
+// Logout forgets the credential in memory and deletes the saved copy, so a
+// restart starts signed out.
+func (c *Client) Logout() error {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+	c.mu.Lock()
+	c.credential = Credential{}
+	c.credentialSeq++
+	c.saveErr = nil
+	c.mu.Unlock()
+	path := CredentialPath()
+	if path == "" {
+		return errors.New("找不到配置目录")
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
 func (c *Client) HasCredential() bool {
 	_, ok := c.usableCredential()
 	return ok
