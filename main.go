@@ -11,6 +11,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
 	"github.com/rzh0504/qmdr/internal/settings"
+	"github.com/rzh0504/qmdr/internal/tag"
 )
 
 func (a *app) viewRoot(c *ui.Context) {
@@ -414,6 +415,7 @@ func main() {
 			a.downloadDir = settings.DefaultDownloadDir()
 		}
 		cleanPartFiles(a.downloadDir)
+		tag.CleanTempFiles(a.downloadDir)
 		options := mygo.WindowOptions{
 			Title:           "Qmdr · QQ 音乐下载器",
 			Width:           1200,
