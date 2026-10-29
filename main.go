@@ -457,6 +457,13 @@ func main() {
 			if err := a.api.EnsureCredential(ctx); err != nil {
 				log.Printf("refresh credential: %v", err)
 			}
+			// A restored cache only shows the last session's playlists; pull
+			// the list and its songs once so the page opens current.
+			a.update(func() {
+				if a.api.HasCredential() {
+					a.refreshPlaylists()
+				}
+			})
 		}()
 		go a.initHistory()
 	})
