@@ -139,28 +139,6 @@ func TestCopyFile(t *testing.T) {
 	}
 }
 
-func TestCleanTempFiles(t *testing.T) {
-	dir := t.TempDir()
-	stale := []string{".song.flac.tag-123456", ".a.b.mp3.tag-7"}
-	keep := []string{"song.flac", ".song.flac.tag-abc", ".song.flac.part", ".tag-1"}
-	for _, name := range append(stale, keep...) {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	CleanTempFiles(dir)
-	for _, name := range stale {
-		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
-			t.Fatalf("%q survived cleanup", name)
-		}
-	}
-	for _, name := range keep {
-		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
-			t.Fatalf("%q was removed: %v", name, err)
-		}
-	}
-}
-
 func assertNoTempFiles(t *testing.T, dir string) {
 	t.Helper()
 	entries, err := os.ReadDir(dir)

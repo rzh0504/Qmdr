@@ -32,46 +32,10 @@ func Write(path string, info Info) error {
 	}
 }
 
-const tempTag = ".tag-"
-
-// CleanTempFiles removes tag temp files a crash or failed swap left in dir.
-func CleanTempFiles(dir string) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || !isTempName(entry.Name()) {
-			continue
-		}
-		_ = os.Remove(filepath.Join(dir, entry.Name()))
-	}
-}
-
-func isTempName(name string) bool {
-	if !strings.HasPrefix(name, ".") {
-		return false
-	}
-	index := strings.LastIndex(name, tempTag)
-	if index < 1 {
-		return false
-	}
-	digits := name[index+len(tempTag):]
-	if digits == "" {
-		return false
-	}
-	for _, r := range digits {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
-}
-
 // writeAtomic replaces path with the file fn writes to the temp path it
 // receives, so a failure partway leaves the original audio untouched.
 func writeAtomic(path string, fn func(tmp string) error) (err error) {
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+tempTag+"*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tag-*")
 	if err != nil {
 		return err
 	}
