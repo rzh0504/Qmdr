@@ -93,25 +93,25 @@ func (c *Client) ResolveURL(ctx context.Context, mid, quality string) (ResolvedU
 	if mid == "" {
 		return ResolvedURL{}, errors.New("歌曲缺少 MID")
 	}
-	candidates := fileTypesForQuality(quality)
-	filenames := make([]string, 0, len(candidates))
-	for _, ft := range candidates {
-		filenames = append(filenames, ft.Code+mid+mid+ft.Ext)
-	}
-	params := map[string]any{
-		"filename": filenames,
-		"guid":     randomHex(16),
-		"songmid":  []string{mid},
-		"songtype": []int{0},
-	}
-	var data struct {
-		Midurlinfo []vkeyEntry `json:"midurlinfo"`
-	}
-	if err := c.call(ctx, "music.vkey.GetVkey", "UrlGetVkey", params, &data); err != nil {
-		return ResolvedURL{}, err
-	}
-	if resolved, ok := resolveFromEntries(mid, candidates, data.Midurlinfo); ok {
-		return resolved, nil
+	// The vkey service only resolves the first filename of a request, so try
+	// the candidates one by one; a batch request would never fall back.
+	guid := randomHex(16)
+	for _, ft := range fileTypesForQuality(quality) {
+		params := map[string]any{
+			"filename": []string{ft.Code + mid + mid + ft.Ext},
+			"guid":     guid,
+			"songmid":  []string{mid},
+			"songtype": []int{0},
+		}
+		var data struct {
+			Midurlinfo []vkeyEntry `json:"midurlinfo"`
+		}
+		if err := c.call(ctx, "music.vkey.GetVkey", "UrlGetVkey", params, &data); err != nil {
+			return ResolvedURL{}, err
+		}
+		if resolved, ok := resolveFromEntries(mid, []FileType{ft}, data.Midurlinfo); ok {
+			return resolved, nil
+		}
 	}
 	if !c.HasCredential() {
 		return ResolvedURL{}, errors.New("需要登录后才能获取该歌曲的下载链接")
