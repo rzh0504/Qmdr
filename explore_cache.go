@@ -35,10 +35,13 @@ func (a *app) restoreExploreCache() {
 			songs: chart.Songs,
 		})
 	}
+	if len(cache.HotSearches) > 0 {
+		a.search.hotSearches = cache.HotSearches
+		a.search.hotDay = cache.Day
+	}
 	if len(charts) == 0 {
 		return
 	}
-	a.search.hotSearches = cache.HotSearches
 	a.search.charts = charts
 	a.search.exploreDay = cache.Day
 }

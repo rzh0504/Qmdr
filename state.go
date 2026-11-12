@@ -27,6 +27,9 @@ type searchState struct {
 	scroll      ui.ScrollState
 
 	hotSearches    []string
+	hotDay         string
+	hotSlot        asyncSlot
+	hotLoading     bool
 	charts         []chartPreview
 	exploreDay     string
 	exploreSlot    asyncSlot

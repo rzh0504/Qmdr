@@ -14,6 +14,8 @@ import (
 func (a *app) searchView(c *ui.Context, col colors) {
 	if a.showExplore {
 		a.ensureExplore()
+	} else {
+		a.ensureHotSearches()
 	}
 	a.searchToolbar(c, col)
 	if a.search.loading {
@@ -45,10 +47,7 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 			})
 		})
 
-		var tags []string
-		if a.showExplore {
-			tags = a.search.hotSearches
-		}
+		tags := a.search.hotSearches
 		if len(tags) == 0 {
 			tags = []string{"周杰伦", "华语流行", "深夜电台", "G.E.M. 邓紫棋", "陈奕迅"}
 		}
@@ -99,6 +98,30 @@ func (a *app) ensureExplore() {
 	a.loadExplore(false, false)
 }
 
+// ensureHotSearches keeps the suggestion row populated even when the
+// toplists are disabled; the same-day explore cache seeds it, and a failed
+// attempt falls back to the fixed examples until the next day.
+func (a *app) ensureHotSearches() {
+	day := explorecache.Day(time.Now())
+	if a.search.hotLoading || a.search.hotDay == day {
+		return
+	}
+	a.search.hotLoading = true
+	var hot []string
+	a.async(&a.search.hotSlot, 20*time.Second,
+		func(ctx context.Context) error {
+			hot, _ = a.api.HotSearches(ctx, hotSearchCount)
+			return nil
+		},
+		func(error) {
+			a.search.hotLoading = false
+			if len(hot) > 0 {
+				a.search.hotSearches = hot
+			}
+			a.search.hotDay = day
+		})
+}
+
 // loadExplore fetches the explore content. quiet keeps cached charts on
 // screen and suppresses failure toasts, so a background refresh is silent.
 func (a *app) loadExplore(force, quiet bool) {
@@ -143,6 +166,7 @@ func (a *app) loadExplore(force, quiet bool) {
 			}
 			if len(hot) > 0 {
 				a.search.hotSearches = hot
+				a.search.hotDay = explorecache.Day(time.Now())
 			}
 			old := make(map[int]chartPreview, len(previous))
 			for _, chart := range previous {
