@@ -44,6 +44,13 @@ func Friendly(err error) string {
 	if errors.Is(err, os.ErrNotExist) {
 		return "文件或目录不存在"
 	}
+	// syscall.Errno implements net.Error, so a locked file would otherwise be
+	// reported as a network failure; filesystem errors come first.
+	var pathErr *os.PathError
+	var linkErr *os.LinkError
+	if errors.As(err, &pathErr) || errors.As(err, &linkErr) {
+		return "文件写入失败，可能被其他程序占用"
+	}
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		if netErr.Timeout() {

@@ -22,6 +22,7 @@ func TestFriendly(t *testing.T) {
 		{&os.PathError{Op: "open", Path: "test", Err: os.ErrPermission}, "没有访问文件或目录的权限"},
 		{&os.PathError{Op: "open", Path: "test", Err: os.ErrNotExist}, "文件或目录不存在"},
 		{&net.OpError{Op: "dial", Net: "tcp", Err: errors.New("boom")}, "网络连接失败，请检查网络"},
+		{&os.LinkError{Op: "rename", Old: "a.tmp", New: "a.flac", Err: errors.New("sharing violation")}, "文件写入失败，可能被其他程序占用"},
 		{&qqmusic.APIError{Code: 1000}, "登录已过期，请重新登录"},
 		{errors.New("plain"), "plain"},
 	}
