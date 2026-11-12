@@ -145,4 +145,14 @@ func TestDownloadClaims(t *testing.T) {
 	if result != claimOK || lower != filepath.Join(dir, "case (2).flac") {
 		t.Fatalf("case-insensitive claim = %q, %v", lower, result)
 	}
+
+	claims = newDownloadClaims()
+	nested := filepath.Join("周深", "花开忘忧")
+	nestedDest, result := claims.reserve(dir, nested, ".flac", false)
+	if result != claimOK || nestedDest != filepath.Join(dir, nested+".flac") {
+		t.Fatalf("nested claim = %q, %v", nestedDest, result)
+	}
+	if _, err := os.Stat(filepath.Dir(nestedDest)); !os.IsNotExist(err) {
+		t.Fatalf("reserve should not create directories")
+	}
 }

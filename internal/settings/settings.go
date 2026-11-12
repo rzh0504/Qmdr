@@ -8,17 +8,22 @@ import (
 	"strings"
 )
 
+// DefaultNameTemplate is the file naming pattern used until the user picks
+// another one.
+const DefaultNameTemplate = "{artist} - {title}"
+
 // Settings is what the app stores between runs.
 type Settings struct {
-	DownloadDir string  `json:"download_dir"`
-	Quality     string  `json:"quality"`
-	CoverSize   string  `json:"cover_size"`
-	Overwrite   bool    `json:"overwrite"`
-	Concurrency float64 `json:"concurrency"`
-	Appearance  string  `json:"appearance"`
-	Background  string  `json:"background"`
-	HistoryKeep string  `json:"history_keep"`
-	ShowExplore bool    `json:"show_explore"`
+	DownloadDir  string  `json:"download_dir"`
+	Quality      string  `json:"quality"`
+	CoverSize    string  `json:"cover_size"`
+	Overwrite    bool    `json:"overwrite"`
+	Concurrency  float64 `json:"concurrency"`
+	Appearance   string  `json:"appearance"`
+	Background   string  `json:"background"`
+	HistoryKeep  string  `json:"history_keep"`
+	ShowExplore  bool    `json:"show_explore"`
+	NameTemplate string  `json:"name_template"`
 }
 
 var (
@@ -45,13 +50,14 @@ func DefaultDownloadDir() string {
 
 func Defaults() Settings {
 	return Settings{
-		DownloadDir: DefaultDownloadDir(),
-		Quality:     "FLAC 无损",
-		CoverSize:   "800 px",
-		Concurrency: 3,
-		Appearance:  "light",
-		Background:  "rex",
-		HistoryKeep: "90 天",
+		DownloadDir:  DefaultDownloadDir(),
+		Quality:      "FLAC 无损",
+		CoverSize:    "800 px",
+		Concurrency:  3,
+		Appearance:   "light",
+		Background:   "rex",
+		HistoryKeep:  "90 天",
+		NameTemplate: DefaultNameTemplate,
 	}
 }
 
@@ -87,6 +93,9 @@ func LoadFile(path string) Settings {
 	}
 	if !ValidHistoryKeep(s.HistoryKeep) {
 		s.HistoryKeep = "90 天"
+	}
+	if strings.TrimSpace(s.NameTemplate) == "" {
+		s.NameTemplate = DefaultNameTemplate
 	}
 	return s
 }

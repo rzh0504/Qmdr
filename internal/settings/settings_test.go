@@ -22,6 +22,17 @@ func TestLoadFileDefaultsAndValidation(t *testing.T) {
 	if got.DownloadDir == "" {
 		t.Fatal("DownloadDir was left empty")
 	}
+	if got.NameTemplate != DefaultNameTemplate {
+		t.Fatalf("NameTemplate = %q, want the default", got.NameTemplate)
+	}
+
+	path = filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"name_template":"{artist}/{album}/{title}"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadFile(path); got.NameTemplate != "{artist}/{album}/{title}" {
+		t.Fatalf("NameTemplate = %q, want the saved template", got.NameTemplate)
+	}
 }
 
 func TestHelpers(t *testing.T) {

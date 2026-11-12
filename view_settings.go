@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
+	"github.com/rzh0504/qmdr/internal/settings"
 )
 
 func (a *app) settingsView(c *ui.Context, col colors) {
@@ -222,6 +223,11 @@ func (a *app) downloadSettings(c *ui.Context, col colors) {
 		secondaryButton(c, col, iconFolder, "选择…", func() {
 			a.pickDir()
 		})
+	})
+	a.settingRow(c, col, "文件命名", "支持 {artist}、{album}、{title}，用 / 分目录", false, func() {
+		a.textField(c, col, &a.nameTemplate, settings.DefaultNameTemplate, 300, 30, func() {
+			a.saveSettings()
+		}, nil)
 	})
 	a.settingRow(c, col, "默认音质", "", false, func() {
 		selectControl(c, col, &a.quality, qualityOptions, 160, col.control, func() {

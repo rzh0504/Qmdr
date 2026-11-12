@@ -51,15 +51,16 @@ type app struct {
 	login       loginState
 	contextMenu contextMenuState
 
-	quality     string
-	downloadDir string
-	coverSize   string
-	concurrency float64
-	overwrite   bool
-	appearance  string
-	background  string
-	historyKeep string
-	showExplore bool
+	quality      string
+	downloadDir  string
+	coverSize    string
+	concurrency  float64
+	overwrite    bool
+	appearance   string
+	background   string
+	historyKeep  string
+	showExplore  bool
+	nameTemplate string
 }
 
 func newApp() *app {
@@ -76,23 +77,24 @@ func newApp() *app {
 	settings := loadSettings()
 	brandIcon, _ := ui.DecodeBitmap(appIconPNG)
 	a := &app{
-		api:         api,
-		brandIcon:   brandIcon,
-		view:        viewPlaylists,
-		covers:      coverState{cache: map[string]coverEntry{}, loading: map[string]bool{}, sem: make(chan struct{}, coverFetchLimit)},
-		queue:       queueState{pending: pending.Load()},
-		playlists:   playlistState{owner: userID, selected: -1, selectedMids: map[string]bool{}},
-		history:     historyState{loading: true},
-		login:       loginState{loggedIn: api.HasCredential(), userID: displayUser, loginType: loginType},
-		quality:     settings.Quality,
-		downloadDir: settings.DownloadDir,
-		coverSize:   settings.CoverSize,
-		concurrency: settings.Concurrency,
-		overwrite:   settings.Overwrite,
-		appearance:  settings.Appearance,
-		background:  settings.Background,
-		historyKeep: settings.HistoryKeep,
-		showExplore: settings.ShowExplore,
+		api:          api,
+		brandIcon:    brandIcon,
+		view:         viewPlaylists,
+		covers:       coverState{cache: map[string]coverEntry{}, loading: map[string]bool{}, sem: make(chan struct{}, coverFetchLimit)},
+		queue:        queueState{pending: pending.Load()},
+		playlists:    playlistState{owner: userID, selected: -1, selectedMids: map[string]bool{}},
+		history:      historyState{loading: true},
+		login:        loginState{loggedIn: api.HasCredential(), userID: displayUser, loginType: loginType},
+		quality:      settings.Quality,
+		downloadDir:  settings.DownloadDir,
+		coverSize:    settings.CoverSize,
+		concurrency:  settings.Concurrency,
+		overwrite:    settings.Overwrite,
+		appearance:   settings.Appearance,
+		background:   settings.Background,
+		historyKeep:  settings.HistoryKeep,
+		showExplore:  settings.ShowExplore,
+		nameTemplate: settings.NameTemplate,
 	}
 	a.startDiskWorker()
 	a.restorePlaylistCache()

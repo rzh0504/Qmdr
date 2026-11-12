@@ -67,20 +67,18 @@ func (c *downloadClaims) reserve(dir, base, ext string, overwrite bool) (string,
 }
 
 // cleanPartFiles removes the .part files of downloads that a previous run
-// never finished; they cannot be resumed.
+// never finished; they cannot be resumed. Naming templates can put files in
+// album subdirectories, so the whole tree is checked.
 func cleanPartFiles(dir string) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".part") {
-			continue
+	_ = filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".part") {
+			return nil
 		}
-		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+		if err := os.Remove(path); err != nil {
 			log.Printf("remove stale part file: %v", err)
 		}
-	}
+		return nil
+	})
 }
 
 func (a *app) writeMetadataSafely(ctx context.Context, task downloadTask, dest string, coverSize int) (err error) {
