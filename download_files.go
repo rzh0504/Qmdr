@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -96,7 +97,7 @@ func (a *app) writeMetadata(ctx context.Context, task downloadTask, dest string,
 	var cover []byte
 	var coverMIME string
 	if task.AlbumMid != "" {
-		cover, coverMIME, _ = a.api.Cover(ctx, task.AlbumMid, coverSize)
+		cover, coverMIME = a.metadataCover(ctx, task.AlbumMid, coverSize)
 	}
 	return tag.Write(dest, tag.Info{
 		Title:     task.Title,
@@ -106,4 +107,50 @@ func (a *app) writeMetadata(ctx context.Context, task downloadTask, dest string,
 		Cover:     cover,
 		CoverMIME: coverMIME,
 	})
+}
+
+const maxCachedMetadataCovers = 64
+
+// metadataCover fetches an album cover once per size: later songs of the
+// same album reuse it, and concurrent downloads wait for the fetch already
+// in flight instead of requesting the same image again.
+func (a *app) metadataCover(ctx context.Context, albumMid string, size int) ([]byte, string) {
+	key := albumMid + "-" + strconv.Itoa(size)
+	state := &a.metaCovers
+	state.mu.Lock()
+	if entry, ok := state.cache[key]; ok {
+		state.mu.Unlock()
+		return entry.data, entry.mime
+	}
+	if call, ok := state.pending[key]; ok {
+		state.mu.Unlock()
+		select {
+		case <-call.done:
+			return call.data, call.mime
+		case <-ctx.Done():
+			return nil, ""
+		}
+	}
+	call := &metadataCoverCall{done: make(chan struct{})}
+	state.pending[key] = call
+	state.mu.Unlock()
+
+	data, mime, err := a.api.Cover(ctx, albumMid, size)
+	if err == nil && len(data) > 0 {
+		call.data, call.mime = data, mime
+		state.mu.Lock()
+		state.cache[key] = metadataCover{data: data, mime: mime}
+		state.order = append(state.order, key)
+		for len(state.order) > maxCachedMetadataCovers {
+			oldest := state.order[0]
+			state.order = state.order[1:]
+			delete(state.cache, oldest)
+		}
+		state.mu.Unlock()
+	}
+	close(call.done)
+	state.mu.Lock()
+	delete(state.pending, key)
+	state.mu.Unlock()
+	return call.data, call.mime
 }

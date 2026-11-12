@@ -136,6 +136,26 @@ type coverState struct {
 	sem     chan struct{}
 }
 
+// metadataCoverState shares cover bytes between songs of the same album and
+// lets concurrent downloads of one album wait on a single fetch.
+type metadataCoverState struct {
+	mu      sync.Mutex
+	cache   map[string]metadataCover
+	order   []string
+	pending map[string]*metadataCoverCall
+}
+
+type metadataCover struct {
+	data []byte
+	mime string
+}
+
+type metadataCoverCall struct {
+	done chan struct{}
+	data []byte
+	mime string
+}
+
 // loginState is the account chip and the QR login dialog.
 type loginState struct {
 	loggedIn  bool

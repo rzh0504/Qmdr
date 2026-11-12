@@ -48,6 +48,7 @@ type app struct {
 	queue       queueState
 	history     historyState
 	covers      coverState
+	metaCovers  metadataCoverState
 	login       loginState
 	contextMenu contextMenuState
 
@@ -81,6 +82,7 @@ func newApp() *app {
 		brandIcon:    brandIcon,
 		view:         viewPlaylists,
 		covers:       coverState{cache: map[string]coverEntry{}, loading: map[string]bool{}, sem: make(chan struct{}, coverFetchLimit)},
+		metaCovers:   metadataCoverState{cache: map[string]metadataCover{}, pending: map[string]*metadataCoverCall{}},
 		queue:        queueState{pending: pending.Load()},
 		playlists:    playlistState{owner: userID, selected: -1, selectedMids: map[string]bool{}},
 		history:      historyState{loading: true},

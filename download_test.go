@@ -156,3 +156,24 @@ func TestDownloadClaims(t *testing.T) {
 		t.Fatalf("reserve should not create directories")
 	}
 }
+
+func TestMetadataCoverCache(t *testing.T) {
+	a := &app{metaCovers: metadataCoverState{cache: map[string]metadataCover{}, pending: map[string]*metadataCoverCall{}}}
+
+	a.metaCovers.cache["hit-800"] = metadataCover{data: []byte("cover"), mime: "image/jpeg"}
+	data, mime := a.metadataCover(context.Background(), "hit", 800)
+	if string(data) != "cover" || mime != "image/jpeg" {
+		t.Fatalf("cache hit = %q, %q", data, mime)
+	}
+
+	call := &metadataCoverCall{done: make(chan struct{})}
+	a.metaCovers.pending["wait-800"] = call
+	go func() {
+		call.data, call.mime = []byte("pending"), "image/png"
+		close(call.done)
+	}()
+	data, mime = a.metadataCover(context.Background(), "wait", 800)
+	if string(data) != "pending" || mime != "image/png" {
+		t.Fatalf("pending call = %q, %q", data, mime)
+	}
+}
