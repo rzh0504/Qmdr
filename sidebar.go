@@ -18,7 +18,7 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 		ui.Column(c).Gap(2).Children(func() {
 			ui.Text(c, "资料库").FontSize(11).FontWeight(600).TextColor(col.faint).
 				Padding(0, 9, 6, 9)
-			a.navItem(c, col, "search", iconSearch, "搜索下载")
+			a.navItem(c, col, "search", iconSearch, "搜索")
 			a.navItem(c, col, "playlists", iconLibrary, "歌单下载")
 			a.navItem(c, col, "queue", iconQueue, "下载队列")
 			a.navItem(c, col, "history", iconClock, "下载历史")

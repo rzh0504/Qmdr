@@ -26,7 +26,7 @@ func (a *app) menu() *mygo.Menu {
 		appMenu,
 		{Role: mygo.RoleEditMenu},
 		{Label: "视图", Submenu: []*mygo.MenuItem{
-			a.menuPage("搜索下载", "CmdOrCtrl+1", "search"),
+			a.menuPage("搜索", "CmdOrCtrl+1", "search"),
 			a.menuPage("歌单下载", "CmdOrCtrl+2", "playlists"),
 			a.menuPage("下载队列", "CmdOrCtrl+3", "queue"),
 			a.menuPage("下载历史", "CmdOrCtrl+4", "history"),
