@@ -15,6 +15,7 @@ type colors struct {
 	accent, accentHover, accentPressed, accentText      ui.Color
 	accentSoft, accentBorder                            ui.Color
 	gold, red, green, blue                              ui.Color
+	vipGold, vipGreen                                   ui.Color
 	shadow, shadow2, floatShadow                        ui.Color
 	control, controlHover                               ui.Color
 	rowSelected, rowSelBorder, rowShadow                ui.Color
@@ -45,6 +46,8 @@ func (a *app) themeColors(c *ui.Context) colors {
 		col.gold = ui.Hex("#f0a33a")
 		col.red = ui.Hex("#ff6961")
 		col.green = ui.Hex("#4fd17a")
+		col.vipGold = ui.Hex("#f5c451")
+		col.vipGreen = ui.Hex("#3ddc84")
 		col.blue = col.accent
 		col.shadow = ui.RGBA(0, 0, 0, 0.35)
 		col.shadow2 = ui.RGBA(0, 0, 0, 0.20)
@@ -78,6 +81,8 @@ func (a *app) themeColors(c *ui.Context) colors {
 		col.gold = ui.Hex("#c27b0f")
 		col.red = ui.Hex("#d93a35")
 		col.green = ui.Hex("#22863a")
+		col.vipGold = ui.Hex("#d19a16")
+		col.vipGreen = ui.Hex("#00a854")
 		col.blue = col.accent
 		col.shadow = ui.RGBA(0, 0, 0, 0.07)
 		col.shadow2 = ui.RGBA(0, 0, 0, 0.035)

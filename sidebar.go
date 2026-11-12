@@ -82,7 +82,11 @@ func (a *app) accountChip(c *ui.Context, col colors) {
 			}
 			ui.Text(c, name).FontSize(12).FontWeight(400).TextColor(col.text).SingleLine().Ellipsis("…")
 			if a.login.loggedIn {
-				ui.Text(c, "已登录").FontSize(11).TextColor(col.muted).SingleLine()
+				detail, fg := "已登录", col.muted
+				if label := a.vipLabel(); label != "" {
+					detail, fg = label, a.vipColor(col)
+				}
+				ui.Text(c, detail).FontSize(11).TextColor(fg).SingleLine().Ellipsis("…")
 			}
 		})
 		ui.Icon(c, iconChevronRight).Size(13, 13).TextColor(col.faint)

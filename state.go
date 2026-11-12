@@ -7,6 +7,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/rzh0504/qmdr/internal/history"
+	"github.com/rzh0504/qmdr/internal/qqmusic"
 )
 
 // searchState is the search page: the query, whether a fetch is running,
@@ -166,6 +167,7 @@ type loginState struct {
 	loginType string
 	nick      string
 	avatar    *ui.Bitmap
+	vip       qqmusic.VipInfo
 
 	profileSlot    asyncSlot
 	profileFor     string

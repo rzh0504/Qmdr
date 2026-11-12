@@ -238,6 +238,7 @@ func (a *app) resetUserProfile() {
 	a.login.profileFor = ""
 	a.login.profileLoading = false
 	a.login.profileDone = false
+	a.login.vip = qqmusic.VipInfo{}
 }
 
 // loadUserProfile fetches the signed-in user's nickname and avatar once
@@ -254,6 +255,7 @@ func (a *app) loadUserProfile() {
 	a.login.profileFor = userID
 	var nick string
 	var avatar *ui.Bitmap
+	var vip qqmusic.VipInfo
 	a.async(&a.login.profileSlot, 20*time.Second,
 		func(ctx context.Context) error {
 			profile, err := a.api.UserProfile(ctx)
@@ -266,6 +268,10 @@ func (a *app) loadUserProfile() {
 				if err == nil {
 					avatar, _ = ui.DecodeBitmap(data)
 				}
+			}
+			vip, err = a.api.VipInfo(ctx)
+			if err != nil {
+				log.Printf("load user vip: %v", err)
 			}
 			return nil
 		},
@@ -280,6 +286,7 @@ func (a *app) loadUserProfile() {
 				return
 			}
 			a.login.nick = nick
+			a.login.vip = vip
 			if avatar != nil {
 				a.login.avatar = avatar
 			}

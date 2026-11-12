@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -98,15 +99,28 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 				if a.login.nick != "" {
 					title = a.login.nick
 				}
-				detail = a.login.userID + " · " + a.login.loginType + " 登录"
+				detail = a.login.userID
+				vip := a.login.vip
+				if (vip.SuperVIP || vip.GreenVip) && vip.Expiry != "" {
+					detail += " · 会员至 " + vip.Expiry
+				}
 			}
-			ui.Text(c, title).FontSize(13).FontWeight(400).TextColor(col.text)
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, title).FontSize(13).FontWeight(400).TextColor(col.text).
+					SingleLine().Ellipsis("…").MaxWidth(240)
+				if a.login.loggedIn {
+					if label := a.vipLabel(); label != "" {
+						vipBadge(c, col, a.vipColor(col), label)
+					}
+				}
+				ui.Spacer(c)
+			})
 			ui.Text(c, detail).FontSize(12).TextColor(col.muted)
 		})
 		if a.login.loggedIn {
 			ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
 				ui.Box(c).Size(6, 6).Radius(3).Background(col.green)
-				ui.Text(c, "已登录").FontSize(12).TextColor(col.muted)
+				ui.Text(c, "已登录（"+a.login.loginType+"）").FontSize(12).TextColor(col.muted)
 			})
 		}
 	})
@@ -133,6 +147,39 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 				a.refresh()
 			})
 		})
+	}
+}
+
+// vipBadge is the small membership tag shown next to the account name.
+func vipBadge(c *ui.Context, col colors, fg ui.Color, label string) ui.Element {
+	badge := ui.Row(c).Height(18).Padding(0, 7).Radius(9).AlignItems(ui.Center)
+	badge.Background(fg.Alpha(0.12)).Border(1, fg.Alpha(0.30))
+	badge.Children(func() {
+		ui.Text(c, label).FontSize(10).FontWeight(600).TextColor(fg).SingleLine()
+	})
+	return badge
+}
+
+// vipColor follows the official badge hues: gold for SVIP, green for 绿钻.
+func (a *app) vipColor(col colors) ui.Color {
+	if a.login.vip.SuperVIP {
+		return col.vipGold
+	}
+	return col.vipGreen
+}
+
+// vipLabel is the membership tier shown beside the signed-in account.
+func (a *app) vipLabel() string {
+	vip := a.login.vip
+	switch {
+	case vip.SuperVIP:
+		return "SVIP"
+	case vip.GreenVip && vip.Level > 0:
+		return fmt.Sprintf("绿钻 Lv.%d", vip.Level)
+	case vip.GreenVip:
+		return "绿钻"
+	default:
+		return ""
 	}
 }
 
