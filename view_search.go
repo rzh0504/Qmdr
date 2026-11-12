@@ -40,7 +40,6 @@ func (a *app) searchToolbar(c *ui.Context, col colors) {
 				func() { a.doSearch() },
 				func() { a.clearSearch() },
 			).Grow(1)
-			selectControl(c, col, &a.quality, qualityOptions, 140, col.chip, nil)
 			primaryButton(c, col, iconSearch, "搜索", func() {
 				a.doSearch()
 			})
