@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/rzh0504/qmdr/internal/qqmusic"
 	"github.com/rzh0504/qmdr/internal/settings"
 )
 
@@ -116,6 +117,7 @@ func (a *app) enqueueSongs(songs []Song) bool {
 			Song:      song,
 			Status:    StatusWaiting,
 			Quality:   quality,
+			FileSize:  qqmusic.ExpectedSize(quality, songFileOf(song)),
 			CreatedAt: now,
 		})
 	}
@@ -141,13 +143,14 @@ func (a *app) startQueue() {
 			continue
 		}
 		tasks = append(tasks, downloadTask{
-			ID:       item.ID,
-			Mid:      item.Song.Mid,
-			Title:    item.Song.Title,
-			Artist:   item.Song.Artist,
-			Album:    item.Song.Album,
-			AlbumMid: item.Song.AlbumMid,
-			Quality:  item.Quality,
+			ID:          item.ID,
+			Mid:         item.Song.Mid,
+			Title:       item.Song.Title,
+			Artist:      item.Song.Artist,
+			Album:       item.Song.Album,
+			AlbumMid:    item.Song.AlbumMid,
+			Quality:     item.Quality,
+			File:        songFileOf(item.Song),
 		})
 	}
 	if len(tasks) == 0 {

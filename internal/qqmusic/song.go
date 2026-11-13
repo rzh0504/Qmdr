@@ -28,6 +28,56 @@ type ResolvedURL struct {
 	Quality string
 }
 
+// SongFile is the audio file availability reported with a song: the media
+// mid used in file names and the size of each quality, zero when absent.
+type SongFile struct {
+	MediaMid   string
+	SizeMaster int64
+	SizeAtmos2 int64
+	SizeAtmos51 int64
+	SizeFLAC   int64
+	SizeMP3320 int64
+	SizeMP3128 int64
+}
+
+func (f SongFile) SizeFor(ft FileType) int64 {
+	switch ft.Code {
+	case fileTypeMaster.Code:
+		return f.SizeMaster
+	case fileTypeAtmos2.Code:
+		return f.SizeAtmos2
+	case fileTypeAtmos51.Code:
+		return f.SizeAtmos51
+	case fileTypeFLAC.Code:
+		return f.SizeFLAC
+	case fileTypeMP3320.Code:
+		return f.SizeMP3320
+	case fileTypeMP3128.Code:
+		return f.SizeMP3128
+	}
+	return 0
+}
+
+// HasSizes reports whether the server listed any file size, so a zero means
+// "unavailable" rather than "unknown".
+func (f SongFile) HasSizes() bool {
+	return f.SizeMaster > 0 || f.SizeAtmos2 > 0 || f.SizeAtmos51 > 0 ||
+		f.SizeFLAC > 0 || f.SizeMP3320 > 0 || f.SizeMP3128 > 0
+}
+
+// ExpectedSize is the size of the highest quality the preference can use.
+func ExpectedSize(quality string, file SongFile) int64 {
+	if !file.HasSizes() {
+		return 0
+	}
+	for _, ft := range fileTypesForQuality(quality) {
+		if size := file.SizeFor(ft); size > 0 {
+			return size
+		}
+	}
+	return 0
+}
+
 func fileTypesForQuality(quality string) []FileType {
 	switch quality {
 	case "臻品母带":
@@ -50,27 +100,10 @@ type vkeyEntry struct {
 	Purl     string `json:"purl"`
 }
 
-// resolveFromEntries picks the highest-priority candidate that the vkey
-// response can serve. Entries echo the requested filename when the server
-// names them, and otherwise line up with the request order.
-func resolveFromEntries(mid string, candidates []FileType, entries []vkeyEntry) (ResolvedURL, bool) {
-	indexed := make(map[string]int, len(entries))
-	named := false
-	for i, entry := range entries {
-		if entry.Filename != "" {
-			indexed[entry.Filename] = i
-			named = true
-		}
-	}
-	for i, ft := range candidates {
-		index, ok := indexed[ft.Code+mid+mid+ft.Ext]
-		if !ok && !named && i < len(entries) {
-			index, ok = i, true
-		}
-		if !ok {
-			continue
-		}
-		entry := entries[index]
+// resolveEntry returns the first entry the server serves for the requested
+// quality; entries for other songs and entries without a URL are skipped.
+func resolveEntry(mid string, ft FileType, entries []vkeyEntry) (ResolvedURL, bool) {
+	for _, entry := range entries {
 		if entry.Songmid != "" && entry.Songmid != mid {
 			continue
 		}
@@ -89,28 +122,46 @@ func resolveFromEntries(mid string, candidates []FileType, entries []vkeyEntry) 
 	return ResolvedURL{}, false
 }
 
-func (c *Client) ResolveURL(ctx context.Context, mid, quality string) (ResolvedURL, error) {
+// vkeyNames lists the file names to request for one quality, preferring the
+// media mid the service uses and keeping the song mid as a safety net.
+func vkeyNames(mid string, ft FileType, mediaMid string) []string {
+	names := []string{ft.Code + mid + mid + ft.Ext}
+	if mediaMid != "" && mediaMid != mid {
+		names = append([]string{ft.Code + mediaMid + ft.Ext}, names...)
+	}
+	return names
+}
+
+func (c *Client) ResolveURL(ctx context.Context, mid, quality string, file SongFile) (ResolvedURL, error) {
 	if mid == "" {
 		return ResolvedURL{}, errors.New("歌曲缺少 MID")
 	}
 	// The vkey service only resolves the first filename of a request, so try
-	// the candidates one by one; a batch request would never fall back.
+	// the candidates one by one; a batch request would never fall back. When
+	// the song lists file sizes, qualities of size zero are unavailable and
+	// skipped without a request.
 	guid := randomHex(16)
+	known := file.HasSizes()
 	for _, ft := range fileTypesForQuality(quality) {
-		params := map[string]any{
-			"filename": []string{ft.Code + mid + mid + ft.Ext},
-			"guid":     guid,
-			"songmid":  []string{mid},
-			"songtype": []int{0},
+		if known && file.SizeFor(ft) <= 0 {
+			continue
 		}
-		var data struct {
-			Midurlinfo []vkeyEntry `json:"midurlinfo"`
-		}
-		if err := c.call(ctx, "music.vkey.GetVkey", "UrlGetVkey", params, &data); err != nil {
-			return ResolvedURL{}, err
-		}
-		if resolved, ok := resolveFromEntries(mid, []FileType{ft}, data.Midurlinfo); ok {
-			return resolved, nil
+		for _, name := range vkeyNames(mid, ft, file.MediaMid) {
+			params := map[string]any{
+				"filename": []string{name},
+				"guid":     guid,
+				"songmid":  []string{mid},
+				"songtype": []int{0},
+			}
+			var data struct {
+				Midurlinfo []vkeyEntry `json:"midurlinfo"`
+			}
+			if err := c.call(ctx, "music.vkey.GetVkey", "UrlGetVkey", params, &data); err != nil {
+				return ResolvedURL{}, err
+			}
+			if resolved, ok := resolveEntry(mid, ft, data.Midurlinfo); ok {
+				return resolved, nil
+			}
 		}
 	}
 	if !c.HasCredential() {

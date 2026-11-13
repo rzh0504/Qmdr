@@ -4,14 +4,21 @@ import "time"
 
 // Song is a song the UI and the download queue share.
 type Song struct {
-	Mid      string `json:"mid"`
-	Title    string `json:"title"`
-	Artist   string `json:"artist"`
-	Album    string `json:"album"`
-	AlbumMid string `json:"album_mid"`
-	Duration string `json:"duration"`
-	Quality  string `json:"quality"`
-	VIP      bool   `json:"vip"`
+	Mid         string  `json:"mid"`
+	Title       string  `json:"title"`
+	Artist      string  `json:"artist"`
+	Album       string  `json:"album"`
+	AlbumMid    string  `json:"album_mid"`
+	Duration    string  `json:"duration"`
+	Quality     string  `json:"quality"`
+	VIP         bool    `json:"vip"`
+	MediaMid     string `json:"media_mid,omitempty"`
+	SizeMaster   int64  `json:"size_master,omitempty"`
+	SizeAtmos2   int64  `json:"size_atmos2,omitempty"`
+	SizeAtmos51  int64  `json:"size_atmos51,omitempty"`
+	SizeFLAC     int64  `json:"size_flac,omitempty"`
+	SizeMP3320   int64  `json:"size_320mp3,omitempty"`
+	SizeMP3128   int64  `json:"size_128mp3,omitempty"`
 }
 
 // Playlist is a user's QQ Music playlist.

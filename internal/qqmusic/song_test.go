@@ -10,10 +10,10 @@ import (
 	"testing"
 )
 
-func TestResolveURLFallsBackPerCandidate(t *testing.T) {
-	mid := "003aAYrm3GE0X5"
-	candidates := fileTypesForQuality("臻品母带")
-	available := candidates[3] // FLAC
+// vkeyServer serves UrlGetVkey and records the requested filenames. respond
+// returns the purl the server would hand out for a filename.
+func vkeyServer(t *testing.T, mid string, respond func(name string) string) (*httptest.Server, func() []string) {
+	t.Helper()
 	var mu sync.Mutex
 	var requests []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -39,10 +39,6 @@ func TestResolveURLFallsBackPerCandidate(t *testing.T) {
 		mu.Lock()
 		requests = append(requests, name)
 		mu.Unlock()
-		purl := ""
-		if strings.HasPrefix(name, available.Code) {
-			purl = "prefix/song" + available.Ext
-		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"music.vkey.GetVkey.UrlGetVkey": map[string]any{
 				"code": 0,
@@ -50,114 +46,120 @@ func TestResolveURLFallsBackPerCandidate(t *testing.T) {
 					"midurlinfo": []map[string]any{{
 						"filename": name,
 						"songmid":  mid,
-						"purl":     purl,
+						"purl":     respond(name),
 					}},
 				},
 			},
 		})
 	}))
-	defer server.Close()
+	t.Cleanup(server.Close)
 	oldEndpoint := apiEndpoint
 	apiEndpoint = server.URL
 	t.Cleanup(func() { apiEndpoint = oldEndpoint })
-
-	client := &Client{http: newHTTPClient(), QIMEI: fallbackQIMEI}
-	resolved, err := client.ResolveURL(context.Background(), mid, "臻品母带")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := ResolvedURL{URL: cdnBase + "prefix/song" + available.Ext, Ext: available.Ext, Quality: available.Name}
-	if resolved != want {
-		t.Fatalf("resolved = %+v, want %+v", resolved, want)
-	}
-	if len(requests) != 4 {
-		t.Fatalf("made %d requests (%v), want 4 up to the FLAC fallback", len(requests), requests)
+	return server, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), requests...)
 	}
 }
 
-func TestResolveFromEntries(t *testing.T) {
+func TestResolveURLFallsBackPerCandidate(t *testing.T) {
 	mid := "003aAYrm3GE0X5"
-	master := fileTypesForQuality("臻品母带")
-	flac := fileTypesForQuality("FLAC 无损")
-	name := func(ft FileType) string { return ft.Code + mid + mid + ft.Ext }
+	flac := fileTypeFLAC
+	_, requested := vkeyServer(t, mid, func(name string) string {
+		if strings.HasPrefix(name, flac.Code) {
+			return "prefix/song.flac"
+		}
+		return ""
+	})
+	client := &Client{http: newHTTPClient(), QIMEI: fallbackQIMEI}
+	resolved, err := client.ResolveURL(context.Background(), mid, "臻品母带", SongFile{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ResolvedURL{URL: cdnBase + "prefix/song.flac", Ext: ".flac", Quality: "FLAC"}
+	if resolved != want {
+		t.Fatalf("resolved = %+v, want %+v", resolved, want)
+	}
+	if names := requested(); len(names) != 4 {
+		t.Fatalf("made %d requests (%v), want 4 up to the FLAC fallback", len(names), names)
+	}
+}
 
+func TestResolveURLSkipsUnavailableQualities(t *testing.T) {
+	mid := "003aAYrm3GE0X5"
+	_, requested := vkeyServer(t, mid, func(name string) string {
+		return "prefix/song" + fileTypeFLAC.Ext
+	})
+	client := &Client{http: newHTTPClient(), QIMEI: fallbackQIMEI}
+	file := SongFile{
+		MediaMid:   "000mediaMid123",
+		SizeFLAC:   4096,
+		SizeMP3320: 1024,
+	}
+	resolved, err := client.ResolveURL(context.Background(), mid, "臻品母带", file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Quality != "FLAC" {
+		t.Fatalf("quality = %q, want FLAC", resolved.Quality)
+	}
+	names := requested()
+	if len(names) != 1 {
+		t.Fatalf("made %d requests (%v), want only the available FLAC", len(names), names)
+	}
+	wantName := fileTypeFLAC.Code + file.MediaMid + fileTypeFLAC.Ext
+	if names[0] != wantName {
+		t.Fatalf("requested %q, want the media mid name %q", names[0], wantName)
+	}
+}
+
+func TestResolveURLAllQualitiesUnavailable(t *testing.T) {
+	mid := "003aAYrm3GE0X5"
+	_, requested := vkeyServer(t, mid, func(string) string { return "" })
+	client := &Client{http: newHTTPClient(), QIMEI: fallbackQIMEI}
+	file := SongFile{SizeAtmos2: 2048}
+	if _, err := client.ResolveURL(context.Background(), mid, "FLAC 无损", file); err == nil {
+		t.Fatal("ResolveURL succeeded, want an unavailable-quality error")
+	}
+	if names := requested(); len(names) != 0 {
+		t.Fatalf("made requests (%v) for sizes that are all zero", names)
+	}
+}
+
+func TestResolveEntry(t *testing.T) {
+	mid := "003aAYrm3GE0X5"
 	cases := []struct {
-		name       string
-		mid        string
-		candidates []FileType
-		entries    []vkeyEntry
-		want       ResolvedURL
-		wantOK     bool
+		name    string
+		entries []vkeyEntry
+		want    ResolvedURL
+		wantOK  bool
 	}{
 		{
-			name:       "picks highest priority available",
-			mid:        mid,
-			candidates: master,
+			name: "serves the first entry with a URL",
 			entries: []vkeyEntry{
-				{Filename: name(master[0])},
-				{Filename: name(master[3]), Purl: "prefix/F000.flac"},
-				{Filename: name(master[5]), Purl: "prefix/M500.mp3"},
-			},
-			want:   ResolvedURL{URL: cdnBase + "prefix/F000.flac", Ext: ".flac", Quality: "FLAC"},
-			wantOK: true,
-		},
-		{
-			name:       "falls back to the only available quality",
-			mid:        mid,
-			candidates: master,
-			entries: []vkeyEntry{
-				{Filename: name(master[5]), Purl: "prefix/M500.mp3"},
-			},
-			want:   ResolvedURL{URL: cdnBase + "prefix/M500.mp3", Ext: ".mp3", Quality: "MP3 128K"},
-			wantOK: true,
-		},
-		{
-			name:       "absolute URL passes through",
-			mid:        mid,
-			candidates: flac,
-			entries: []vkeyEntry{
-				{Filename: name(flac[0]), Wifiurl: "https://example.com/song.flac"},
-			},
-			want:   ResolvedURL{URL: "https://example.com/song.flac", Ext: ".flac", Quality: "FLAC"},
-			wantOK: true,
-		},
-		{
-			name:       "positional order when filenames are absent",
-			mid:        mid,
-			candidates: flac,
-			entries: []vkeyEntry{
+				{Songmid: "other", Purl: "prefix/wrong.flac"},
 				{Songmid: mid},
-				{Songmid: mid, Purl: "prefix/M800.mp3"},
+				{Songmid: mid, Purl: "prefix/right.flac"},
 			},
-			want:   ResolvedURL{URL: cdnBase + "prefix/M800.mp3", Ext: ".mp3", Quality: "MP3 320K"},
+			want:   ResolvedURL{URL: cdnBase + "prefix/right.flac", Ext: ".flac", Quality: "FLAC"},
 			wantOK: true,
 		},
 		{
-			name:       "skips entries for another song",
-			mid:        mid,
-			candidates: flac,
-			entries: []vkeyEntry{
-				{Songmid: "other", Filename: name(flac[0]), Purl: "prefix/wrong.flac"},
-				{Filename: name(flac[2]), Purl: "prefix/right.mp3"},
-			},
-			want:   ResolvedURL{URL: cdnBase + "prefix/right.mp3", Ext: ".mp3", Quality: "MP3 128K"},
-			wantOK: true,
+			name:    "absolute URL passes through",
+			entries: []vkeyEntry{{Wifiurl: "https://example.com/song.flac"}},
+			want:    ResolvedURL{URL: "https://example.com/song.flac", Ext: ".flac", Quality: "FLAC"},
+			wantOK:  true,
 		},
 		{
-			name:       "no entry serves the song",
-			mid:        mid,
-			candidates: flac,
-			entries: []vkeyEntry{
-				{Filename: name(flac[0])},
-				{Filename: name(flac[1])},
-			},
-			wantOK: false,
+			name:    "no entry has a URL",
+			entries: []vkeyEntry{{Songmid: mid}, {Songmid: "other", Purl: "prefix/x.flac"}},
+			wantOK:  false,
 		},
 	}
-
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := resolveFromEntries(tc.mid, tc.candidates, tc.entries)
+			got, ok := resolveEntry(mid, fileTypeFLAC, tc.entries)
 			if ok != tc.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
 			}
@@ -165,5 +167,27 @@ func TestResolveFromEntries(t *testing.T) {
 				t.Fatalf("resolved = %+v, want %+v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestExpectedSize(t *testing.T) {
+	file := SongFile{
+		SizeAtmos2:  2048,
+		SizeAtmos51: 4096,
+		SizeFLAC:    1024,
+		SizeMP3320:  512,
+		SizeMP3128:  128,
+	}
+	if got := ExpectedSize("臻品母带", file); got != 2048 {
+		t.Fatalf("臻品母带 size = %d, want the first available advanced quality", got)
+	}
+	if got := ExpectedSize("FLAC 无损", file); got != 1024 {
+		t.Fatalf("FLAC size = %d, want 1024", got)
+	}
+	if got := ExpectedSize("MP3 320K", file); got != 512 {
+		t.Fatalf("MP3 320K size = %d, want 512", got)
+	}
+	if got := ExpectedSize("FLAC 无损", SongFile{}); got != 0 {
+		t.Fatalf("unknown sizes = %d, want 0", got)
 	}
 }

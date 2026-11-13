@@ -84,7 +84,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 	})
 
 	resolveCtx, cancelResolve := context.WithTimeout(taskCtx, 30*time.Second)
-	resolved, err := a.api.ResolveURL(resolveCtx, task.Mid, task.Quality)
+	resolved, err := a.api.ResolveURL(resolveCtx, task.Mid, task.Quality, task.File)
 	cancelResolve()
 	if err != nil {
 		if ctx.Err() != nil || taskCtx.Err() != nil {
@@ -184,6 +184,7 @@ func (a *app) markCancelled(runID int, task downloadTask) {
 		}
 		if item := a.queueItem(task.ID); item != nil {
 			item.Status = StatusCancelled
+			item.FileSize = 0
 			a.persistQueueItem(*item)
 		}
 		a.appendLog("已取消："+task.Title, "warning")
@@ -199,6 +200,7 @@ func (a *app) markFailed(runID int, task downloadTask, err error) {
 		if item := a.queueItem(task.ID); item != nil {
 			item.Status = StatusFailed
 			item.Error = message
+			item.FileSize = 0
 			a.persistQueueItem(*item)
 		}
 		a.appendLog("下载失败："+task.Title+"（"+message+"）", "error")

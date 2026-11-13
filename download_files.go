@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/rzh0504/qmdr/internal/fsutil"
+	"github.com/rzh0504/qmdr/internal/qqmusic"
 	"github.com/rzh0504/qmdr/internal/tag"
 )
 
@@ -23,6 +24,19 @@ type downloadTask struct {
 	Album    string
 	AlbumMid string
 	Quality  string
+	File     qqmusic.SongFile
+}
+
+func songFileOf(song Song) qqmusic.SongFile {
+	return qqmusic.SongFile{
+		MediaMid:    song.MediaMid,
+		SizeMaster:  song.SizeMaster,
+		SizeAtmos2:  song.SizeAtmos2,
+		SizeAtmos51: song.SizeAtmos51,
+		SizeFLAC:    song.SizeFLAC,
+		SizeMP3320:  song.SizeMP3320,
+		SizeMP3128:  song.SizeMP3128,
+	}
 }
 
 type claimResult int

@@ -18,6 +18,7 @@ type Song struct {
 	DurationSeconds int
 	VIP             bool
 	Quality         string
+	File            SongFile
 }
 
 type songItem struct {
@@ -36,10 +37,12 @@ type songItem struct {
 	Pay struct {
 		PayPlay int `json:"pay_play"`
 	} `json:"pay"`
-	File struct {
-		SizeFLAC   int64 `json:"size_flac"`
-		Size320MP3 int64 `json:"size_320mp3"`
-		Size128MP3 int64 `json:"size_128mp3"`
+	File       struct {
+		MediaMid   string  `json:"media_mid"`
+		SizeFLAC   int64   `json:"size_flac"`
+		Size320MP3 int64   `json:"size_320mp3"`
+		Size128MP3 int64   `json:"size_128mp3"`
+		SizeNew    []int64 `json:"size_new"`
 	} `json:"file"`
 }
 
@@ -71,7 +74,29 @@ func (item songItem) song() Song {
 		DurationSeconds: item.Interval,
 		VIP:             item.Pay.PayPlay != 0,
 		Quality:         quality,
+		File:            songFileFrom(item.File.MediaMid, item.File.SizeNew, item.File.SizeFLAC, item.File.Size320MP3, item.File.Size128MP3),
 	}
+}
+
+// songFileFrom picks the advanced sizes Qmdr can download from the size_new
+// array: master, atmos 2.0 and atmos 5.1.
+func songFileFrom(mediaMid string, sizeNew []int64, flac, mp3320, mp3128 int64) SongFile {
+	file := SongFile{
+		MediaMid:   strings.TrimSpace(mediaMid),
+		SizeFLAC:   flac,
+		SizeMP3320: mp3320,
+		SizeMP3128: mp3128,
+	}
+	if len(sizeNew) > 0 {
+		file.SizeMaster = sizeNew[0]
+	}
+	if len(sizeNew) > 1 {
+		file.SizeAtmos2 = sizeNew[1]
+	}
+	if len(sizeNew) > 2 {
+		file.SizeAtmos51 = sizeNew[2]
+	}
+	return file
 }
 
 const (

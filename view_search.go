@@ -459,13 +459,20 @@ func songFromAPI(song qqmusic.Song) Song {
 	}
 	duration := fmt.Sprintf("%02d:%02d", song.DurationSeconds/60, song.DurationSeconds%60)
 	return Song{
-		Mid:      song.Mid,
-		Title:    title,
-		Artist:   artist,
-		Album:    album,
-		AlbumMid: song.AlbumMid,
-		Duration: duration,
-		Quality:  song.Quality,
-		VIP:      song.VIP,
+		Mid:         song.Mid,
+		Title:       title,
+		Artist:      artist,
+		Album:       album,
+		AlbumMid:    song.AlbumMid,
+		Duration:    duration,
+		Quality:     song.Quality,
+		VIP:         song.VIP,
+		MediaMid:    song.File.MediaMid,
+		SizeMaster:  song.File.SizeMaster,
+		SizeAtmos2:  song.File.SizeAtmos2,
+		SizeAtmos51: song.File.SizeAtmos51,
+		SizeFLAC:    song.File.SizeFLAC,
+		SizeMP3320:  song.File.SizeMP3320,
+		SizeMP3128:  song.File.SizeMP3128,
 	}
 }
