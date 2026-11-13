@@ -62,6 +62,7 @@ type app struct {
 	historyKeep  string
 	showExplore  bool
 	nameTemplate string
+	lyricsTrans  bool
 }
 
 func newApp() *app {
@@ -97,6 +98,7 @@ func newApp() *app {
 		historyKeep:  settings.HistoryKeep,
 		showExplore:  settings.ShowExplore,
 		nameTemplate: settings.NameTemplate,
+		lyricsTrans:  settings.LyricsTrans,
 	}
 	a.startDiskWorker()
 	a.restorePlaylistCache()

@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/rzh0504/qmdr/internal/fsutil"
+	"github.com/rzh0504/qmdr/internal/lrc"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
 	"github.com/rzh0504/qmdr/internal/tag"
 )
@@ -99,18 +100,22 @@ func cleanPartFiles(dir string) {
 	})
 }
 
-func (a *app) writeMetadataSafely(ctx context.Context, task downloadTask, dest string, coverSize int) (err error) {
+func (a *app) writeMetadataSafely(ctx context.Context, task downloadTask, dest string, coverSize int, lyricsTrans bool) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			log.Printf("metadata panic: %v\n%s", recovered, debug.Stack())
 			err = fmt.Errorf("元数据写入异常")
 		}
 	}()
-	return a.writeMetadata(ctx, task, dest, coverSize)
+	return a.writeMetadata(ctx, task, dest, coverSize, lyricsTrans)
 }
 
-func (a *app) writeMetadata(ctx context.Context, task downloadTask, dest string, coverSize int) error {
+func (a *app) writeMetadata(ctx context.Context, task downloadTask, dest string, coverSize int, lyricsTrans bool) error {
 	lyrics, _ := a.api.Lyric(ctx, task.Mid)
+	lyricText := lyrics.LRC
+	if lyricsTrans {
+		lyricText = lrc.Merge(lyricText, lyrics.Translation)
+	}
 	var cover []byte
 	var coverMIME string
 	if task.AlbumMid != "" {
@@ -126,7 +131,7 @@ func (a *app) writeMetadata(ctx context.Context, task downloadTask, dest string,
 		Title:       task.Title,
 		Artist:      task.Artist,
 		Album:       task.Album,
-		Lyrics:      lyrics,
+		Lyrics:      lyricText,
 		Cover:       cover,
 		CoverMIME:   coverMIME,
 		TrackNumber: task.Track,

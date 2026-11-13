@@ -297,6 +297,12 @@ func (a *app) downloadSettings(c *ui.Context, col colors) {
 			a.saveSettings()
 		}
 	})
+	a.settingRow(c, col, "歌词包含翻译", "歌曲有官方翻译时，在歌词中附加译文", false, func() {
+		toggle := toggleSwitch(c, col, &a.lyricsTrans)
+		if toggle.Changed() {
+			a.saveSettings()
+		}
+	})
 	a.settingRow(c, col, "下载历史保留", "超出保存天数的记录会自动清理，不会删除文件", false, func() {
 		selectControl(c, col, &a.historyKeep, historyKeepOptions, 120, col.control, func() {
 			a.saveSettings()

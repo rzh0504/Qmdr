@@ -24,6 +24,7 @@ type Settings struct {
 	HistoryKeep  string  `json:"history_keep"`
 	ShowExplore  bool    `json:"show_explore"`
 	NameTemplate string  `json:"name_template"`
+	LyricsTrans  bool    `json:"lyrics_trans"`
 }
 
 var (

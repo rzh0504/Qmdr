@@ -178,6 +178,7 @@ func (a *app) startQueue() {
 	overwrite := a.overwrite
 	coverSize := settings.CoverSizeValue(a.coverSize)
 	nameTemplate := a.nameTemplate
+	lyricsTrans := a.lyricsTrans
 	// A download that a previous run left unfinished leaves its .part file
 	// behind; start each run with a clean directory.
 	cleanPartFiles(dir)
@@ -186,7 +187,7 @@ func (a *app) startQueue() {
 	a.refresh()
 
 	go func() {
-		a.runWorkers(ctx, runID, tasks, workers, dir, overwrite, coverSize, nameTemplate, claims)
+		a.runWorkers(ctx, runID, tasks, workers, dir, overwrite, coverSize, nameTemplate, lyricsTrans, claims)
 		a.update(func() {
 			if runID != a.queue.runID {
 				return

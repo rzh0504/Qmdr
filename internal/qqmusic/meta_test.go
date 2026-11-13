@@ -2,6 +2,7 @@ package qqmusic
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,21 @@ func apiStub(t *testing.T, key string, data any) {
 	oldEndpoint := apiEndpoint
 	apiEndpoint = server.URL
 	t.Cleanup(func() { apiEndpoint = oldEndpoint })
+}
+
+func TestLyricDecodesTranslation(t *testing.T) {
+	apiStub(t, "music.musichallSong.PlayLyricInfo.GetPlayLyricInfo", map[string]any{
+		"lyric": base64.StdEncoding.EncodeToString([]byte("[00:01.00]Hello")),
+		"trans": base64.StdEncoding.EncodeToString([]byte("[00:01.00]你好")),
+	})
+	client := &Client{http: newHTTPClient(), QIMEI: fallbackQIMEI}
+	lyrics, err := client.Lyric(context.Background(), "mid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lyrics.LRC != "[00:01.00]Hello" || lyrics.Translation != "[00:01.00]你好" {
+		t.Fatalf("lyrics = %+v", lyrics)
+	}
 }
 
 func TestSongMetaReadsDetailBlocks(t *testing.T) {

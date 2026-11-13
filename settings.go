@@ -38,6 +38,7 @@ func (a *app) saveSettings() {
 		HistoryKeep:  a.historyKeep,
 		ShowExplore:  a.showExplore,
 		NameTemplate: a.nameTemplate,
+		LyricsTrans:  a.lyricsTrans,
 	}
 	a.dispatchDisk(func() {
 		data, err := json.MarshalIndent(current, "", "  ")

@@ -13,7 +13,7 @@ import (
 	"github.com/rzh0504/qmdr/internal/history"
 )
 
-func (a *app) runWorkers(ctx context.Context, runID int, tasks []downloadTask, workers int, dir string, overwrite bool, coverSize int, nameTemplate string, claims *downloadClaims) {
+func (a *app) runWorkers(ctx context.Context, runID int, tasks []downloadTask, workers int, dir string, overwrite bool, coverSize int, nameTemplate string, lyricsTrans bool, claims *downloadClaims) {
 	jobs := make(chan downloadTask)
 	var wg sync.WaitGroup
 	for i := 0; i < workers; i++ {
@@ -24,7 +24,7 @@ func (a *app) runWorkers(ctx context.Context, runID int, tasks []downloadTask, w
 				if ctx.Err() != nil {
 					return
 				}
-				a.processDownloadSafely(ctx, runID, task, dir, overwrite, coverSize, nameTemplate, claims)
+				a.processDownloadSafely(ctx, runID, task, dir, overwrite, coverSize, nameTemplate, lyricsTrans, claims)
 			}
 		}()
 	}
@@ -41,17 +41,17 @@ feed:
 	wg.Wait()
 }
 
-func (a *app) processDownloadSafely(ctx context.Context, runID int, task downloadTask, dir string, overwrite bool, coverSize int, nameTemplate string, claims *downloadClaims) {
+func (a *app) processDownloadSafely(ctx context.Context, runID int, task downloadTask, dir string, overwrite bool, coverSize int, nameTemplate string, lyricsTrans bool, claims *downloadClaims) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			log.Printf("download task panic: %v\n%s", recovered, debug.Stack())
 			a.markFailed(runID, task, fmt.Errorf("下载任务异常：%v", recovered))
 		}
 	}()
-	a.processDownload(ctx, runID, task, dir, overwrite, coverSize, nameTemplate, claims)
+	a.processDownload(ctx, runID, task, dir, overwrite, coverSize, nameTemplate, lyricsTrans, claims)
 }
 
-func (a *app) processDownload(ctx context.Context, runID int, task downloadTask, dir string, overwrite bool, coverSize int, nameTemplate string, claims *downloadClaims) {
+func (a *app) processDownload(ctx context.Context, runID int, task downloadTask, dir string, overwrite bool, coverSize int, nameTemplate string, lyricsTrans bool, claims *downloadClaims) {
 	// Each task carries its own cancel so one row can be cancelled without
 	// touching the rest of the queue; the run-level ctx still cancels all.
 	taskCtx, taskCancel := context.WithCancel(ctx)
@@ -135,7 +135,7 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 	}
 
 	metaCtx, metaCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	metaErr := a.writeMetadataSafely(metaCtx, task, dest, coverSize)
+	metaErr := a.writeMetadataSafely(metaCtx, task, dest, coverSize, lyricsTrans)
 	metaCancel()
 
 	size := fsutil.FileSize(dest)

@@ -33,6 +33,14 @@ func TestLoadFileDefaultsAndValidation(t *testing.T) {
 	if got := LoadFile(path); got.NameTemplate != "{artist}/{album}/{title}" {
 		t.Fatalf("NameTemplate = %q, want the saved template", got.NameTemplate)
 	}
+
+	path = filepath.Join(t.TempDir(), "settings.json")
+	if err := os.WriteFile(path, []byte(`{"lyrics_trans":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadFile(path); !got.LyricsTrans {
+		t.Fatal("LyricsTrans was not loaded")
+	}
 }
 
 func TestHelpers(t *testing.T) {
