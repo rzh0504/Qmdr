@@ -150,6 +150,9 @@ func (a *app) startQueue() {
 			Album:       item.Song.Album,
 			AlbumMid:    item.Song.AlbumMid,
 			Quality:     item.Quality,
+			Track:       item.Song.Track,
+			Disc:        item.Song.Disc,
+			ReleaseDate: item.Song.ReleaseDate,
 			File:        songFileOf(item.Song),
 		})
 	}

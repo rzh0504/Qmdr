@@ -18,6 +18,9 @@ type Song struct {
 	DurationSeconds int
 	VIP             bool
 	Quality         string
+	Track           int
+	Disc            int
+	ReleaseDate     string
 	File            SongFile
 }
 
@@ -37,6 +40,9 @@ type songItem struct {
 	Pay struct {
 		PayPlay int `json:"pay_play"`
 	} `json:"pay"`
+	IndexAlbum int    `json:"index_album"`
+	IndexCD    int    `json:"index_cd"`
+	TimePublic string `json:"time_public"`
 	File       struct {
 		MediaMid   string  `json:"media_mid"`
 		SizeFLAC   int64   `json:"size_flac"`
@@ -64,6 +70,13 @@ func (item songItem) song() Song {
 	case item.File.Size320MP3 > 0:
 		quality = "320K"
 	}
+	track, disc := item.IndexAlbum, item.IndexCD
+	if track < 0 {
+		track = 0
+	}
+	if disc < 0 {
+		disc = 0
+	}
 	return Song{
 		ID:              item.ID,
 		Mid:             item.Mid,
@@ -74,6 +87,9 @@ func (item songItem) song() Song {
 		DurationSeconds: item.Interval,
 		VIP:             item.Pay.PayPlay != 0,
 		Quality:         quality,
+		Track:           track,
+		Disc:            disc,
+		ReleaseDate:     dateOnly(cleanText(item.TimePublic)),
 		File:            songFileFrom(item.File.MediaMid, item.File.SizeNew, item.File.SizeFLAC, item.File.Size320MP3, item.File.Size128MP3),
 	}
 }

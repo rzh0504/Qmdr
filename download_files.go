@@ -17,14 +17,17 @@ import (
 )
 
 type downloadTask struct {
-	ID       int
-	Mid      string
-	Title    string
-	Artist   string
-	Album    string
-	AlbumMid string
-	Quality  string
-	File     qqmusic.SongFile
+	ID          int
+	Mid         string
+	Title       string
+	Artist      string
+	Album       string
+	AlbumMid    string
+	Quality     string
+	Track       int
+	Disc        int
+	ReleaseDate string
+	File        qqmusic.SongFile
 }
 
 func songFileOf(song Song) qqmusic.SongFile {
@@ -113,13 +116,26 @@ func (a *app) writeMetadata(ctx context.Context, task downloadTask, dest string,
 	if task.AlbumMid != "" {
 		cover, coverMIME = a.metadataCover(ctx, task.AlbumMid, coverSize)
 	}
+	meta, _ := a.api.SongMeta(ctx, task.Mid)
+	credits, _ := a.api.SongCredits(ctx, task.Mid)
+	date := task.ReleaseDate
+	if date == "" {
+		date = meta.ReleaseDate
+	}
 	return tag.Write(dest, tag.Info{
-		Title:     task.Title,
-		Artist:    task.Artist,
-		Album:     task.Album,
-		Lyrics:    lyrics,
-		Cover:     cover,
-		CoverMIME: coverMIME,
+		Title:       task.Title,
+		Artist:      task.Artist,
+		Album:       task.Album,
+		Lyrics:      lyrics,
+		Cover:       cover,
+		CoverMIME:   coverMIME,
+		TrackNumber: task.Track,
+		DiscNumber:  task.Disc,
+		Date:        date,
+		Genre:       meta.Genre,
+		Language:    meta.Language,
+		Composer:    credits.Composer,
+		Lyricist:    credits.Lyricist,
 	})
 }
 

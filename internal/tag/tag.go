@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	id3v2 "github.com/bogem/id3v2/v2"
@@ -13,12 +14,26 @@ import (
 )
 
 type Info struct {
-	Title     string
-	Artist    string
-	Album     string
-	Lyrics    string
-	Cover     []byte
-	CoverMIME string
+	Title       string
+	Artist      string
+	Album       string
+	Lyrics      string
+	Cover       []byte
+	CoverMIME   string
+	TrackNumber int
+	DiscNumber  int
+	Date        string
+	Genre       string
+	Language    string
+	Composer    string
+	Lyricist    string
+}
+
+func number(value int) string {
+	if value <= 0 {
+		return ""
+	}
+	return strconv.Itoa(value)
 }
 
 func Write(path string, info Info) error {
@@ -87,6 +102,13 @@ func writeFLAC(path string, info Info) error {
 			{flacvorbis.FIELD_TITLE, info.Title},
 			{flacvorbis.FIELD_ARTIST, info.Artist},
 			{flacvorbis.FIELD_ALBUM, info.Album},
+			{flacvorbis.FIELD_TRACKNUMBER, number(info.TrackNumber)},
+			{"DISCNUMBER", number(info.DiscNumber)},
+			{flacvorbis.FIELD_DATE, info.Date},
+			{flacvorbis.FIELD_GENRE, info.Genre},
+			{"LANGUAGE", info.Language},
+			{"COMPOSER", info.Composer},
+			{"LYRICIST", info.Lyricist},
 			{"LYRICS", info.Lyrics},
 		} {
 			if strings.TrimSpace(field.value) == "" {
@@ -148,7 +170,10 @@ func writeMP3(path string, info Info) error {
 
 		file.SetVersion(4)
 
-		for _, id := range []string{"TIT2", "TPE1", "TALB", "APIC", "USLT"} {
+		for _, id := range []string{
+			"TIT2", "TPE1", "TALB", "APIC", "USLT",
+			"TRCK", "TPOS", "TDRC", "TCON", "TLAN", "TCOM", "TEXT",
+		} {
 			file.DeleteFrames(id)
 		}
 
@@ -183,6 +208,19 @@ func writeMP3(path string, info Info) error {
 				ContentDescriptor: "Lyrics",
 				Lyrics:            info.Lyrics,
 			})
+		}
+		for id, value := range map[string]string{
+			"TRCK": number(info.TrackNumber),
+			"TPOS": number(info.DiscNumber),
+			"TDRC": info.Date,
+			"TCON": info.Genre,
+			"TLAN": info.Language,
+			"TCOM": info.Composer,
+			"TEXT": info.Lyricist,
+		} {
+			if strings.TrimSpace(value) != "" {
+				file.AddTextFrame(id, id3v2.EncodingUTF8, value)
+			}
 		}
 		return file.Save()
 	})

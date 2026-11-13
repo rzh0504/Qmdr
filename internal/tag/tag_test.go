@@ -65,6 +65,59 @@ func TestWriteFLACReplacesFileWithTags(t *testing.T) {
 	t.Fatal("no vorbis comment block in tagged file")
 }
 
+func TestWriteFLACExtraTags(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "song.flac")
+	writeMinimalFLAC(t, path)
+
+	if err := Write(path, Info{
+		Title:       "Title",
+		Artist:      "Artist",
+		Album:       "Album",
+		TrackNumber: 3,
+		DiscNumber:  1,
+		Date:        "2022-09-10",
+		Genre:       "流行",
+		Language:    "国语",
+		Composer:    "钱雷",
+		Lyricist:    "唐恬",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := flac.ParseFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	for _, block := range file.Meta {
+		if block == nil || block.Type != flac.VorbisComment {
+			continue
+		}
+		comments, err := flacvorbis.ParseFromMetaDataBlock(*block)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := map[string]string{
+			flacvorbis.FIELD_TRACKNUMBER: "3",
+			"DISCNUMBER":                 "1",
+			flacvorbis.FIELD_DATE:        "2022-09-10",
+			flacvorbis.FIELD_GENRE:       "流行",
+			"LANGUAGE":                   "国语",
+			"COMPOSER":                   "钱雷",
+			"LYRICIST":                   "唐恬",
+		}
+		for key, value := range want {
+			got, _ := comments.Get(key)
+			if len(got) != 1 || got[0] != value {
+				t.Fatalf("%s = %v, want [%s]", key, got, value)
+			}
+		}
+		return
+	}
+	t.Fatal("no vorbis comment block in tagged file")
+}
+
 func TestWriteAtomicReplacesOnSuccess(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "song.mp3")

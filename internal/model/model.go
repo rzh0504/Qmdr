@@ -12,6 +12,9 @@ type Song struct {
 	Duration    string  `json:"duration"`
 	Quality     string  `json:"quality"`
 	VIP         bool    `json:"vip"`
+	Track        int    `json:"track,omitempty"`
+	Disc         int    `json:"disc,omitempty"`
+	ReleaseDate  string `json:"release_date,omitempty"`
 	MediaMid     string `json:"media_mid,omitempty"`
 	SizeMaster   int64  `json:"size_master,omitempty"`
 	SizeAtmos2   int64  `json:"size_atmos2,omitempty"`
