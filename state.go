@@ -224,6 +224,7 @@ type tagEntry struct {
 	album     string
 	size      int64
 	info      tag.Info
+	cover     *ui.Bitmap // info.Cover decoded once, when the entry is loaded
 	loaded    bool
 	err       string
 	missing   bool

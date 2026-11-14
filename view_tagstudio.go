@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -486,11 +487,25 @@ func (a *app) requestTagStudioAction(action func()) {
 	a.refresh()
 }
 
+// selectedTagCover returns the decoded cover of the selected entry,
+// decoding once if the entry predates the per-entry bitmap cache.
+func (a *app) selectedTagCover() *ui.Bitmap {
+	s := &a.tagStudio
+	entry := s.activeEntry(s.selected)
+	if entry == nil {
+		return nil
+	}
+	if entry.cover == nil {
+		entry.cover = tagCoverBitmap(entry.info.Cover)
+	}
+	return entry.cover
+}
+
 func (a *app) discardTagChanges() {
 	s := &a.tagStudio
 	s.confirmDiscard = false
 	s.draft = s.original
-	s.cover = tagCoverBitmap(s.original.Cover)
+	s.cover = a.selectedTagCover()
 	s.trackText = numberString(s.original.TrackNumber)
 	s.discText = numberString(s.original.DiscNumber)
 	s.dirty = false
@@ -612,6 +627,7 @@ func (a *app) rebuildTagHistory(keepSelection bool) {
 			entry.info = old.info
 			entry.loaded = true
 			entry.size = old.size
+			entry.cover = old.cover
 		}
 		entries = append(entries, entry)
 	}
@@ -855,6 +871,7 @@ func (a *app) loadTagEntry(index int, refresh bool) {
 		current.missing = false
 		current.info = info
 		current.size = fsutil.FileSize(path)
+		current.cover = tagCoverBitmap(info.Cover)
 		a.showTagEntry(current)
 	})
 	if refresh {
@@ -863,7 +880,8 @@ func (a *app) loadTagEntry(index int, refresh bool) {
 }
 
 // showTagEntry fills the editor from an entry whose tags are already in
-// memory, so switching back to a file does not read it again.
+// memory, so switching back to a file does not read it again or decode its
+// cover again.
 func (a *app) showTagEntry(entry *tagEntry) {
 	s := &a.tagStudio
 	s.loading = false
@@ -872,7 +890,7 @@ func (a *app) showTagEntry(entry *tagEntry) {
 	s.loadedPath = entry.path
 	s.trackText = numberString(entry.info.TrackNumber)
 	s.discText = numberString(entry.info.DiscNumber)
-	s.cover = tagCoverBitmap(entry.info.Cover)
+	s.cover = entry.cover
 	s.dirty = false
 }
 
@@ -1324,7 +1342,7 @@ func (a *app) revertTagStudio() {
 		return
 	}
 	s.draft = s.original
-	s.cover = tagCoverBitmap(s.draft.Cover)
+	s.cover = a.selectedTagCover()
 	s.trackText = numberString(s.draft.TrackNumber)
 	s.discText = numberString(s.draft.DiscNumber)
 	s.dirty = false
@@ -1390,6 +1408,9 @@ func (a *app) finishTagSave(oldPath, newPath string, info tag.Info, size int64, 
 			entries[i].title = info.Title
 			entries[i].artist = info.Artist
 			entries[i].album = info.Album
+			if !bytes.Equal(entries[i].info.Cover, info.Cover) {
+				entries[i].cover = nil // decoded again when the entry is revisited
+			}
 			entries[i].info = info
 			entries[i].loaded = true
 			entries[i].err = ""
