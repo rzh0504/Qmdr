@@ -216,14 +216,16 @@ func (a *app) startQueue() {
 	coverSize := settings.CoverSizeValue(a.coverSize)
 	nameTemplate := a.nameTemplate
 	lyricsTrans := a.lyricsTrans
-	// A download that a previous run left unfinished leaves its .part file
-	// behind; start each run with a clean directory.
-	cleanPartFiles(dir)
 	claims := newDownloadClaims()
 	a.appendLog(fmt.Sprintf("开始处理下载队列（并发 %d）", workers), "info")
 	a.refresh()
 
 	go func() {
+		// A download that a previous run left unfinished leaves its .part
+		// file behind; start each run with a clean directory. The tree walk
+		// runs here, off the UI thread and before any worker creates a new
+		// .part file, so a large download directory never blocks a frame.
+		cleanPartFiles(dir)
 		a.runWorkers(ctx, runID, tasks, workers, dir, overwrite, coverSize, nameTemplate, lyricsTrans, claims)
 		a.update(func() {
 			if runID != a.queue.runID {
