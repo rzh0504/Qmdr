@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,10 +27,25 @@ import (
 
 const maxTagCoverBytes = 8 << 20
 
+// tagSortNatural is the list's own order: the history source shows the
+// download order, the files source shows the order files were opened.
+const tagSortNatural = "下载时间"
+
+var tagSortOptions = []string{tagSortNatural, "标题", "艺人", "专辑"}
+
+// tagSortPair is one entry's sort key with its index into the entry list.
+type tagSortPair struct {
+	index int
+	key   string
+}
+
 func (a *app) tagStudioView(c *ui.Context, col colors) {
 	s := &a.tagStudio
 	if s.source == "" {
 		s.source = "history"
+	}
+	if s.sortBy == "" {
+		s.sortBy = tagSortNatural
 	}
 	if s.source == "history" && !s.historyReady && !a.history.loading {
 		s.historyReady = true
@@ -63,6 +79,11 @@ func (a *app) tagStudioSidebar(c *ui.Context, col colors) {
 			s.filter = ""
 			a.refresh()
 		})
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "排序").FontSize(12).TextColor(col.faint).Shrink(0)
+			selectControl(c, col, &s.sortBy, tagSortOptions, 120, col.control, a.refresh)
+			ui.Spacer(c)
+		})
 		matched := a.matchedTagEntries()
 		listPanel(c, col, "tag-studio-"+s.source, func() {
 			if len(matched) == 0 {
@@ -88,23 +109,55 @@ func (a *app) tagStudioSidebar(c *ui.Context, col colors) {
 }
 
 // matchedTagEntries returns the indices of the active entries that pass the
-// current filter, so the list and its count agree and the match runs once
-// per frame instead of once per row plus once for the count.
+// current filter, in the display order, so the list, its count and the
+// prev/next navigation all agree and the match runs once per frame.
 func (a *app) matchedTagEntries() []int {
 	s := &a.tagStudio
 	entries := s.activeEntries()
+	var indices []int
 	if strings.TrimSpace(s.filter) == "" {
-		indices := make([]int, len(entries))
+		indices = make([]int, len(entries))
 		for i := range indices {
 			indices[i] = i
 		}
+	} else {
+		indices = make([]int, 0, len(entries))
+		for i := range entries {
+			if a.tagEntryMatches(i) {
+				indices = append(indices, i)
+			}
+		}
+	}
+	return a.sortedTagIndices(indices)
+}
+
+// sortedTagIndices orders the indices by the sort the sidebar picked: the
+// natural list order, or an ascending field sort that keeps the natural
+// order for equal keys.
+func (a *app) sortedTagIndices(indices []int) []int {
+	s := &a.tagStudio
+	if s.sortBy == "" || s.sortBy == tagSortNatural {
 		return indices
 	}
-	indices := make([]int, 0, len(entries))
-	for i := range entries {
-		if a.tagEntryMatches(i) {
-			indices = append(indices, i)
+	entries := s.activeEntries()
+	pairs := make([]tagSortPair, len(indices))
+	for i, index := range indices {
+		key := ""
+		switch s.sortBy {
+		case "标题":
+			key = entries[index].displayTitle()
+		case "艺人":
+			key = entries[index].displayArtist()
+		case "专辑":
+			key = entries[index].displayAlbum()
 		}
+		pairs[i] = tagSortPair{index: index, key: strings.ToLower(key)}
+	}
+	sort.SliceStable(pairs, func(x, y int) bool {
+		return pairs[x].key < pairs[y].key
+	})
+	for i, pair := range pairs {
+		indices[i] = pair.index
 	}
 	return indices
 }

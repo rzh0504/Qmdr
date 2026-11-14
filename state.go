@@ -188,6 +188,7 @@ type tagStudioState struct {
 	fileEntries    []tagEntry
 	selected       int
 	filter         string
+	sortBy         string // 下载时间（默认顺序）、标题、艺人或专辑
 	historyReady   bool
 	loading        bool
 	loadedPath     string
