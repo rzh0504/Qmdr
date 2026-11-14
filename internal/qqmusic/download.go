@@ -15,6 +15,23 @@ type ProgressFunc func(received, total int64)
 
 const downloadStallTimeout = 90 * time.Second
 
+// audioHeadLen is the number of leading bytes the downloader inspects to
+// tell an MP3 / FLAC stream from an error page saved as audio.
+const audioHeadLen = 4
+
+// audioMagic reports whether head looks like the MP3 / FLAC audio the
+// downloader accepts: an ID3 tag, a raw MPEG frame, or a FLAC stream.
+func audioMagic(head []byte) bool {
+	if len(head) >= 3 && string(head[:3]) == "ID3" {
+		return true
+	}
+	if len(head) >= 4 && string(head[:4]) == "fLaC" {
+		return true
+	}
+	// A raw MPEG audio frame starts with 0xFF and an 11-bit sync word.
+	return len(head) >= 2 && head[0] == 0xFF && head[1]&0xE0 == 0xE0
+}
+
 func (c *Client) Download(ctx context.Context, rawURL, dest string, overwrite bool, progress ProgressFunc) (int64, error) {
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return 0, err
@@ -62,11 +79,19 @@ func (c *Client) Download(ctx context.Context, rawURL, dest string, overwrite bo
 	total := resp.ContentLength
 	var received int64
 	buf := make([]byte, 256<<10)
+	var head []byte
 	lastReport := time.Now()
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
 			stall.Reset(downloadStallTimeout)
+			if len(head) < audioHeadLen {
+				take := min(audioHeadLen-len(head), n)
+				head = append(head, buf[:take]...)
+				if len(head) == audioHeadLen && !audioMagic(head) {
+					return received, fmt.Errorf("下载内容不是有效的 MP3 / FLAC 音频")
+				}
+			}
 			if _, err := file.Write(buf[:n]); err != nil {
 				return received, err
 			}
@@ -98,6 +123,11 @@ func (c *Client) Download(ctx context.Context, rawURL, dest string, overwrite bo
 	}
 	if received == 0 {
 		return 0, fmt.Errorf("下载内容为空")
+	}
+	// A file shorter than the inspection window never went through the
+	// in-flight check, so validate whatever head was collected.
+	if !audioMagic(head) {
+		return received, fmt.Errorf("下载内容不是有效的 MP3 / FLAC 音频")
 	}
 	if total > 0 && received != total {
 		return received, fmt.Errorf("下载不完整：已接收 %d/%d 字节", received, total)
