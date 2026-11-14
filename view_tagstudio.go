@@ -1169,12 +1169,9 @@ func (a *app) fetchTagStudioCover() {
 	var bitmap *ui.Bitmap
 	a.async(&s.coverSlot, 30*time.Second, func(ctx context.Context) error {
 		var err error
-		data, mime = a.metadataCover(ctx, albumMID, size)
+		data, mime, err = a.metadataCover(ctx, albumMID, size)
 		if err != nil {
 			return err
-		}
-		if len(data) == 0 {
-			return qqmusic.ErrNoCover
 		}
 		bitmap, err = ui.DecodeBitmap(data)
 		return err

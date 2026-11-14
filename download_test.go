@@ -161,9 +161,9 @@ func TestMetadataCoverCache(t *testing.T) {
 	a := &app{metaCovers: metadataCoverState{cache: map[string]metadataCover{}, pending: map[string]*metadataCoverCall{}}}
 
 	a.metaCovers.cache["hit-800"] = metadataCover{data: []byte("cover"), mime: "image/jpeg"}
-	data, mime := a.metadataCover(context.Background(), "hit", 800)
-	if string(data) != "cover" || mime != "image/jpeg" {
-		t.Fatalf("cache hit = %q, %q", data, mime)
+	data, mime, err := a.metadataCover(context.Background(), "hit", 800)
+	if err != nil || string(data) != "cover" || mime != "image/jpeg" {
+		t.Fatalf("cache hit = %q, %q, %v", data, mime, err)
 	}
 
 	call := &metadataCoverCall{done: make(chan struct{})}
@@ -172,8 +172,8 @@ func TestMetadataCoverCache(t *testing.T) {
 		call.data, call.mime = []byte("pending"), "image/png"
 		close(call.done)
 	}()
-	data, mime = a.metadataCover(context.Background(), "wait", 800)
-	if string(data) != "pending" || mime != "image/png" {
-		t.Fatalf("pending call = %q, %q", data, mime)
+	data, mime, err = a.metadataCover(context.Background(), "wait", 800)
+	if err != nil || string(data) != "pending" || mime != "image/png" {
+		t.Fatalf("pending call = %q, %q, %v", data, mime, err)
 	}
 }

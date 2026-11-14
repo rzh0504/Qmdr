@@ -171,6 +171,7 @@ type metadataCoverCall struct {
 	done chan struct{}
 	data []byte
 	mime string
+	err  error
 }
 
 // tagStudioState is the Tag Studio page: where the file list comes from,

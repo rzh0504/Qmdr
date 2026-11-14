@@ -119,7 +119,12 @@ func (a *app) writeMetadata(ctx context.Context, task downloadTask, dest string,
 	var cover []byte
 	var coverMIME string
 	if task.AlbumMid != "" {
-		cover, coverMIME = a.metadataCover(ctx, task.AlbumMid, coverSize)
+		fetched, mime, coverErr := a.metadataCover(ctx, task.AlbumMid, coverSize)
+		if coverErr != nil {
+			log.Printf("fetch cover %s: %v", task.AlbumMid, coverErr)
+		} else {
+			cover, coverMIME = fetched, mime
+		}
 	}
 	meta, _ := a.api.SongMeta(ctx, task.Mid)
 	credits, _ := a.api.SongCredits(ctx, task.Mid)
@@ -148,22 +153,23 @@ const maxCachedMetadataCovers = 64
 
 // metadataCover fetches an album cover once per size: later songs of the
 // same album reuse it, and concurrent downloads wait for the fetch already
-// in flight instead of requesting the same image again.
-func (a *app) metadataCover(ctx context.Context, albumMid string, size int) ([]byte, string) {
+// in flight instead of requesting the same image again. A failed fetch is
+// not cached, so callers see the real error and may retry.
+func (a *app) metadataCover(ctx context.Context, albumMid string, size int) ([]byte, string, error) {
 	key := albumMid + "-" + strconv.Itoa(size)
 	state := &a.metaCovers
 	state.mu.Lock()
 	if entry, ok := state.cache[key]; ok {
 		state.mu.Unlock()
-		return entry.data, entry.mime
+		return entry.data, entry.mime, nil
 	}
 	if call, ok := state.pending[key]; ok {
 		state.mu.Unlock()
 		select {
 		case <-call.done:
-			return call.data, call.mime
+			return call.data, call.mime, call.err
 		case <-ctx.Done():
-			return nil, ""
+			return nil, "", ctx.Err()
 		}
 	}
 	call := &metadataCoverCall{done: make(chan struct{})}
@@ -182,10 +188,13 @@ func (a *app) metadataCover(ctx context.Context, albumMid string, size int) ([]b
 			delete(state.cache, oldest)
 		}
 		state.mu.Unlock()
+	} else if err == nil {
+		err = qqmusic.ErrNoCover
 	}
+	call.err = err
 	close(call.done)
 	state.mu.Lock()
 	delete(state.pending, key)
 	state.mu.Unlock()
-	return call.data, call.mime
+	return call.data, call.mime, call.err
 }
