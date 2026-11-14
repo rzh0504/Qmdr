@@ -193,12 +193,14 @@ func (a *app) appendLog(message, level string) {
 	a.storeLog(entry)
 }
 
-func (a *app) queueCounts() (total, done, failed, active int) {
+func (a *app) queueCounts() (total, done, skipped, failed, active int) {
 	total = len(a.queue.items)
 	for _, item := range a.queue.items {
 		switch item.Status {
 		case StatusDone:
 			done++
+		case StatusSkipped:
+			skipped++
 		case StatusFailed, StatusCancelled:
 			failed++
 		case StatusWaiting, StatusDownloading:

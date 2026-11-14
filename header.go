@@ -77,13 +77,7 @@ func (a *app) headerActions(c *ui.Context, col colors) {
 			primaryButtonDisabled(c, col, iconCheck, "保存")
 		}
 	case viewQueue:
-		_, done, _, active := a.queueCounts()
-		skipped := 0
-		for _, item := range a.queue.items {
-			if item.Status == StatusSkipped {
-				skipped++
-			}
-		}
+		_, done, skipped, _, active := a.queueCounts()
 		if a.queue.downloading {
 			ghostDangerButton(c, col, iconX, "取消", a.cancelQueue)
 		}

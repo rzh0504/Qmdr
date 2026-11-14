@@ -6,7 +6,7 @@ import (
 )
 
 func (a *app) queueView(c *ui.Context, col colors) {
-	total, _, failed, active := a.queueCounts()
+	total, _, _, failed, active := a.queueCounts()
 	if total == 0 && len(a.queue.pending) == 0 {
 		emptyState(c, col, iconQueue, "队列为空", "在歌单中右键歌曲加入待下载队列，或直接下载歌曲。")
 		return

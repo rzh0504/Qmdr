@@ -53,7 +53,7 @@ func (a *app) navItem(c *ui.Context, col colors, key string, icon *ui.SVG, label
 		ui.Icon(c, icon).Size(15, 15).TextColor(fg)
 		ui.Text(c, label).FontSize(13).FontWeight(400).TextColor(fg).Grow(1)
 		if key == "downloads" {
-			_, _, _, active := a.queueCounts()
+			_, _, _, _, active := a.queueCounts()
 			if count := active + len(a.queue.pending); count > 0 {
 				ui.Textf(c, "%d", count).FontSize(11).TextColor(col.muted)
 			}
