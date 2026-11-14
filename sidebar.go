@@ -22,7 +22,7 @@ var sidebarItems = []struct {
 
 const (
 	sidebarWidth     = 216
-	sidebarRailWidth = 56
+	sidebarRailWidth = 62
 )
 
 func (a *app) sidebar(c *ui.Context, col colors) {
@@ -52,14 +52,6 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 		})
 
 		ui.Column(c).Gap(2).Children(func() {
-			if a.sidebarCollapsed {
-				ui.Row(c).FillWidth().Justify(ui.Center).Padding(0, 0, 6, 0).Children(func() {
-					ui.Text(c, "资料库").FontSize(11).FontWeight(600).TextColor(col.faint)
-				})
-			} else {
-				ui.Text(c, "资料库").FontSize(11).FontWeight(600).TextColor(col.faint).
-					Padding(0, 9, 6, 9)
-			}
 			for _, item := range sidebarItems {
 				if a.sidebarCollapsed {
 					a.navIcon(c, col, item.key, item.icon, item.label)
@@ -107,11 +99,12 @@ func (a *app) navItem(c *ui.Context, col colors, key string, icon *ui.SVG, label
 }
 
 // navIcon is the collapsed form of navItem: the icon alone, with the label
-// as a tooltip, and a small dot when the download queue has work.
+// as a tooltip and a small dot when the download queue has work. The icon
+// keeps the expanded row's left offset, so nothing shifts when toggling.
 func (a *app) navIcon(c *ui.Context, col colors, key string, icon *ui.SVG, label string) {
 	active := a.pageKey() == key
-	row := ui.ButtonBase(c).Width(36).Height(30).Radius(8).Center().
-		Cursor(ui.CursorPointer).Label(label).Tooltip(label)
+	row := ui.ButtonBase(c).Width(42).Height(30).Padding(0, 9).Radius(8).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label).Tooltip(label)
 	if active {
 		row.Background(col.rowSelected)
 		row = chosen(row, col)
@@ -157,8 +150,8 @@ func (a *app) toggleSidebar() {
 // never moves when the sidebar toggles.
 func (a *app) sidebarToggle(c *ui.Context, col colors) {
 	if a.sidebarCollapsed {
-		row := ui.ButtonBase(c).Width(36).Height(30).Radius(8).Center().
-			Cursor(ui.CursorPointer).Label("展开侧栏").Tooltip("展开侧栏")
+		row := ui.ButtonBase(c).Width(42).Height(30).Padding(0, 9).Radius(8).
+			AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("展开侧栏").Tooltip("展开侧栏")
 		hovered := row.Hovered()
 		if hovered {
 			row.Background(col.cardHover)
@@ -196,8 +189,8 @@ func (a *app) sidebarToggle(c *ui.Context, col colors) {
 
 func (a *app) accountChip(c *ui.Context, col colors) {
 	if a.sidebarCollapsed {
-		chip := ui.ButtonBase(c).Width(36).Height(50).Radius(10).Center().
-			Cursor(ui.CursorPointer).Label("账号设置").Tooltip("账号设置")
+		chip := ui.ButtonBase(c).Width(42).Height(50).Padding(0, 10).Radius(10).
+			AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("账号设置").Tooltip("账号设置")
 		fill := col.card
 		if chip.Hovered() {
 			fill = col.controlHover
