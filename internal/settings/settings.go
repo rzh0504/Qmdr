@@ -14,17 +14,18 @@ const DefaultNameTemplate = "{artist} - {title}"
 
 // Settings is what the app stores between runs.
 type Settings struct {
-	DownloadDir  string  `json:"download_dir"`
-	Quality      string  `json:"quality"`
-	CoverSize    string  `json:"cover_size"`
-	Overwrite    bool    `json:"overwrite"`
-	Concurrency  float64 `json:"concurrency"`
-	Appearance   string  `json:"appearance"`
-	Background   string  `json:"background"`
-	HistoryKeep  string  `json:"history_keep"`
-	ShowExplore  bool    `json:"show_explore"`
-	NameTemplate string  `json:"name_template"`
-	LyricsTrans  bool    `json:"lyrics_trans"`
+	DownloadDir      string  `json:"download_dir"`
+	Quality          string  `json:"quality"`
+	CoverSize        string  `json:"cover_size"`
+	Overwrite        bool    `json:"overwrite"`
+	Concurrency      float64 `json:"concurrency"`
+	Appearance       string  `json:"appearance"`
+	Background       string  `json:"background"`
+	HistoryKeep      string  `json:"history_keep"`
+	ShowExplore      bool    `json:"show_explore"`
+	NameTemplate     string  `json:"name_template"`
+	LyricsTrans      bool    `json:"lyrics_trans"`
+	SidebarCollapsed bool    `json:"sidebar_collapsed"`
 }
 
 var (

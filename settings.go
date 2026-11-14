@@ -29,17 +29,18 @@ func (a *app) saveSettings() {
 		return
 	}
 	current := settings.Settings{
-		DownloadDir:  a.downloadDir,
-		Quality:      a.quality,
-		CoverSize:    a.coverSize,
-		Overwrite:    a.overwrite,
-		Concurrency:  a.concurrency,
-		Appearance:   a.appearance,
-		Background:   a.background,
-		HistoryKeep:  a.historyKeep,
-		ShowExplore:  a.showExplore,
-		NameTemplate: a.nameTemplate,
-		LyricsTrans:  a.lyricsTrans,
+		DownloadDir:      a.downloadDir,
+		Quality:          a.quality,
+		CoverSize:        a.coverSize,
+		Overwrite:        a.overwrite,
+		Concurrency:      a.concurrency,
+		Appearance:       a.appearance,
+		Background:       a.background,
+		HistoryKeep:      a.historyKeep,
+		ShowExplore:      a.showExplore,
+		NameTemplate:     a.nameTemplate,
+		LyricsTrans:      a.lyricsTrans,
+		SidebarCollapsed: a.sidebarCollapsed,
 	}
 	a.dispatchDisk(func() {
 		data, err := json.MarshalIndent(current, "", "  ")

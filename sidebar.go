@@ -1,32 +1,71 @@
 package main
 
 import (
+	"runtime"
+
 	"github.com/egoist/mygo/ui"
+)
+
+// sidebarItems is the nav the sidebar offers, shared by the expanded rows
+// and the collapsed icon rail.
+var sidebarItems = []struct {
+	key   string
+	icon  *ui.SVG
+	label string
+}{
+	{"search", iconSearch, "搜索"},
+	{"playlists", iconLibrary, "歌单"},
+	{"downloads", iconDownload, "下载"},
+	{"tagstudio", iconTag, "Tag Studio"},
+	{"settings", iconSettings, "设置"},
+}
+
+const (
+	sidebarWidth     = 216
+	sidebarRailWidth = 56
 )
 
 func (a *app) sidebar(c *ui.Context, col colors) {
 	bar := c.TitleBar()
-	side := ui.Column(c).Width(216).Shrink(0).FillHeight().Padding(0, 10, 10, 10)
+	width := float32(sidebarWidth)
+	if a.sidebarCollapsed {
+		width = sidebarRailWidth
+	}
+	side := ui.Column(c).Width(width).Shrink(0).FillHeight().Padding(0, 10, 10, 10)
 
 	side.Children(func() {
-		ui.Row(c).Height(topBar).Shrink(0).AlignItems(ui.Center).
+		// On macOS the traffic lights sit over the rail's top, so the
+		// collapsed rail leaves the brand mark out instead of overlapping.
+		showLogo := !a.sidebarCollapsed || runtime.GOOS != "darwin"
+		ui.Row(c).Height(topBar).Shrink(0).AlignItems(ui.Center).Justify(ui.Center).
 			Padding(0, bar.Left+10, 0, 10).Gap(8).DragWindow().Children(func() {
-			a.logoMark(c, col, 22)
-			ui.Text(c, "Qmdr").FontSize(13).FontWeight(600).TextColor(col.text)
+			if showLogo {
+				a.logoMark(c, col, 22)
+			}
+			if !a.sidebarCollapsed {
+				ui.Text(c, "Qmdr").FontSize(13).FontWeight(600).TextColor(col.text)
+			}
 		})
 
-		ui.Column(c).Gap(2).Children(func() {
-			ui.Text(c, "资料库").FontSize(11).FontWeight(600).TextColor(col.faint).
-				Padding(0, 9, 6, 9)
-			a.navItem(c, col, "search", iconSearch, "搜索")
-			a.navItem(c, col, "playlists", iconLibrary, "歌单")
-			a.navItem(c, col, "downloads", iconDownload, "下载")
-			a.navItem(c, col, "tagstudio", iconTag, "Tag Studio")
-			a.navItem(c, col, "settings", iconSettings, "设置")
-		})
+		if a.sidebarCollapsed {
+			ui.Column(c).Gap(2).AlignItems(ui.Center).Children(func() {
+				for _, item := range sidebarItems {
+					a.navIcon(c, col, item.key, item.icon, item.label)
+				}
+			})
+		} else {
+			ui.Column(c).Gap(2).Children(func() {
+				ui.Text(c, "资料库").FontSize(11).FontWeight(600).TextColor(col.faint).
+					Padding(0, 9, 6, 9)
+				for _, item := range sidebarItems {
+					a.navItem(c, col, item.key, item.icon, item.label)
+				}
+			})
+		}
 
 		ui.Spacer(c)
 
+		a.sidebarToggle(c, col)
 		a.accountChip(c, col)
 	})
 }
@@ -61,7 +100,95 @@ func (a *app) navItem(c *ui.Context, col colors, key string, icon *ui.SVG, label
 	})
 }
 
+// navIcon is the collapsed form of navItem: the icon alone, with the label
+// as a tooltip, and a small dot when the download queue has work.
+func (a *app) navIcon(c *ui.Context, col colors, key string, icon *ui.SVG, label string) {
+	active := a.pageKey() == key
+	row := ui.ButtonBase(c).Width(36).Height(30).Radius(8).Center().
+		Cursor(ui.CursorPointer).Label(label).Tooltip(label)
+	if active {
+		row.Background(col.rowSelected)
+		row = chosen(row, col)
+	} else if row.Hovered() {
+		row.Background(col.cardHover)
+	}
+	if row.Clicked() {
+		a.setPage(key)
+		a.refresh()
+	}
+	fg := col.muted
+	if active {
+		fg = col.text
+	}
+	row.Children(func() {
+		ui.Box(c).Size(16, 16).Children(func() {
+			ui.Row(c).Fill().Center().Children(func() {
+				ui.Icon(c, icon).Size(15, 15).TextColor(fg)
+			})
+			if key == "downloads" && a.sidebarBusy() {
+				ui.Box(c).Absolute().Top(0).Right(0).Size(6, 6).Radius(3).Background(col.accent)
+			}
+		})
+	})
+}
+
+// sidebarBusy reports whether the downloads entry deserves its badge dot.
+func (a *app) sidebarBusy() bool {
+	_, _, _, _, active := a.queueCounts()
+	return active+len(a.queue.pending) > 0
+}
+
+// toggleSidebar flips the sidebar between the full width and the icon rail;
+// the choice is persisted with the rest of the settings.
+func (a *app) toggleSidebar() {
+	a.sidebarCollapsed = !a.sidebarCollapsed
+	a.saveSettings()
+	a.refresh()
+}
+
+// sidebarToggle sits above the account chip as the collapse affordance.
+func (a *app) sidebarToggle(c *ui.Context, col colors) {
+	if a.sidebarCollapsed {
+		iconButton(c, col, iconChevronRight, "展开侧栏", a.toggleSidebar)
+		return
+	}
+	row := ui.ButtonBase(c).FillWidth().Height(30).Padding(0, 9).Gap(9).
+		Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("收起侧栏")
+	hovered := row.Hovered()
+	if hovered {
+		row.Background(col.cardHover)
+	}
+	if row.Clicked() {
+		a.toggleSidebar()
+	}
+	fg := col.muted
+	if hovered {
+		fg = col.text
+	}
+	row.Children(func() {
+		ui.Icon(c, iconChevronLeft).Size(15, 15).TextColor(fg)
+		ui.Text(c, "收起侧栏").FontSize(13).TextColor(fg).Grow(1)
+	})
+}
+
 func (a *app) accountChip(c *ui.Context, col colors) {
+	if a.sidebarCollapsed {
+		chip := ui.ButtonBase(c).Width(36).Height(40).Radius(10).Center().
+			Cursor(ui.CursorPointer).Label("账号设置").Tooltip("账号设置")
+		fill := col.card
+		if chip.Hovered() {
+			fill = col.controlHover
+		}
+		smoothPanel(chip, col, 10, fill, false)
+		if chip.Clicked() {
+			a.view = viewSettings
+			a.refresh()
+		}
+		chip.Children(func() {
+			a.avatar(c, col, 26)
+		})
+		return
+	}
 	account := ui.Row(c).Height(50).Padding(0, 10).Gap(9).
 		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label("账号设置")
 	fill := col.card

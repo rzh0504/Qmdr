@@ -67,6 +67,9 @@ type app struct {
 	nameTemplate string
 	lyricsTrans  bool
 
+	// sidebarCollapsed keeps the nav as an icon rail; persisted in settings.
+	sidebarCollapsed bool
+
 	// settingsSaveTimer debounces the settings write while the user types
 	// in a settings field; it is only touched on the UI thread.
 	settingsSaveTimer *time.Timer
@@ -107,6 +110,8 @@ func newApp() *app {
 		showExplore:  cfg.ShowExplore,
 		nameTemplate: cfg.NameTemplate,
 		lyricsTrans:  cfg.LyricsTrans,
+
+		sidebarCollapsed: cfg.SidebarCollapsed,
 	}
 	a.startDiskWorker()
 	a.restorePlaylistCache()
