@@ -107,6 +107,16 @@ func (s *Store) migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_downloads_completed_at ON downloads(completed_at DESC, id DESC)`); err != nil {
 		return err
 	}
+	// SaveDownload matches candidates by song and quality, and the tag save
+	// follows a renamed file by path; both stay table scans without these.
+	if _, err := s.db.Execute(ctx,
+		`CREATE INDEX IF NOT EXISTS idx_downloads_song_quality ON downloads(song_mid, quality)`); err != nil {
+		return err
+	}
+	if _, err := s.db.Execute(ctx,
+		`CREATE INDEX IF NOT EXISTS idx_downloads_file_path ON downloads(file_path)`); err != nil {
+		return err
+	}
 	if _, err := s.db.Execute(ctx, `
 		CREATE TABLE IF NOT EXISTS queue_items (
 			id INTEGER PRIMARY KEY,
