@@ -83,7 +83,7 @@ func newApp() *app {
 	if displayUser == "" {
 		displayUser = "未登录"
 	}
-	settings := loadSettings()
+	cfg := loadSettings()
 	brandIcon, _ := ui.DecodeBitmap(appIconPNG)
 	a := &app{
 		api:          api,
@@ -96,17 +96,17 @@ func newApp() *app {
 		playlists:    playlistState{owner: userID, selected: -1, selectedMids: map[string]bool{}},
 		history:      historyState{loading: true},
 		login:        loginState{loggedIn: api.HasCredential(), userID: displayUser, loginType: loginType},
-		quality:      settings.Quality,
-		downloadDir:  settings.DownloadDir,
-		coverSize:    settings.CoverSize,
-		concurrency:  settings.Concurrency,
-		overwrite:    settings.Overwrite,
-		appearance:   settings.Appearance,
-		background:   settings.Background,
-		historyKeep:  settings.HistoryKeep,
-		showExplore:  settings.ShowExplore,
-		nameTemplate: settings.NameTemplate,
-		lyricsTrans:  settings.LyricsTrans,
+		quality:      cfg.Quality,
+		downloadDir:  cfg.DownloadDir,
+		coverSize:    cfg.CoverSize,
+		concurrency:  cfg.Concurrency,
+		overwrite:    cfg.Overwrite,
+		appearance:   cfg.Appearance,
+		background:   cfg.Background,
+		historyKeep:  cfg.HistoryKeep,
+		showExplore:  cfg.ShowExplore,
+		nameTemplate: cfg.NameTemplate,
+		lyricsTrans:  cfg.LyricsTrans,
 	}
 	a.startDiskWorker()
 	a.restorePlaylistCache()
