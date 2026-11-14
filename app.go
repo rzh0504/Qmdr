@@ -35,12 +35,13 @@ type app struct {
 	api       *qqmusic.Client
 	brandIcon *ui.Bitmap
 
-	view       viewID
-	closed     atomic.Bool
-	toast      string
-	updating   bool
-	aboutOpen  bool
-	updateInfo updatePrompt
+	view         viewID
+	downloadsTab viewID
+	closed       atomic.Bool
+	toast        string
+	updating     bool
+	aboutOpen    bool
+	updateInfo   updatePrompt
 
 	diskJobs chan func()
 
@@ -84,6 +85,7 @@ func newApp() *app {
 		api:          api,
 		brandIcon:    brandIcon,
 		view:         viewPlaylists,
+		downloadsTab: viewQueue,
 		covers:       coverState{cache: map[string]coverEntry{}, loading: map[string]bool{}, sem: make(chan struct{}, coverFetchLimit)},
 		metaCovers:   metadataCoverState{cache: map[string]metadataCover{}, pending: map[string]*metadataCoverCall{}},
 		queue:        queueState{pending: pending.Load()},
@@ -206,10 +208,8 @@ func (a *app) pageKey() string {
 	switch a.view {
 	case viewPlaylists:
 		return "playlists"
-	case viewQueue:
-		return "queue"
-	case viewHistory:
-		return "history"
+	case viewQueue, viewHistory:
+		return "downloads"
 	case viewTagStudio:
 		return "tagstudio"
 	case viewSettings:
@@ -224,10 +224,23 @@ func (a *app) setPage(page string) {
 	case "playlists":
 		a.view = viewPlaylists
 	case "queue":
+		if a.view == viewHistory {
+			a.resetHistorySelection()
+		}
 		a.view = viewQueue
+		a.downloadsTab = viewQueue
 	case "history":
 		a.view = viewHistory
+		a.downloadsTab = viewHistory
 		a.pruneHistoryNow()
+	case "downloads":
+		if a.downloadsTab != viewQueue && a.downloadsTab != viewHistory {
+			a.downloadsTab = viewQueue
+		}
+		a.view = a.downloadsTab
+		if a.view == viewHistory {
+			a.pruneHistoryNow()
+		}
 	case "tagstudio":
 		a.view = viewTagStudio
 	case "settings":

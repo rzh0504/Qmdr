@@ -23,10 +23,8 @@ func (a *app) pageTitle() string {
 	switch a.view {
 	case viewPlaylists:
 		return "歌单"
-	case viewQueue:
-		return "队列"
-	case viewHistory:
-		return "历史"
+	case viewQueue, viewHistory:
+		return "下载"
 	case viewTagStudio:
 		return "Tag Studio"
 	case viewSettings:

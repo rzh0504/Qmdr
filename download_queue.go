@@ -96,7 +96,7 @@ func (a *app) enqueueSongs(songs []Song) bool {
 	}
 	if a.queue.downloading {
 		a.setToast("已有下载任务在运行，请先等待或取消")
-		a.view = viewQueue
+		a.openQueueTab()
 		a.refresh()
 		return false
 	}
@@ -123,7 +123,7 @@ func (a *app) enqueueSongs(songs []Song) bool {
 	}
 	a.persistQueueItems(a.queue.items[first:])
 	a.appendLog(fmt.Sprintf("已添加 %d 首歌曲到下载队列", len(songs)), "info")
-	a.view = viewQueue
+	a.openQueueTab()
 	a.refresh()
 	a.startQueue()
 	return true

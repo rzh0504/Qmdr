@@ -20,8 +20,7 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 				Padding(0, 9, 6, 9)
 			a.navItem(c, col, "search", iconSearch, "搜索")
 			a.navItem(c, col, "playlists", iconLibrary, "歌单下载")
-			a.navItem(c, col, "queue", iconQueue, "下载队列")
-			a.navItem(c, col, "history", iconClock, "下载历史")
+			a.navItem(c, col, "downloads", iconDownload, "下载")
 			a.navItem(c, col, "tagstudio", iconTag, "Tag Studio")
 			a.navItem(c, col, "settings", iconSettings, "设置")
 		})
@@ -53,7 +52,7 @@ func (a *app) navItem(c *ui.Context, col colors, key string, icon *ui.SVG, label
 	row.Children(func() {
 		ui.Icon(c, icon).Size(15, 15).TextColor(fg)
 		ui.Text(c, label).FontSize(13).FontWeight(400).TextColor(fg).Grow(1)
-		if key == "queue" {
+		if key == "downloads" {
 			_, _, _, active := a.queueCounts()
 			if count := active + len(a.queue.pending); count > 0 {
 				ui.Textf(c, "%d", count).FontSize(11).TextColor(col.muted)

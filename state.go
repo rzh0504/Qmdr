@@ -89,6 +89,7 @@ type queueState struct {
 	pending     []Song
 	items       []QueueItem
 	filter      int
+	scroll      ui.ScrollState
 	seq         int
 	downloading bool
 	runID       int

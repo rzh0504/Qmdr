@@ -53,6 +53,13 @@ func (a *app) viewRoot(c *ui.Context) {
 						})
 						return
 					}
+					if a.view == viewQueue || a.view == viewHistory {
+						ui.Column(c).Grow(1).MinHeight(0).
+							Padding(12, 20, 20, 18).Children(func() {
+							a.downloadsView(c, col)
+						})
+						return
+					}
 					if a.fullPageLoading() {
 						ui.Column(c).Grow(1).MinHeight(0).
 							Padding(12, 20, 20, 18).Children(func() {
@@ -64,8 +71,6 @@ func (a *app) viewRoot(c *ui.Context) {
 						Padding(12, 20, 20, 18).Gap(18)
 					if a.view == viewSearch {
 						scroll = scroll.TrackScroll(&a.search.scroll)
-					} else if a.view == viewHistory {
-						scroll = scroll.TrackScroll(&a.history.scroll)
 					}
 					scroll.Children(func() {
 						a.viewBody(c, col)
@@ -92,10 +97,6 @@ func (a *app) viewBody(c *ui.Context, col colors) {
 		a.searchView(c, col)
 	case viewPlaylists:
 		a.playlistsView(c, col)
-	case viewQueue:
-		a.queueView(c, col)
-	case viewHistory:
-		a.historyView(c, col)
 	case viewTagStudio:
 		a.tagStudioView(c, col)
 	case viewSettings:
@@ -113,8 +114,6 @@ func (a *app) fullPageLoading() bool {
 				(!a.search.exploreLoaded || a.search.exploreLoading)
 		}
 		return a.search.loading
-	case viewHistory:
-		return a.history.loading && a.history.store == nil
 	}
 	return false
 }
