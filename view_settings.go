@@ -124,14 +124,16 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 			})
 		}
 	})
-	a.settingRow(c, col, "登录方式", "", false, func() {
-		primaryButton(c, col, iconLogin, "QQ 登录", func() {
-			a.openQR("QQ")
+	if !a.login.loggedIn {
+		a.settingRow(c, col, "登录方式", "", false, func() {
+			primaryButton(c, col, iconLogin, "QQ 登录", func() {
+				a.openQR("QQ")
+			})
+			secondaryButton(c, col, iconLogin, "微信登录", func() {
+				a.openQR("微信")
+			})
 		})
-		secondaryButton(c, col, iconLogin, "微信登录", func() {
-			a.openQR("微信")
-		})
-	})
+	}
 	a.settingRow(c, col, "本地凭证", "重新读取或导出保存的登录凭证", false, func() {
 		ghostButton(c, col, iconRefresh, "重新加载", func() {
 			a.reloadCredential()
@@ -141,7 +143,7 @@ func (a *app) accountSettings(c *ui.Context, col colors) {
 		})
 	})
 	if a.login.loggedIn {
-		a.settingRow(c, col, "退出登录并清除本地凭据", "删除本地保存的登录凭证，下次启动需重新扫码登录", false, func() {
+		a.settingRow(c, col, "退出登录", "", false, func() {
 			ghostDangerButton(c, col, iconLogout, "退出登录", func() {
 				a.login.confirmLogout = true
 				a.refresh()
