@@ -40,6 +40,8 @@ func (a *app) tagStudioView(c *ui.Context, col colors) {
 		}
 	}
 	c.OnShortcut(ui.Cmd, ui.KeyS, a.saveTagStudio)
+	c.OnShortcut(ui.Alt, ui.KeyLeft, func() { a.tagStudioStep(-1) })
+	c.OnShortcut(ui.Alt, ui.KeyRight, func() { a.tagStudioStep(1) })
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Gap(16).Children(func() {
 		a.tagStudioSidebar(c, col)
 		a.tagStudioPanel(c, col)
@@ -329,6 +331,45 @@ func (a *app) tagStudioForm(c *ui.Context, col colors, entry *tagEntry) {
 	})
 }
 
+// tagStudioNeighbor returns the next (dir 1) or previous (dir -1) entry in
+// the current display order. Navigation follows the filtered, sorted list;
+// a selection outside it moves to the nearest end.
+func (a *app) tagStudioNeighbor(dir int) (int, bool) {
+	s := &a.tagStudio
+	order := a.matchedTagEntries()
+	if len(order) == 0 {
+		return 0, false
+	}
+	pos := -1
+	for i, index := range order {
+		if index == s.selected {
+			pos = i
+			break
+		}
+	}
+	if pos < 0 {
+		if dir > 0 {
+			return order[0], true
+		}
+		return order[len(order)-1], true
+	}
+	next := pos + dir
+	if next < 0 || next >= len(order) {
+		return 0, false
+	}
+	return order[next], true
+}
+
+// tagStudioStep moves to the neighbouring entry, asking before an unsaved
+// draft is dropped.
+func (a *app) tagStudioStep(dir int) {
+	a.requestTagStudioAction(func() {
+		if index, ok := a.tagStudioNeighbor(dir); ok {
+			a.loadTagEntry(index, false)
+		}
+	})
+}
+
 func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 	s := &a.tagStudio
 	softCard(c, col, func() {
@@ -357,6 +398,8 @@ func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 				}
 				ui.Text(c, detail).FontSize(11).TextColor(col.faint)
 			})
+			iconButton(c, col, iconChevronLeft, "上一个 (Alt+←)", func() { a.tagStudioStep(-1) })
+			iconButton(c, col, iconChevronRight, "下一个 (Alt+→)", func() { a.tagStudioStep(1) })
 			iconButton(c, col, iconFolder, "在文件夹中显示", func() {
 				a.showHistoryFile(entry.path)
 			})
