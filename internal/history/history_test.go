@@ -646,3 +646,17 @@ func TestDeleteRemovesRecordsAndKeepsFiles(t *testing.T) {
 		t.Fatalf("file was removed with its record: %v", err)
 	}
 }
+
+func TestDeleteEmptyIDs(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "qmdr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	changes, err := store.Delete(ctx, nil)
+	if err != nil || changes != 0 {
+		t.Fatalf("Delete(nil) = %d, %v, want 0, nil", changes, err)
+	}
+}

@@ -415,18 +415,28 @@ func (s *Store) Stats(ctx context.Context) (Stats, error) {
 	return stats, err
 }
 
-// Delete removes download records by id. The files themselves are left
-// alone. It reports how many rows were removed.
+// Delete removes download records by id in a single statement, so a
+// multi-select delete is one write instead of one per row. The files
+// themselves are left alone. It reports how many rows were removed.
 func (s *Store) Delete(ctx context.Context, ids []int64) (int64, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	args := make([]any, len(ids))
+	placeholders := make([]string, len(ids))
+	for i, id := range ids {
+		args[i] = id
+		placeholders[i] = "?"
+	}
 	var changes int64
 	err := s.withDB(func(db *sqlite.DB) error {
-		for _, id := range ids {
-			result, err := db.Execute(ctx, `DELETE FROM downloads WHERE id = ?`, id)
-			if err != nil {
-				return err
-			}
-			changes += result.Changes
+		result, err := db.Execute(ctx,
+			`DELETE FROM downloads WHERE id IN (`+strings.Join(placeholders, ", ")+`)`,
+			args...)
+		if err != nil {
+			return err
 		}
+		changes = result.Changes
 		return nil
 	})
 	return changes, err
