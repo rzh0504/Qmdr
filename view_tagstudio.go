@@ -351,28 +351,19 @@ func (a *app) tagStudioForm(c *ui.Context, col colors, entry *tagEntry) {
 			a.settingRow(c, col, "专辑", "", false, func() {
 				a.tagField(c, col, &s.draft.Album, "专辑名", 320)
 			})
-			a.settingRow(c, col, "音轨号", "", false, func() {
-				a.tagNumberField(c, col, &s.trackText, "如 3")
-			})
-			a.settingRow(c, col, "碟号", "", false, func() {
-				a.tagNumberField(c, col, &s.discText, "如 1")
-			})
-			a.settingRow(c, col, "日期", "如 2024-01-01 或 2024", false, func() {
-				a.tagField(c, col, &s.draft.Date, "发行日期", 190)
-			})
-			a.settingRow(c, col, "流派", "", false, func() {
-				a.tagField(c, col, &s.draft.Genre, "如 流行", 190)
-			})
-			a.settingRow(c, col, "语言", "", false, func() {
-				a.tagField(c, col, &s.draft.Language, "如 国语", 190)
+			divider(c, col)
+			ui.Row(c).FillWidth().Gap(12).Padding(11, 0).AlignItems(ui.End).Children(func() {
+				a.tagShortField(c, col, "音轨号", &s.trackText, "如 3 或 3/12")
+				a.tagShortField(c, col, "碟号", &s.discText, "如 1 或 1/2")
+				a.tagShortField(c, col, "日期", &s.draft.Date, "如 2024-01-01")
+				a.tagShortField(c, col, "流派", &s.draft.Genre, "如 流行")
+				a.tagShortField(c, col, "语言", &s.draft.Language, "如 国语")
 			})
 		})
 		a.settingsGroup(c, col, "创作者", func() {
-			a.settingRow(c, col, "作曲", "", true, func() {
-				a.tagField(c, col, &s.draft.Composer, "作曲", 280)
-			})
-			a.settingRow(c, col, "作词", "", false, func() {
-				a.tagField(c, col, &s.draft.Lyricist, "作词", 280)
+			ui.Row(c).FillWidth().Gap(12).Padding(11, 4).AlignItems(ui.End).Children(func() {
+				a.tagShortField(c, col, "作曲", &s.draft.Composer, "作曲")
+				a.tagShortField(c, col, "作词", &s.draft.Lyricist, "作词")
 			})
 		})
 		a.settingsGroup(c, col, "封面", func() {
@@ -559,10 +550,15 @@ func (a *app) tagField(c *ui.Context, col colors, value *string, placeholder str
 	}, nil)
 }
 
-func (a *app) tagNumberField(c *ui.Context, col colors, value *string, placeholder string) {
-	a.textField(c, col, value, placeholder, 120, 30, func() {
-		a.tagStudio.dirty = true
-	}, nil)
+// tagShortField is a label-above field for the compact rows of the tag
+// form; it shares its row with its siblings.
+func (a *app) tagShortField(c *ui.Context, col colors, label string, value *string, placeholder string) {
+	ui.Column(c).Grow(1).MinWidth(110).Gap(4).Children(func() {
+		ui.Text(c, label).FontSize(12).TextColor(col.muted)
+		a.textField(c, col, value, placeholder, 0, 30, func() {
+			a.tagStudio.dirty = true
+		}, nil)
+	})
 }
 
 // requestTagStudioAction runs action after confirming that unsaved edits may
