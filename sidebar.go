@@ -34,10 +34,14 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 	side := ui.Column(c).Width(width).Shrink(0).FillHeight().Padding(0, 10, 10, 10)
 
 	side.Children(func() {
+		// The two states share one vertical skeleton: every section keeps
+		// its height across the toggle, so nothing below jumps or resizes;
+		// only the rail's width changes.
+		//
 		// On macOS the traffic lights sit over the rail's top, so the
 		// collapsed rail leaves the brand mark out instead of overlapping.
 		showLogo := !a.sidebarCollapsed || runtime.GOOS != "darwin"
-		ui.Row(c).Height(topBar).Shrink(0).AlignItems(ui.Center).Justify(ui.Center).
+		ui.Row(c).Height(topBar).Shrink(0).AlignItems(ui.Center).
 			Padding(0, bar.Left+10, 0, 10).Gap(8).DragWindow().Children(func() {
 			if showLogo {
 				a.logoMark(c, col, 22)
@@ -47,21 +51,23 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 			}
 		})
 
-		if a.sidebarCollapsed {
-			ui.Column(c).Gap(2).AlignItems(ui.Center).Children(func() {
-				for _, item := range sidebarItems {
-					a.navIcon(c, col, item.key, item.icon, item.label)
-				}
-			})
-		} else {
-			ui.Column(c).Gap(2).Children(func() {
+		ui.Column(c).Gap(2).Children(func() {
+			if a.sidebarCollapsed {
+				ui.Row(c).FillWidth().Justify(ui.Center).Padding(0, 0, 6, 0).Children(func() {
+					ui.Text(c, "资料库").FontSize(11).FontWeight(600).TextColor(col.faint)
+				})
+			} else {
 				ui.Text(c, "资料库").FontSize(11).FontWeight(600).TextColor(col.faint).
 					Padding(0, 9, 6, 9)
-				for _, item := range sidebarItems {
+			}
+			for _, item := range sidebarItems {
+				if a.sidebarCollapsed {
+					a.navIcon(c, col, item.key, item.icon, item.label)
+				} else {
 					a.navItem(c, col, item.key, item.icon, item.label)
 				}
-			})
-		}
+			}
+		})
 
 		ui.Spacer(c)
 
@@ -147,9 +153,26 @@ func (a *app) toggleSidebar() {
 }
 
 // sidebarToggle sits above the account chip as the collapse affordance.
+// Both states keep the nav row's 30px height so the account chip below it
+// never moves when the sidebar toggles.
 func (a *app) sidebarToggle(c *ui.Context, col colors) {
 	if a.sidebarCollapsed {
-		iconButton(c, col, iconChevronRight, "展开侧栏", a.toggleSidebar)
+		row := ui.ButtonBase(c).Width(36).Height(30).Radius(8).Center().
+			Cursor(ui.CursorPointer).Label("展开侧栏").Tooltip("展开侧栏")
+		hovered := row.Hovered()
+		if hovered {
+			row.Background(col.cardHover)
+		}
+		if row.Clicked() {
+			a.toggleSidebar()
+		}
+		fg := col.muted
+		if hovered {
+			fg = col.text
+		}
+		row.Children(func() {
+			ui.Icon(c, iconChevronRight).Size(15, 15).TextColor(fg)
+		})
 		return
 	}
 	row := ui.ButtonBase(c).FillWidth().Height(30).Padding(0, 9).Gap(9).
@@ -173,7 +196,7 @@ func (a *app) sidebarToggle(c *ui.Context, col colors) {
 
 func (a *app) accountChip(c *ui.Context, col colors) {
 	if a.sidebarCollapsed {
-		chip := ui.ButtonBase(c).Width(36).Height(40).Radius(10).Center().
+		chip := ui.ButtonBase(c).Width(36).Height(50).Radius(10).Center().
 			Cursor(ui.CursorPointer).Label("账号设置").Tooltip("账号设置")
 		fill := col.card
 		if chip.Hovered() {
