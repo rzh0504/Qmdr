@@ -30,6 +30,7 @@ func (a *app) menu() *mygo.Menu {
 			a.menuPage("歌单下载", "CmdOrCtrl+2", "playlists"),
 			a.menuPage("下载队列", "CmdOrCtrl+3", "queue"),
 			a.menuPage("下载历史", "CmdOrCtrl+4", "history"),
+			a.menuPage("Tag Studio", "CmdOrCtrl+5", "tagstudio"),
 			mygo.Separator(),
 			{Role: mygo.RoleToggleFullScreen},
 		}},

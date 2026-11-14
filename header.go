@@ -27,6 +27,8 @@ func (a *app) pageTitle() string {
 		return "队列"
 	case viewHistory:
 		return "历史"
+	case viewTagStudio:
+		return "Tag Studio"
 	case viewSettings:
 		return "设置"
 	default:
@@ -38,6 +40,24 @@ func (a *app) headerActions(c *ui.Context, col colors) {
 	switch a.view {
 	case viewSearch, viewHistory, viewSettings:
 		iconButton(c, col, iconFolder, "打开下载目录", a.openDownloadDir)
+	case viewTagStudio:
+		s := &a.tagStudio
+		if s.saving {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Spinner(c).Size(13, 13)
+				ui.Text(c, "保存中…").FontSize(12).TextColor(col.muted)
+			})
+			return
+		}
+		if s.selected < 0 || s.selected >= len(s.activeEntries()) || s.loading {
+			return
+		}
+		if s.dirty {
+			secondaryButton(c, col, iconRefresh, "还原", a.revertTagStudio)
+			primaryButton(c, col, iconCheck, "保存", a.saveTagStudio)
+		} else {
+			primaryButtonDisabled(c, col, iconCheck, "保存")
+		}
 	case viewQueue:
 		_, done, _, active := a.queueCounts()
 		skipped := 0

@@ -22,6 +22,7 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 			a.navItem(c, col, "playlists", iconLibrary, "歌单下载")
 			a.navItem(c, col, "queue", iconQueue, "下载队列")
 			a.navItem(c, col, "history", iconClock, "下载历史")
+			a.navItem(c, col, "tagstudio", iconTag, "Tag Studio")
 			a.navItem(c, col, "settings", iconSettings, "设置")
 		})
 

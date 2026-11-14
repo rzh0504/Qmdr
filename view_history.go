@@ -148,17 +148,29 @@ func (a *app) recordHistory(record history.Record) {
 	a.dispatchDisk(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		id, err := store.Add(ctx, record)
+		id, outcome, removed, err := store.SaveDownload(ctx, record)
 		if err != nil {
 			log.Printf("record download history: %v", err)
 			return
 		}
+		stats, statsErr := store.Stats(ctx)
 		a.update(func() {
 			if a.history.store != store {
 				return
 			}
 			record.ID = id
-			a.prependHistory(record)
+			for _, removedID := range removed {
+				a.removeHistoryRecord(removedID)
+			}
+			switch outcome {
+			case history.DownloadUpdated, history.DownloadInserted:
+				a.prependHistoryItem(record)
+			}
+			if statsErr == nil {
+				a.history.count = stats.Count
+				a.history.bytes = stats.Bytes
+			}
+			a.syncTagStudioHistory(record, outcome, removed)
 		})
 	})
 }
@@ -173,33 +185,42 @@ func (a *app) flushHistoryBacklog() {
 	a.dispatchDisk(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		var added []history.Record
 		for _, record := range records {
-			id, err := store.Add(ctx, record)
-			if err != nil {
+			if _, _, _, err := store.SaveDownload(ctx, record); err != nil {
 				log.Printf("record download history: %v", err)
-				continue
 			}
-			record.ID = id
-			added = append(added, record)
 		}
-		if len(added) == 0 {
-			return
-		}
+		recent, recentErr := store.Recent(ctx, historyPageSize)
+		stats, statsErr := store.Stats(ctx)
 		a.update(func() {
 			if a.history.store != store {
 				return
 			}
-			for _, record := range added {
-				a.prependHistory(record)
+			if recentErr == nil {
+				a.history.items = recent
+			}
+			if statsErr == nil {
+				a.history.count = stats.Count
+				a.history.bytes = stats.Bytes
 			}
 		})
 	})
 }
 
-func (a *app) prependHistory(record history.Record) {
-	a.history.count++
-	a.history.bytes += record.FileSize
+// removeHistoryRecord drops one row from the in-memory list; the totals
+// come from the store's stats after the write.
+func (a *app) removeHistoryRecord(id int64) {
+	for i := range a.history.items {
+		if a.history.items[i].ID != id {
+			continue
+		}
+		a.history.items = append(a.history.items[:i], a.history.items[i+1:]...)
+		return
+	}
+}
+
+func (a *app) prependHistoryItem(record history.Record) {
+	a.removeHistoryRecord(record.ID)
 	a.history.items = append(a.history.items, history.Record{})
 	copy(a.history.items[1:], a.history.items[:len(a.history.items)-1])
 	a.history.items[0] = record
@@ -342,6 +363,7 @@ func (a *app) historyRow(c *ui.Context, col colors, record history.Record) {
 			a.showHistoryFile(record.FilePath)
 		})
 	})
+	a.openHistoryMenu(row, record)
 }
 
 func (a *app) showHistoryFile(path string) {

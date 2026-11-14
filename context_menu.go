@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/egoist/mygo/ui"
+	"github.com/rzh0504/qmdr/internal/history"
 )
 
 const (
@@ -41,6 +42,24 @@ func (a *app) openSongMenu(row ui.Element, song Song, selecting bool) {
 		x, y = b.W/2, b.H/2
 	}
 	a.contextMenu = contextMenuState{open: true, x: b.X + x, y: b.Y + y, items: a.songMenuItems(song, selecting)}
+	a.refresh()
+}
+
+// openHistoryMenu opens the menu at the pointer when a history row was
+// right-clicked. It is the shortcut into Tag Studio for a downloaded file.
+func (a *app) openHistoryMenu(row ui.Element, record history.Record) {
+	if !row.RightClicked() {
+		return
+	}
+	b := row.Bounds()
+	x, y, over := row.PointerPosition()
+	if !over {
+		x, y = b.W/2, b.H/2
+	}
+	a.contextMenu = contextMenuState{open: true, x: b.X + x, y: b.Y + y, items: []menuAction{
+		{label: "编辑标签", run: func() { a.openTagStudioRecord(record) }},
+		{label: "在文件夹中显示", run: func() { a.showHistoryFile(record.FilePath) }},
+	}}
 	a.refresh()
 }
 

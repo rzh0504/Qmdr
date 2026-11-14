@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -178,6 +180,182 @@ func (s *Store) Add(ctx context.Context, record Record) (int64, error) {
 		return 0, err
 	}
 	return id, nil
+}
+
+// UpdateFile follows a tag save: it moves the record of oldPath to newPath
+// and rewrites the metadata fields and size. It reports whether a record
+// matched.
+func (s *Store) UpdateFile(ctx context.Context, oldPath, newPath, title, artist, album string, fileSize int64) (bool, error) {
+	var changed bool
+	err := s.withDB(func(db *sqlite.DB) error {
+		result, err := db.Execute(ctx, `
+			UPDATE downloads
+			SET file_path = ?, title = ?, artist = ?, album = ?, file_size = ?
+			WHERE file_path = ?`,
+			newPath, title, artist, album, fileSize, oldPath)
+		if err != nil {
+			return err
+		}
+		changed = result.Changes > 0
+		return nil
+	})
+	return changed, err
+}
+
+// SaveOutcome reports how SaveDownload handled a record.
+type SaveOutcome int
+
+const (
+	DownloadInserted SaveOutcome = iota
+	DownloadUpdated
+	DownloadUnchanged
+)
+
+// SaveDownload records a finished download without piling up duplicates: a
+// record for the same destination is updated, a record of the same song and
+// quality whose file has gone missing takes the new destination, and stale
+// siblings left by earlier re-downloads are removed. DownloadUnchanged means
+// a skipped download found its file already recorded and nothing was added.
+func (s *Store) SaveDownload(ctx context.Context, record Record) (id int64, outcome SaveOutcome, removed []int64, err error) {
+	if record.CompletedAt.IsZero() {
+		record.CompletedAt = time.Now()
+	}
+	if record.Status == "" {
+		record.Status = StatusDone
+	}
+	skipped := record.Status == StatusSkipped
+	err = s.withDB(func(db *sqlite.DB) error {
+		rows, err := db.Query(ctx, `
+			SELECT id, song_mid, quality, file_path
+			FROM downloads
+			WHERE (song_mid <> '' AND song_mid = ? AND quality = ?) OR file_path = ?
+			ORDER BY completed_at DESC, id DESC`,
+			record.SongMID, record.Quality, record.FilePath)
+		if err != nil {
+			return err
+		}
+		type candidate struct {
+			id      int64
+			songMID string
+			quality string
+			path    string
+		}
+		candidates := make([]candidate, 0, len(rows.Values))
+		for _, row := range rows.Values {
+			if len(row) < 4 {
+				continue
+			}
+			candidates = append(candidates, candidate{
+				id:      int64Value(row[0]),
+				songMID: stringValue(row[1]),
+				quality: stringValue(row[2]),
+				path:    stringValue(row[3]),
+			})
+		}
+
+		target := int64(0)
+		unchanged := false
+		for _, candidate := range candidates {
+			if sameFilePath(candidate.path, record.FilePath) {
+				target = candidate.id
+				break
+			}
+		}
+		if target != 0 {
+			unchanged = skipped
+		} else if !skipped {
+			for _, candidate := range candidates {
+				if candidate.songMID != record.SongMID || candidate.quality != record.Quality {
+					continue
+				}
+				if missingFile(candidate.path) {
+					target = candidate.id
+					break
+				}
+			}
+		}
+
+		switch {
+		case target == 0:
+			result, err := db.Execute(ctx, `
+				INSERT INTO downloads
+					(song_mid, title, artist, album, album_mid, quality, file_path, file_size, status, completed_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				record.SongMID,
+				record.Title,
+				record.Artist,
+				record.Album,
+				record.AlbumMID,
+				record.Quality,
+				record.FilePath,
+				record.FileSize,
+				record.Status,
+				record.CompletedAt.Unix(),
+			)
+			if err != nil {
+				return err
+			}
+			id = result.LastInsertID
+			outcome = DownloadInserted
+		case unchanged:
+			id = target
+			outcome = DownloadUnchanged
+		default:
+			if _, err := db.Execute(ctx, `
+				UPDATE downloads
+				SET song_mid = ?, title = ?, artist = ?, album = ?, album_mid = ?,
+					quality = ?, file_path = ?, file_size = ?, status = ?, completed_at = ?
+				WHERE id = ?`,
+				record.SongMID,
+				record.Title,
+				record.Artist,
+				record.Album,
+				record.AlbumMID,
+				record.Quality,
+				record.FilePath,
+				record.FileSize,
+				record.Status,
+				record.CompletedAt.Unix(),
+				target,
+			); err != nil {
+				return err
+			}
+			id = target
+			outcome = DownloadUpdated
+		}
+
+		for _, candidate := range candidates {
+			if candidate.id == id {
+				continue
+			}
+			sameSong := record.SongMID != "" &&
+				candidate.songMID == record.SongMID && candidate.quality == record.Quality
+			sameDest := sameFilePath(candidate.path, record.FilePath)
+			if !sameDest && !(sameSong && missingFile(candidate.path)) {
+				continue
+			}
+			if _, err := db.Execute(ctx, `DELETE FROM downloads WHERE id = ?`, candidate.id); err != nil {
+				return err
+			}
+			removed = append(removed, candidate.id)
+		}
+		return nil
+	})
+	return id, outcome, removed, err
+}
+
+func missingFile(path string) bool {
+	_, err := os.Stat(path)
+	return errors.Is(err, os.ErrNotExist)
+}
+
+func sameFilePath(a, b string) bool {
+	a = filepath.Clean(a)
+	b = filepath.Clean(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }
 
 func (s *Store) Recent(ctx context.Context, limit int) ([]Record, error) {

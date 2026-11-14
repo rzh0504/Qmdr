@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -291,5 +292,295 @@ func TestStoreCloseDuringUse(t *testing.T) {
 	}
 	if err := store.Close(); err != nil {
 		t.Fatalf("second Close: %v", err)
+	}
+}
+
+func TestUpdateFileFollowsRename(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "qmdr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	oldPath := `C:\Music\Artist - Old.flac`
+	if _, err := store.Add(ctx, Record{
+		SongMID:     "mid",
+		Title:       "Old",
+		Artist:      "Artist",
+		Album:       "Album",
+		AlbumMID:    "album",
+		Quality:     "FLAC",
+		FilePath:    oldPath,
+		FileSize:    1024,
+		Status:      StatusDone,
+		CompletedAt: time.Unix(1700000000, 0),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	newPath := `C:\Music\Artist - New.flac`
+	changed, err := store.UpdateFile(ctx, oldPath, newPath, "New", "Artist", "Album", 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("UpdateFile did not match the record")
+	}
+	records, err := store.Recent(ctx, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("Recent returned %d records, want 1", len(records))
+	}
+	record := records[0]
+	if record.FilePath != newPath || record.Title != "New" || record.FileSize != 2048 {
+		t.Fatalf("record = %+v, want the rewritten fields", record)
+	}
+	stats, err := store.Stats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Bytes != 2048 {
+		t.Fatalf("stats bytes = %d, want 2048", stats.Bytes)
+	}
+
+	changed, err = store.UpdateFile(ctx, oldPath, newPath, "New", "Artist", "Album", 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("UpdateFile matched an already moved record")
+	}
+}
+
+func saveDownloadRecords(t *testing.T, store *Store) []Record {
+	t.Helper()
+	records, err := store.Recent(context.Background(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return records
+}
+
+func TestSaveDownloadMovesMissingRecordToNewPath(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "qmdr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	dir := t.TempDir()
+	oldPath := filepath.Join(dir, "K_DA_Artist - Title.flac")
+	newPath := filepath.Join(dir, "K_DA _ Artist - Title.flac")
+	base := time.Unix(1700000000, 0)
+	if _, err := store.Add(ctx, Record{
+		SongMID:     "mid",
+		Title:       "Title",
+		Artist:      "K/DA/Artist",
+		Album:       "Album",
+		Quality:     "FLAC",
+		FilePath:    oldPath,
+		FileSize:    100,
+		Status:      StatusDone,
+		CompletedAt: base,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	id, outcome, removed, err := store.SaveDownload(ctx, Record{
+		SongMID:     "mid",
+		Title:       "Title",
+		Artist:      "K/DA / Artist",
+		Album:       "Album",
+		Quality:     "FLAC",
+		FilePath:    newPath,
+		FileSize:    120,
+		Status:      StatusDone,
+		CompletedAt: base.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome != DownloadUpdated {
+		t.Fatalf("outcome = %v, want DownloadUpdated", outcome)
+	}
+	if len(removed) != 0 {
+		t.Fatalf("removed = %v, want none", removed)
+	}
+	records := saveDownloadRecords(t, store)
+	if len(records) != 1 {
+		t.Fatalf("got %d records, want 1", len(records))
+	}
+	if records[0].ID != id || records[0].FilePath != newPath || records[0].FileSize != 120 {
+		t.Fatalf("record = %+v, want the moved record", records[0])
+	}
+}
+
+func TestSaveDownloadKeepsDifferentExistingFiles(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "qmdr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.flac")
+	second := filepath.Join(dir, "second.flac")
+	if err := os.WriteFile(first, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	base := time.Unix(1700000000, 0)
+	if _, err := store.Add(ctx, Record{
+		SongMID: "mid", Title: "Title", Quality: "FLAC",
+		FilePath: first, FileSize: 5, Status: StatusDone, CompletedAt: base,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, outcome, _, err := store.SaveDownload(ctx, Record{
+		SongMID: "mid", Title: "Title", Quality: "FLAC",
+		FilePath: second, FileSize: 6, Status: StatusDone, CompletedAt: base.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome != DownloadInserted {
+		t.Fatalf("outcome = %v, want DownloadInserted", outcome)
+	}
+	if records := saveDownloadRecords(t, store); len(records) != 2 {
+		t.Fatalf("got %d records, want 2", len(records))
+	}
+}
+
+func TestSaveDownloadRemovesStaleSibling(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "qmdr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "existing.flac")
+	if err := os.WriteFile(existing, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(dir, "stale.flac")
+	base := time.Unix(1700000000, 0)
+	staleID, err := store.Add(ctx, Record{
+		SongMID: "mid", Title: "Title", Quality: "FLAC",
+		FilePath: stale, FileSize: 5, Status: StatusDone, CompletedAt: base,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	existingID, err := store.Add(ctx, Record{
+		SongMID: "mid", Title: "Old", Quality: "FLAC",
+		FilePath: existing, FileSize: 6, Status: StatusDone, CompletedAt: base.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	id, outcome, removed, err := store.SaveDownload(ctx, Record{
+		SongMID: "mid", Title: "New", Quality: "FLAC",
+		FilePath: existing, FileSize: 7, Status: StatusDone, CompletedAt: base.Add(2 * time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome != DownloadUpdated || id != existingID {
+		t.Fatalf("outcome = %v id = %d, want updated %d", outcome, id, existingID)
+	}
+	if len(removed) != 1 || removed[0] != staleID {
+		t.Fatalf("removed = %v, want [%d]", removed, staleID)
+	}
+	records := saveDownloadRecords(t, store)
+	if len(records) != 1 || records[0].ID != existingID ||
+		records[0].Title != "New" || records[0].FileSize != 7 {
+		t.Fatalf("records = %+v, want the one updated record", records)
+	}
+}
+
+func TestSaveDownloadSkippedKeepsDoneRecord(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "qmdr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "song.flac")
+	if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stalePath := filepath.Join(dir, "song old.flac")
+	base := time.Unix(1700000000, 0)
+	staleID, err := store.Add(ctx, Record{
+		SongMID: "mid", Title: "Title", Quality: "FLAC",
+		FilePath: stalePath, FileSize: 4, Status: StatusDone, CompletedAt: base,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Add(ctx, Record{
+		SongMID: "mid", Title: "Title", Quality: "FLAC",
+		FilePath: path, FileSize: 5, Status: StatusDone, CompletedAt: base.Add(time.Minute),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	id, outcome, removed, err := store.SaveDownload(ctx, Record{
+		SongMID: "mid", Title: "Title", Quality: "FLAC",
+		FilePath: path, FileSize: 5, Status: StatusSkipped, CompletedAt: base.Add(2 * time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome != DownloadUnchanged {
+		t.Fatalf("outcome = %v, want DownloadUnchanged", outcome)
+	}
+	if len(removed) != 1 || removed[0] != staleID {
+		t.Fatalf("removed = %v, want [%d]", removed, staleID)
+	}
+	records := saveDownloadRecords(t, store)
+	if len(records) != 1 {
+		t.Fatalf("got %d records, want 1", len(records))
+	}
+	if records[0].ID != id || records[0].Status != StatusDone {
+		t.Fatalf("record = %+v, want the original done record", records[0])
+	}
+}
+
+func TestSaveDownloadSkippedInsertsUnknownPath(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "qmdr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "song.flac")
+	if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, outcome, _, err := store.SaveDownload(ctx, Record{
+		SongMID: "mid", Title: "Title", Quality: "FLAC",
+		FilePath: path, FileSize: 5, Status: StatusSkipped, CompletedAt: time.Unix(1700000000, 0),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome != DownloadInserted {
+		t.Fatalf("outcome = %v, want DownloadInserted", outcome)
+	}
+	records := saveDownloadRecords(t, store)
+	if len(records) != 1 || records[0].Status != StatusSkipped {
+		t.Fatalf("records = %+v, want one skipped record", records)
 	}
 }

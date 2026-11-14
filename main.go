@@ -46,6 +46,13 @@ func (a *app) viewRoot(c *ui.Context) {
 						})
 						return
 					}
+					if a.view == viewTagStudio {
+						ui.Column(c).Grow(1).MinHeight(0).
+							Padding(12, 20, 20, 18).Children(func() {
+							a.tagStudioView(c, col)
+						})
+						return
+					}
 					if a.fullPageLoading() {
 						ui.Column(c).Grow(1).MinHeight(0).
 							Padding(12, 20, 20, 18).Children(func() {
@@ -70,6 +77,7 @@ func (a *app) viewRoot(c *ui.Context) {
 	a.musicIDModal(c, col)
 	a.clearHistoryModal(c, col)
 	a.logoutModal(c, col)
+	a.tagStudioDiscardModal(c, col)
 	a.aboutModal(c, col)
 	a.updateModal(c, col)
 	a.menuView(c, col)
@@ -85,6 +93,8 @@ func (a *app) viewBody(c *ui.Context, col colors) {
 		a.queueView(c, col)
 	case viewHistory:
 		a.historyView(c, col)
+	case viewTagStudio:
+		a.tagStudioView(c, col)
 	case viewSettings:
 		a.settingsView(c, col)
 	}

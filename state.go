@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"github.com/rzh0504/qmdr/internal/history"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
+	"github.com/rzh0504/qmdr/internal/tag"
 )
 
 // searchState is the search page: the query, whether a fetch is running,
@@ -158,6 +159,57 @@ type metadataCoverCall struct {
 	done chan struct{}
 	data []byte
 	mime string
+}
+
+// tagStudioState is the Tag Studio page: where the file list comes from,
+// which file is selected, and the draft tag being edited.
+type tagStudioState struct {
+	readSlot  asyncSlot
+	metaSlot  asyncSlot
+	lyricSlot asyncSlot
+	coverSlot asyncSlot
+	saveSlot  asyncSlot
+
+	source         string // "history" or "files"
+	historyEntries []tagEntry
+	fileEntries    []tagEntry
+	selected       int
+	filter         string
+	historyReady   bool
+	loading        bool
+	loadedPath     string
+
+	draft     tag.Info
+	original  tag.Info
+	cover     *ui.Bitmap
+	trackText string
+	discText  string
+	dirty     bool
+	saving    bool
+
+	metaBusy  bool
+	lyricBusy bool
+	coverBusy bool
+
+	confirmDiscard bool
+	pendingAction  func()
+}
+
+// tagEntry is one file the Tag Studio list offers. The history fields are
+// empty for files opened from disk that the download history does not know.
+type tagEntry struct {
+	path      string
+	historyID int64
+	songMID   string
+	albumMID  string
+	title     string
+	artist    string
+	album     string
+	size      int64
+	info      tag.Info
+	loaded    bool
+	err       string
+	missing   bool
 }
 
 // loginState is the account chip and the QR login dialog.

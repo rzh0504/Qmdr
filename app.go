@@ -19,6 +19,7 @@ const (
 	viewPlaylists
 	viewQueue
 	viewHistory
+	viewTagStudio
 	viewSettings
 )
 
@@ -47,6 +48,7 @@ type app struct {
 	playlists   playlistState
 	queue       queueState
 	history     historyState
+	tagStudio   tagStudioState
 	covers      coverState
 	metaCovers  metadataCoverState
 	login       loginState
@@ -208,6 +210,8 @@ func (a *app) pageKey() string {
 		return "queue"
 	case viewHistory:
 		return "history"
+	case viewTagStudio:
+		return "tagstudio"
 	case viewSettings:
 		return "settings"
 	default:
@@ -224,6 +228,8 @@ func (a *app) setPage(page string) {
 	case "history":
 		a.view = viewHistory
 		a.pruneHistoryNow()
+	case "tagstudio":
+		a.view = viewTagStudio
 	case "settings":
 		a.view = viewSettings
 	default:
