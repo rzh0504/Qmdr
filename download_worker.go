@@ -134,7 +134,10 @@ func (a *app) processDownload(ctx context.Context, runID int, task downloadTask,
 		return
 	}
 
-	metaCtx, metaCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Derive from taskCtx so cancelling the queue also stops the metadata
+	// fetches instead of keeping workers busy for up to 30 seconds; the
+	// write itself is an atomic replace and stays safe if it is aborted.
+	metaCtx, metaCancel := context.WithTimeout(taskCtx, 30*time.Second)
 	metaErr := a.writeMetadataSafely(metaCtx, task, dest, coverSize, lyricsTrans)
 	metaCancel()
 
