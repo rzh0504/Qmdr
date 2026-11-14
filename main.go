@@ -29,7 +29,9 @@ func (a *app) viewRoot(c *ui.Context) {
 			main := ui.Column(c).Grow(1).MinWidth(0).Padding(cardGap, cardGap, cardGap, cardGap)
 			main.Children(func() {
 				content := ui.Column(c).Fill()
-				smoothPanel(content, col, 14, col.card, true)
+				// The card's corner follows the window's own rounding so the
+				// panel does not poke out rounder than the frame around it.
+				smoothPanel(content, col, 8, col.card, true)
 				content.Children(func() {
 					a.cardHeader(c, col)
 					if a.view == viewSearch && !a.search.searched && !a.showExplore {
