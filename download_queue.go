@@ -90,6 +90,29 @@ func (a *app) startPendingDownloads() {
 	a.savePending()
 }
 
+// queuedSongs splits the songs into the ones worth enqueueing and how many
+// were dropped as duplicates: a song already in the queue with a status that
+// makes a fresh attempt redundant is skipped, while failed and cancelled
+// items may be enqueued again for another try.
+func (a *app) queuedSongs(songs []Song) (fresh []Song, duplicates int) {
+	queued := make(map[string]bool, len(a.queue.items))
+	for _, item := range a.queue.items {
+		switch item.Status {
+		case StatusWaiting, StatusDownloading, StatusDone, StatusSkipped:
+			queued[item.Song.Mid] = true
+		}
+	}
+	for _, song := range songs {
+		if queued[song.Mid] {
+			duplicates++
+			continue
+		}
+		queued[song.Mid] = true
+		fresh = append(fresh, song)
+	}
+	return fresh, duplicates
+}
+
 func (a *app) enqueueSongs(songs []Song) bool {
 	if len(songs) == 0 {
 		return false
@@ -107,10 +130,18 @@ func (a *app) enqueueSongs(songs []Song) bool {
 		}
 	}
 
+	fresh, duplicates := a.queuedSongs(songs)
+	if len(fresh) == 0 {
+		a.setToast("所选歌曲已在下载队列中")
+		a.openQueueTab()
+		a.refresh()
+		return false
+	}
+
 	quality := a.quality
 	now := time.Now()
 	first := len(a.queue.items)
-	for _, song := range songs {
+	for _, song := range fresh {
 		a.queue.seq++
 		a.queue.items = append(a.queue.items, QueueItem{
 			ID:        a.queue.seq,
@@ -122,7 +153,13 @@ func (a *app) enqueueSongs(songs []Song) bool {
 		})
 	}
 	a.persistQueueItems(a.queue.items[first:])
-	a.appendLog(fmt.Sprintf("已添加 %d 首歌曲到下载队列", len(songs)), "info")
+	if duplicates > 0 {
+		added := len(fresh)
+		a.appendLog(fmt.Sprintf("已添加 %d 首歌曲到下载队列，跳过 %d 首已在队列", added, duplicates), "info")
+		a.setToast(fmt.Sprintf("已加入 %d 首，跳过 %d 首已在队列", added, duplicates))
+	} else {
+		a.appendLog(fmt.Sprintf("已添加 %d 首歌曲到下载队列", len(fresh)), "info")
+	}
 	a.openQueueTab()
 	a.refresh()
 	a.startQueue()

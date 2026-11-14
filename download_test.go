@@ -157,6 +157,27 @@ func TestDownloadClaims(t *testing.T) {
 	}
 }
 
+func TestQueuedSongsSkipsDuplicates(t *testing.T) {
+	a := &app{queue: queueState{items: []QueueItem{
+		{Song: Song{Mid: "waiting"}, Status: StatusWaiting},
+		{Song: Song{Mid: "downloading"}, Status: StatusDownloading},
+		{Song: Song{Mid: "done"}, Status: StatusDone},
+		{Song: Song{Mid: "skipped"}, Status: StatusSkipped},
+		{Song: Song{Mid: "failed"}, Status: StatusFailed},
+	}}}
+	songs := []Song{
+		{Mid: "waiting"}, {Mid: "downloading"}, {Mid: "done"}, {Mid: "skipped"},
+		{Mid: "failed"}, {Mid: "new"}, {Mid: "new"},
+	}
+	fresh, duplicates := a.queuedSongs(songs)
+	if duplicates != 5 {
+		t.Fatalf("duplicates = %d, want 5", duplicates)
+	}
+	if len(fresh) != 2 || fresh[0].Mid != "failed" || fresh[1].Mid != "new" {
+		t.Fatalf("fresh = %+v, want failed and new", fresh)
+	}
+}
+
 func TestMetadataCoverCache(t *testing.T) {
 	a := &app{metaCovers: metadataCoverState{cache: map[string]metadataCover{}, pending: map[string]*metadataCoverCall{}}}
 
