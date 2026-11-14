@@ -60,27 +60,50 @@ func (a *app) tagStudioSidebar(c *ui.Context, col colors) {
 			s.filter = ""
 			a.refresh()
 		})
+		matched := a.matchedTagEntries()
 		listPanel(c, col, "tag-studio-"+s.source, func() {
-			entries := s.activeEntries()
-			if len(entries) == 0 {
-				ui.Text(c, "暂无文件").FontSize(12).TextColor(col.faint).Padding(8, 10)
+			if len(matched) == 0 {
+				if len(s.activeEntries()) == 0 {
+					ui.Text(c, "暂无文件").FontSize(12).TextColor(col.faint).Padding(8, 10)
+				} else {
+					ui.Text(c, "没有匹配的文件").FontSize(12).TextColor(col.faint).Padding(8, 10)
+				}
 				return
 			}
-			shown := 0
-			for i := range entries {
-				if !a.tagEntryMatches(i) {
-					continue
-				}
-				shown++
-				a.tagEntryRow(c, col, i)
-			}
-			if shown == 0 {
-				ui.Text(c, "没有匹配的文件").FontSize(12).TextColor(col.faint).Padding(8, 10)
+			for _, index := range matched {
+				a.tagEntryRow(c, col, index)
 			}
 		})
-		ui.Textf(c, "共 %d 个文件", len(s.activeEntries())).FontSize(11).
-			TextColor(col.faint).Padding(0, 4)
+		if len(matched) == len(s.activeEntries()) {
+			ui.Textf(c, "共 %d 个文件", len(matched)).FontSize(11).
+				TextColor(col.faint).Padding(0, 4)
+		} else {
+			ui.Textf(c, "匹配 %d / 共 %d 个文件", len(matched), len(s.activeEntries())).FontSize(11).
+				TextColor(col.faint).Padding(0, 4)
+		}
 	})
+}
+
+// matchedTagEntries returns the indices of the active entries that pass the
+// current filter, so the list and its count agree and the match runs once
+// per frame instead of once per row plus once for the count.
+func (a *app) matchedTagEntries() []int {
+	s := &a.tagStudio
+	entries := s.activeEntries()
+	if strings.TrimSpace(s.filter) == "" {
+		indices := make([]int, len(entries))
+		for i := range indices {
+			indices[i] = i
+		}
+		return indices
+	}
+	indices := make([]int, 0, len(entries))
+	for i := range entries {
+		if a.tagEntryMatches(i) {
+			indices = append(indices, i)
+		}
+	}
+	return indices
 }
 
 // tagStudioSourceSwitch changes sources through a request so a dirty draft
