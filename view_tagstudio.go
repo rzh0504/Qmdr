@@ -322,6 +322,9 @@ func (a *app) tagStudioReadError(c *ui.Context, col colors, entry *tagEntry) {
 				ui.Text(c, "无法读取标签："+message).FontSize(12).TextColor(col.red).MaxLines(3)
 				ui.Text(c, entry.path).FontSize(11).TextColor(col.muted).
 					SingleLine().Ellipsis("…").Tooltip(entry.path)
+				if entry.missing && a.tagStudio.source == "history" {
+					ui.Text(c, "可在下载历史中删除这条记录。").FontSize(11).TextColor(col.faint)
+				}
 			})
 			secondaryButton(c, col, iconRefresh, "重试", func() {
 				a.loadTagEntry(a.tagStudio.selected, true)
@@ -1568,7 +1571,11 @@ func (a *app) revertTagStudio() {
 
 func (a *app) saveTagStudio() {
 	s := &a.tagStudio
-	if s.saving || s.loading || s.selected < 0 || !s.dirty {
+	if s.saving {
+		a.setToast("正在保存，请稍候")
+		return
+	}
+	if s.loading || s.selected < 0 || !s.dirty {
 		return
 	}
 	entry := s.activeEntry(s.selected)
