@@ -66,6 +66,10 @@ type app struct {
 	showExplore  bool
 	nameTemplate string
 	lyricsTrans  bool
+
+	// settingsSaveTimer debounces the settings write while the user types
+	// in a settings field; it is only touched on the UI thread.
+	settingsSaveTimer *time.Timer
 }
 
 func newApp() *app {
