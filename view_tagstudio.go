@@ -439,13 +439,7 @@ func (a *app) tagStudioLyrics(c *ui.Context, col colors, entry *tagEntry) {
 					ui.Text(c, "获取中…").FontSize(12).TextColor(col.muted)
 				})
 			} else {
-				secondaryButton(c, col, iconSparkles, "获取歌词", func() {
-					if entry.songMID == "" {
-						a.setToast("该文件没有关联 QQ 音乐歌曲 ID")
-						return
-					}
-					a.fetchTagStudioLyrics()
-				})
+				secondaryButton(c, col, iconSparkles, "获取歌词", a.requestTagLyrics)
 			}
 		})
 		frame := ui.Column(c).FillWidth().Padding(8, 6)
@@ -1118,6 +1112,46 @@ func (a *app) fillTagStudioMeta() {
 			a.toast = "没有可补全的信息"
 		}
 		a.refresh()
+	})
+}
+
+// requestTagLyrics asks before a fetch would replace lyrics the user edited
+// in the draft; fetching over untouched lyrics just runs.
+func (a *app) requestTagLyrics() {
+	s := &a.tagStudio
+	entry := s.activeEntry(s.selected)
+	if entry == nil {
+		return
+	}
+	if entry.songMID == "" {
+		a.setToast("该文件没有关联 QQ 音乐歌曲 ID")
+		return
+	}
+	if strings.TrimSpace(s.draft.Lyrics) != "" && s.draft.Lyrics != s.original.Lyrics {
+		s.confirmLyricsOverwrite = true
+		a.refresh()
+		return
+	}
+	a.fetchTagStudioLyrics()
+}
+
+func (a *app) tagStudioLyricsModal(c *ui.Context, col colors) {
+	a.modal(c, col, &a.tagStudio.confirmLyricsOverwrite, "覆盖已修改的歌词", 380, func(close func()) {
+		ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
+			ui.Icon(c, iconAlert).Size(20, 20).TextColor(col.gold)
+			ui.Column(c).Gap(4).Grow(1).MinWidth(0).Children(func() {
+				ui.Text(c, "当前歌词已被手动修改。").FontSize(14).TextColor(col.text).LineHeight(1.35)
+				ui.Text(c, "获取歌词会覆盖这些修改，且无法恢复。").FontSize(12).
+					TextColor(col.muted).LineHeight(1.35)
+			})
+		})
+		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+			secondaryButton(c, col, nil, "取消", close)
+			dangerButton(c, col, "覆盖获取", func() {
+				close()
+				a.fetchTagStudioLyrics()
+			})
+		})
 	})
 }
 

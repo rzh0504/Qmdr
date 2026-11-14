@@ -86,6 +86,7 @@ func (a *app) viewRoot(c *ui.Context) {
 	a.deleteHistoryModal(c, col)
 	a.logoutModal(c, col)
 	a.tagStudioDiscardModal(c, col)
+	a.tagStudioLyricsModal(c, col)
 	a.aboutModal(c, col)
 	a.updateModal(c, col)
 	a.menuView(c, col)

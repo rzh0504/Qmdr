@@ -206,6 +206,10 @@ type tagStudioState struct {
 
 	confirmDiscard bool
 	pendingAction  func()
+
+	// confirmLyricsOverwrite guards the lyric fetch: fetching over lyrics
+	// the user edited in the draft asks before replacing them.
+	confirmLyricsOverwrite bool
 }
 
 // tagEntry is one file the Tag Studio list offers. The history fields are
