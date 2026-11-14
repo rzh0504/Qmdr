@@ -702,6 +702,41 @@ func (a *app) prependTagHistoryEntry(record history.Record) {
 	}
 }
 
+// removeTagHistoryEntryByID forgets a download record that the history page
+// deleted; files opened from disk stay in the files source.
+func (a *app) removeTagHistoryEntryByID(id int64) {
+	s := &a.tagStudio
+	s.historyEntries = a.removeTagEntry(s.historyEntries, s.source == "history", id)
+}
+
+func (a *app) clearTagHistoryEntries() {
+	s := &a.tagStudio
+	s.historyEntries = nil
+	if s.source == "history" {
+		s.selected = -1
+		a.clearTagDraft()
+	}
+}
+
+// tagStudioDraftLostByHistoryDelete reports whether deleting history
+// records would drop unsaved edits in the open Tag Studio draft.
+func (a *app) tagStudioDraftLostByHistoryDelete(ids []int64) bool {
+	s := &a.tagStudio
+	if !s.dirty || s.source != "history" {
+		return false
+	}
+	current := s.activeEntry(s.selected)
+	if current == nil || current.historyID == 0 {
+		return false
+	}
+	for _, id := range ids {
+		if current.historyID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *app) retryTagHistory() {
 	if a.history.loading {
 		a.setToast("下载历史正在加载")

@@ -415,6 +415,23 @@ func (s *Store) Stats(ctx context.Context) (Stats, error) {
 	return stats, err
 }
 
+// Delete removes download records by id. The files themselves are left
+// alone. It reports how many rows were removed.
+func (s *Store) Delete(ctx context.Context, ids []int64) (int64, error) {
+	var changes int64
+	err := s.withDB(func(db *sqlite.DB) error {
+		for _, id := range ids {
+			result, err := db.Execute(ctx, `DELETE FROM downloads WHERE id = ?`, id)
+			if err != nil {
+				return err
+			}
+			changes += result.Changes
+		}
+		return nil
+	})
+	return changes, err
+}
+
 func (s *Store) Clear(ctx context.Context) error {
 	return s.withDB(func(db *sqlite.DB) error {
 		_, err := db.Execute(ctx, `DELETE FROM downloads`)

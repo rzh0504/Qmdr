@@ -64,6 +64,8 @@ func (a *app) viewRoot(c *ui.Context) {
 						Padding(12, 20, 20, 18).Gap(18)
 					if a.view == viewSearch {
 						scroll = scroll.TrackScroll(&a.search.scroll)
+					} else if a.view == viewHistory {
+						scroll = scroll.TrackScroll(&a.history.scroll)
 					}
 					scroll.Children(func() {
 						a.viewBody(c, col)
@@ -76,6 +78,7 @@ func (a *app) viewRoot(c *ui.Context) {
 	a.qrModal(c, col)
 	a.musicIDModal(c, col)
 	a.clearHistoryModal(c, col)
+	a.deleteHistoryModal(c, col)
 	a.logoutModal(c, col)
 	a.tagStudioDiscardModal(c, col)
 	a.aboutModal(c, col)
@@ -454,6 +457,7 @@ func main() {
 		a.win.OnClosed(func() {
 			a.closed.Store(true)
 			a.stopSongPress()
+			a.stopHistoryPress()
 			if a.queue.cancel != nil {
 				a.queue.cancel()
 			}

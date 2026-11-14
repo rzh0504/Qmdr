@@ -38,7 +38,27 @@ func (a *app) pageTitle() string {
 
 func (a *app) headerActions(c *ui.Context, col colors) {
 	switch a.view {
-	case viewSearch, viewHistory, viewSettings:
+	case viewSearch, viewSettings:
+		iconButton(c, col, iconFolder, "打开下载目录", a.openDownloadDir)
+	case viewHistory:
+		if a.history.selecting {
+			allLabel := "全选"
+			if a.allHistorySelected() {
+				allLabel = "取消全选"
+			}
+			ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+				ui.Textf(c, "已选 %d", a.historySelectedCount()).FontSize(12).
+					TextColor(col.accent).Padding(0, 4)
+				ghostButton(c, col, nil, allLabel, a.toggleAllHistory)
+				if a.historySelectedCount() > 0 {
+					dangerButton(c, col, "删除所选", func() {
+						a.confirmDeleteHistory(a.historySelectedIDs())
+					})
+				}
+				secondaryButton(c, col, nil, "退出", a.endHistorySelection)
+			})
+			return
+		}
 		iconButton(c, col, iconFolder, "打开下载目录", a.openDownloadDir)
 	case viewTagStudio:
 		s := &a.tagStudio

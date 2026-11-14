@@ -132,6 +132,17 @@ type historyState struct {
 	err          string
 	loading      bool
 	confirmClear bool
+	scroll       ui.ScrollState
+
+	selecting     bool
+	selectedIDs   map[int64]bool
+	pressID       int64
+	pressSeq      int
+	pressTimer    *time.Timer
+	suppressClick bool
+
+	confirmDelete bool
+	deleteIDs     []int64
 }
 
 // coverState caches fetched cover bitmaps and throttles their fetches.

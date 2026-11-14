@@ -46,7 +46,8 @@ func (a *app) openSongMenu(row ui.Element, song Song, selecting bool) {
 }
 
 // openHistoryMenu opens the menu at the pointer when a history row was
-// right-clicked. It is the shortcut into Tag Studio for a downloaded file.
+// right-clicked. It is the shortcut into Tag Studio for a downloaded file,
+// and it carries the record actions the page's selection mode uses.
 func (a *app) openHistoryMenu(row ui.Element, record history.Record) {
 	if !row.RightClicked() {
 		return
@@ -56,10 +57,31 @@ func (a *app) openHistoryMenu(row ui.Element, record history.Record) {
 	if !over {
 		x, y = b.W/2, b.H/2
 	}
-	a.contextMenu = contextMenuState{open: true, x: b.X + x, y: b.Y + y, items: []menuAction{
-		{label: "编辑标签", run: func() { a.openTagStudioRecord(record) }},
-		{label: "在文件夹中显示", run: func() { a.showHistoryFile(record.FilePath) }},
-	}}
+	items := []menuAction{}
+	if a.history.selecting {
+		allLabel := "全选"
+		if a.allHistorySelected() {
+			allLabel = "取消全选"
+		}
+		items = append(items,
+			menuAction{label: "删除选中记录", disabled: a.historySelectedCount() == 0,
+				run: func() { a.confirmDeleteHistory(a.historySelectedIDs()) }},
+			menuAction{separator: true},
+			menuAction{label: allLabel, run: a.toggleAllHistory},
+			menuAction{label: "退出多选", run: a.endHistorySelection},
+		)
+	} else {
+		items = append(items,
+			menuAction{label: "编辑标签", run: func() { a.openTagStudioRecord(record) }},
+			menuAction{label: "在文件夹中显示", run: func() { a.showHistoryFile(record.FilePath) }},
+			menuAction{separator: true},
+			menuAction{label: "删除这条记录", run: func() {
+				a.confirmDeleteHistory([]int64{record.ID})
+			}},
+			menuAction{label: "多选", run: func() { a.beginHistorySelectionWith(record) }},
+		)
+	}
+	a.contextMenu = contextMenuState{open: true, x: b.X + x, y: b.Y + y, items: items}
 	a.refresh()
 }
 

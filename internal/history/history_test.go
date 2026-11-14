@@ -584,3 +584,65 @@ func TestSaveDownloadSkippedInsertsUnknownPath(t *testing.T) {
 		t.Fatalf("records = %+v, want one skipped record", records)
 	}
 }
+
+func TestDeleteRemovesRecordsAndKeepsFiles(t *testing.T) {
+	ctx := context.Background()
+	store, err := Open(ctx, filepath.Join(t.TempDir(), "qmdr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "keep.flac")
+	if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	base := time.Unix(1700000000, 0)
+	first, err := store.Add(ctx, Record{
+		SongMID: "a", Title: "A", Quality: "FLAC",
+		FilePath: filepath.Join(dir, "missing.flac"), FileSize: 10,
+		Status: StatusDone, CompletedAt: base,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := store.Add(ctx, Record{
+		SongMID: "b", Title: "B", Quality: "FLAC",
+		FilePath: path, FileSize: 20,
+		Status: StatusDone, CompletedAt: base.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	third, err := store.Add(ctx, Record{
+		SongMID: "c", Title: "C", Quality: "FLAC",
+		FilePath: filepath.Join(dir, "other.flac"), FileSize: 30,
+		Status: StatusDone, CompletedAt: base.Add(2 * time.Minute),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	changes, err := store.Delete(ctx, []int64{first, third, 9999})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changes != 2 {
+		t.Fatalf("Delete changed %d rows, want 2", changes)
+	}
+	records := saveDownloadRecords(t, store)
+	if len(records) != 1 || records[0].ID != second {
+		t.Fatalf("records = %+v, want only the second one", records)
+	}
+	stats, err := store.Stats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Count != 1 || stats.Bytes != 20 {
+		t.Fatalf("stats = %+v, want count 1 bytes 20", stats)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("file was removed with its record: %v", err)
+	}
+}

@@ -215,6 +215,10 @@ func (a *app) removeHistoryRecord(id int64) {
 			continue
 		}
 		a.history.items = append(a.history.items[:i], a.history.items[i+1:]...)
+		delete(a.history.selectedIDs, id)
+		if a.history.selecting && a.historySelectedCount() == 0 {
+			a.resetHistorySelection()
+		}
 		return
 	}
 }
@@ -244,6 +248,10 @@ func (a *app) clearHistoryModal(c *ui.Context, col colors) {
 			ui.Column(c).Gap(4).Grow(1).MinWidth(0).Children(func() {
 				ui.Text(c, "确定清空所有下载历史吗？").FontSize(14).TextColor(col.text).LineHeight(1.35)
 				ui.Text(c, "只删除记录，不会删除已下载的文件。").FontSize(12).TextColor(col.muted).LineHeight(1.35)
+				if a.tagStudio.dirty && a.tagStudio.source == "history" {
+					ui.Text(c, "Tag Studio 中未保存的标签修改也会被丢弃。").FontSize(12).
+						TextColor(col.gold).LineHeight(1.35)
+				}
 			})
 		})
 		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
@@ -277,6 +285,9 @@ func (a *app) clearHistory() {
 			a.history.backlog = nil
 			a.history.count = 0
 			a.history.bytes = 0
+			a.history.deleteIDs = nil
+			a.resetHistorySelection()
+			a.clearTagHistoryEntries()
 			a.toast = "下载历史已清空"
 		})
 	})
@@ -316,15 +327,20 @@ func (a *app) historyView(c *ui.Context, col colors) {
 		if sizeText == "" {
 			sizeText = "0 B"
 		}
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Padding(0, 4).Children(func() {
+		ui.Row(c).FillWidth().Height(30).AlignItems(ui.Center).Padding(0, 4).Children(func() {
+			if a.history.selecting {
+				ui.Textf(c, "已选 %d / %d 条", a.historySelectedCount(), len(a.history.items)).
+					FontSize(12).TextColor(col.accent).Grow(1)
+				return
+			}
 			ui.Textf(c, "共 %d 条记录 · 合计 %s", a.history.count, sizeText).FontSize(12).
 				TextColor(col.muted).Grow(1)
 			ghostDangerButton(c, col, iconTrash, "清空历史", a.confirmClearHistory)
 		})
 
 		sheet(c, col, func() {
-			for _, record := range a.history.items {
-				a.historyRow(c, col, record)
+			for i, record := range a.history.items {
+				a.historyRow(c, col, i, record)
 			}
 		})
 
@@ -335,13 +351,48 @@ func (a *app) historyView(c *ui.Context, col colors) {
 	})
 }
 
-func (a *app) historyRow(c *ui.Context, col colors, record history.Record) {
+func (a *app) historyRow(c *ui.Context, col colors, index int, record history.Record) {
+	s := &a.history
+	selected := s.selecting && s.selectedIDs[record.ID]
 	row := ui.Row(c).Gap(10).Padding(7, 10).Height(52).Radius(8).AlignItems(ui.Center)
-	if row.Hovered() {
+	switch {
+	case s.selecting && selected:
+		fill := col.accent.Alpha(0.06)
+		if col.dark {
+			fill = col.accent.Alpha(0.12)
+		}
+		row.Background(fill).Cursor(ui.CursorPointer)
+	case s.selecting:
+		row.Cursor(ui.CursorPointer)
+		if row.Hovered() {
+			row.Background(col.rowSelected)
+			row = chosen(row, col)
+		}
+	case row.Hovered():
 		row.Background(col.rowSelected)
 		row = chosen(row, col)
 	}
+	if !s.selecting {
+		a.trackHistoryPress(row, record, func() { a.beginHistorySelectionWith(record) })
+	}
+	if s.selecting && row.Clicked() {
+		if s.suppressClick && s.pressID == record.ID {
+			s.suppressClick = false
+			s.pressID = 0
+		} else {
+			s.suppressClick = false
+			s.pressID = 0
+			a.toggleHistorySelection(record)
+		}
+	}
 	row.Children(func() {
+		ui.Row(c).Width(24).Center().Children(func() {
+			if s.selecting {
+				songSelectionMark(c, col, selected)
+				return
+			}
+			ui.Textf(c, "%02d", index+1).FontSize(11).TextColor(col.faint).SingleLine()
+		})
 		a.cover(c, col, record.AlbumMID, 34)
 		ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
@@ -359,11 +410,226 @@ func (a *app) historyRow(c *ui.Context, col colors, record history.Record) {
 			TextColor(col.muted).SingleLine()
 		ui.Text(c, record.CompletedAt.Local().Format("2006-01-02 15:04")).Width(116).
 			FontSize(11).TextColor(col.faint).SingleLine()
-		iconButton(c, col, iconFolder, "在文件夹中显示 "+record.Title, func() {
-			a.showHistoryFile(record.FilePath)
-		})
+		if !s.selecting {
+			iconButton(c, col, iconFolder, "在文件夹中显示 "+record.Title, func() {
+				a.showHistoryFile(record.FilePath)
+			})
+		}
 	})
 	a.openHistoryMenu(row, record)
+}
+
+func (a *app) trackHistoryPress(row ui.Element, record history.Record, onLongPress func()) {
+	if record.ID == 0 {
+		return
+	}
+	if row.Pressed() {
+		if a.history.pressID == record.ID {
+			return
+		}
+		a.stopHistoryPress()
+		a.history.pressID = record.ID
+		a.history.pressSeq++
+		seq := a.history.pressSeq
+		a.history.suppressClick = false
+		a.history.pressTimer = time.AfterFunc(songLongPressDelay, func() {
+			a.update(func() {
+				if a.history.pressID != record.ID || a.history.pressSeq != seq {
+					return
+				}
+				a.history.pressTimer = nil
+				a.history.suppressClick = true
+				onLongPress()
+			})
+		})
+		return
+	}
+	if a.history.pressID == record.ID {
+		a.stopHistoryPress()
+	}
+}
+
+func (a *app) stopHistoryPress() {
+	if a.history.pressTimer != nil {
+		a.history.pressTimer.Stop()
+		a.history.pressTimer = nil
+	}
+	a.history.pressID = 0
+}
+
+func (a *app) beginHistorySelectionWith(record history.Record) {
+	if record.ID == 0 {
+		return
+	}
+	if !a.history.selecting {
+		a.history.selecting = true
+		a.history.selectedIDs = make(map[int64]bool)
+	}
+	a.history.selectedIDs[record.ID] = true
+	a.refresh()
+}
+
+func (a *app) endHistorySelection() {
+	a.resetHistorySelection()
+	a.refresh()
+}
+
+func (a *app) resetHistorySelection() {
+	a.stopHistoryPress()
+	a.history.selecting = false
+	a.history.selectedIDs = nil
+	a.history.suppressClick = false
+}
+
+func (a *app) toggleHistorySelection(record history.Record) {
+	if !a.history.selecting || record.ID == 0 {
+		return
+	}
+	if a.history.selectedIDs[record.ID] {
+		delete(a.history.selectedIDs, record.ID)
+		if a.historySelectedCount() == 0 {
+			a.resetHistorySelection()
+		}
+	} else {
+		a.history.selectedIDs[record.ID] = true
+	}
+	a.refresh()
+}
+
+func (a *app) toggleAllHistory() {
+	if a.allHistorySelected() {
+		a.resetHistorySelection()
+		a.refresh()
+		return
+	}
+	next := make(map[int64]bool, len(a.history.items))
+	for _, record := range a.history.items {
+		if record.ID != 0 {
+			next[record.ID] = true
+		}
+	}
+	a.history.selecting = true
+	a.history.selectedIDs = next
+	if len(next) == 0 {
+		a.resetHistorySelection()
+	}
+	a.refresh()
+}
+
+func (a *app) allHistorySelected() bool {
+	if len(a.history.items) == 0 {
+		return false
+	}
+	for _, record := range a.history.items {
+		if !a.history.selectedIDs[record.ID] {
+			return false
+		}
+	}
+	return true
+}
+
+func (a *app) historySelectedCount() int {
+	count := 0
+	for _, record := range a.history.items {
+		if a.history.selectedIDs[record.ID] {
+			count++
+		}
+	}
+	return count
+}
+
+func (a *app) historySelectedIDs() []int64 {
+	ids := make([]int64, 0, a.historySelectedCount())
+	for _, record := range a.history.items {
+		if a.history.selectedIDs[record.ID] {
+			ids = append(ids, record.ID)
+		}
+	}
+	return ids
+}
+
+func (a *app) confirmDeleteHistory(ids []int64) {
+	if len(ids) == 0 || a.history.store == nil {
+		return
+	}
+	a.history.deleteIDs = append([]int64(nil), ids...)
+	a.history.confirmDelete = true
+	a.refresh()
+}
+
+func (a *app) deleteHistoryModal(c *ui.Context, col colors) {
+	a.modal(c, col, &a.history.confirmDelete, "删除下载记录", 380, func(close func()) {
+		ids := a.history.deleteIDs
+		title := "确定删除这条下载记录吗？"
+		if len(ids) == 1 {
+			for _, record := range a.history.items {
+				if record.ID == ids[0] {
+					title = fmt.Sprintf("确定删除「%s」的下载记录吗？", record.Title)
+					break
+				}
+			}
+		} else if len(ids) > 1 {
+			title = fmt.Sprintf("确定删除选中的 %d 条下载记录吗？", len(ids))
+		}
+		ui.Row(c).Gap(10).AlignItems(ui.Start).Children(func() {
+			ui.Icon(c, iconAlert).Size(20, 20).TextColor(col.gold)
+			ui.Column(c).Gap(4).Grow(1).MinWidth(0).Children(func() {
+				ui.Text(c, title).FontSize(14).TextColor(col.text).LineHeight(1.35)
+				ui.Text(c, "只删除记录，不会删除已下载的文件。").FontSize(12).
+					TextColor(col.muted).LineHeight(1.35)
+				if a.tagStudioDraftLostByHistoryDelete(ids) {
+					ui.Text(c, "Tag Studio 中这首歌未保存的修改也会被丢弃。").FontSize(12).
+						TextColor(col.gold).LineHeight(1.35)
+				}
+			})
+		})
+		ui.Row(c).Gap(8).Justify(ui.End).Children(func() {
+			secondaryButton(c, col, nil, "取消", close)
+			dangerButton(c, col, "删除", func() {
+				ids := a.history.deleteIDs
+				close()
+				a.deleteHistoryRecords(ids)
+			})
+		})
+	})
+}
+
+func (a *app) deleteHistoryRecords(ids []int64) {
+	store := a.history.store
+	if store == nil || len(ids) == 0 {
+		return
+	}
+	a.dispatchDisk(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		changes, err := store.Delete(ctx, ids)
+		if err != nil {
+			a.update(func() { a.toast = "删除下载记录失败：" + friendlyError(err) })
+			return
+		}
+		recent, recentErr := store.Recent(ctx, historyPageSize)
+		stats, statsErr := store.Stats(ctx)
+		a.update(func() {
+			if a.history.store != store {
+				return
+			}
+			for _, id := range ids {
+				a.removeTagHistoryEntryByID(id)
+			}
+			if recentErr == nil {
+				a.history.items = recent
+			}
+			if statsErr == nil {
+				a.history.count = stats.Count
+				a.history.bytes = stats.Bytes
+			}
+			a.resetHistorySelection()
+			a.history.deleteIDs = nil
+			if changes > 0 {
+				a.toast = fmt.Sprintf("已删除 %d 条下载记录", changes)
+			}
+		})
+	})
 }
 
 func (a *app) showHistoryFile(path string) {
