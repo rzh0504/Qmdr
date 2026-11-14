@@ -30,3 +30,38 @@ func TestRequestTagLyrics(t *testing.T) {
 		t.Fatal("edited lyrics should open the confirm dialog first")
 	}
 }
+
+func TestNumberPairText(t *testing.T) {
+	cases := []struct {
+		in            string
+		number, total int
+		hasTotal      bool
+	}{
+		{"3", 3, 0, false},
+		{"3/12", 3, 12, true},
+		{" 3 / 12 ", 3, 12, true},
+		{"", 0, 0, false},
+		{"/12", 0, 12, true},
+		{"3/x", 3, 0, false},
+		{"3/", 3, 0, false},
+	}
+	for _, tc := range cases {
+		number, total, hasTotal := numberPairText(tc.in)
+		if number != tc.number || total != tc.total || hasTotal != tc.hasTotal {
+			t.Fatalf("numberPairText(%q) = %d, %d, %v; want %d, %d, %v",
+				tc.in, number, total, hasTotal, tc.number, tc.total, tc.hasTotal)
+		}
+	}
+}
+
+func TestNumberText(t *testing.T) {
+	if got := numberText(3, 12); got != "3/12" {
+		t.Fatalf("numberText(3, 12) = %q, want 3/12", got)
+	}
+	if got := numberText(3, 0); got != "3" {
+		t.Fatalf("numberText(3, 0) = %q, want 3", got)
+	}
+	if got := numberText(0, 12); got != "" {
+		t.Fatalf("numberText(0, 12) = %q, want empty", got)
+	}
+}

@@ -506,8 +506,8 @@ func (a *app) discardTagChanges() {
 	s.confirmDiscard = false
 	s.draft = s.original
 	s.cover = a.selectedTagCover()
-	s.trackText = numberString(s.original.TrackNumber)
-	s.discText = numberString(s.original.DiscNumber)
+	s.trackText = numberText(s.original.TrackNumber, s.original.TrackTotal)
+	s.discText = numberText(s.original.DiscNumber, s.original.DiscTotal)
 	s.dirty = false
 	action := s.pendingAction
 	s.pendingAction = nil
@@ -888,8 +888,8 @@ func (a *app) showTagEntry(entry *tagEntry) {
 	s.draft = entry.info
 	s.original = entry.info
 	s.loadedPath = entry.path
-	s.trackText = numberString(entry.info.TrackNumber)
-	s.discText = numberString(entry.info.DiscNumber)
+	s.trackText = numberText(entry.info.TrackNumber, entry.info.TrackTotal)
+	s.discText = numberText(entry.info.DiscNumber, entry.info.DiscTotal)
 	s.cover = entry.cover
 	s.dirty = false
 }
@@ -1343,8 +1343,8 @@ func (a *app) revertTagStudio() {
 	}
 	s.draft = s.original
 	s.cover = a.selectedTagCover()
-	s.trackText = numberString(s.draft.TrackNumber)
-	s.discText = numberString(s.draft.DiscNumber)
+	s.trackText = numberText(s.draft.TrackNumber, s.draft.TrackTotal)
+	s.discText = numberText(s.draft.DiscNumber, s.draft.DiscTotal)
 	s.dirty = false
 	a.refresh()
 }
@@ -1360,8 +1360,16 @@ func (a *app) saveTagStudio() {
 	}
 	oldPath := entry.path
 	info := s.draft
-	info.TrackNumber = leadingInt(s.trackText)
-	info.DiscNumber = leadingInt(s.discText)
+	trackNum, trackTotal, hasTrackTotal := numberPairText(s.trackText)
+	discNum, discTotal, hasDiscTotal := numberPairText(s.discText)
+	info.TrackNumber = trackNum
+	info.DiscNumber = discNum
+	if hasTrackTotal {
+		info.TrackTotal = trackTotal
+	}
+	if hasDiscTotal {
+		info.DiscTotal = discTotal
+	}
 	target := a.tagStudioTargetPath(oldPath, info)
 	s.saving = true
 	a.refresh()
@@ -1424,8 +1432,8 @@ func (a *app) finishTagSave(oldPath, newPath string, info tag.Info, size int64, 
 		s.original = info
 		s.draft = info
 		s.loadedPath = newPath
-		s.trackText = numberString(info.TrackNumber)
-		s.discText = numberString(info.DiscNumber)
+		s.trackText = numberText(info.TrackNumber, info.TrackTotal)
+		s.discText = numberText(info.DiscNumber, info.DiscTotal)
 		s.dirty = false
 	}
 	a.afterTagSave(oldPath, newPath, info, size)
@@ -1586,6 +1594,28 @@ func tagCoverBitmap(data []byte) *ui.Bitmap {
 	}
 	bitmap, _ := ui.DecodeBitmap(data)
 	return bitmap
+}
+
+// numberText formats a track or disc field: "3" alone, or "3/12" when the
+// file carries a total.
+func numberText(value, total int) string {
+	if value > 0 && total > 0 {
+		return strconv.Itoa(value) + "/" + strconv.Itoa(total)
+	}
+	return numberString(value)
+}
+
+// numberPairText reads a track or disc field like "3" or "3/12". hasTotal
+// reports a usable "/total" part, so a plain number keeps the total already
+// in the draft instead of clearing it.
+func numberPairText(value string) (number, total int, hasTotal bool) {
+	value = strings.TrimSpace(value)
+	slash := strings.IndexByte(value, '/')
+	if slash < 0 {
+		return leadingInt(value), 0, false
+	}
+	total = leadingInt(strings.TrimSpace(value[slash+1:]))
+	return leadingInt(strings.TrimSpace(value[:slash])), total, total > 0
 }
 
 func leadingInt(value string) int {
