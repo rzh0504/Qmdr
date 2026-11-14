@@ -456,7 +456,7 @@ func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 			case entry.songMID != "":
 				secondaryButton(c, col, iconSparkles, "从 QQ 音乐补全", a.fillTagStudioMeta)
 			default:
-				ui.Text(c, "未关联 QQ 音乐 ID").FontSize(11).TextColor(col.faint)
+				secondaryButton(c, col, iconSearch, "搜索匹配", a.openTagMatch)
 			}
 		})
 	})
@@ -1359,6 +1359,131 @@ func (a *app) fetchTagStudioCover() {
 			a.toast = "封面已更新"
 		}
 		a.refresh()
+	})
+}
+
+// openTagMatch starts a song search for the selected entry, so files the
+// download history does not know can still use the QQ Music lookups.
+func (a *app) openTagMatch() {
+	s := &a.tagStudio
+	entry := s.activeEntry(s.selected)
+	if entry == nil {
+		return
+	}
+	s.matchFor = entry.path
+	s.matchQuery = ""
+	s.matchResults = nil
+	s.matchErr = ""
+	s.matchOpen = true
+	a.refresh()
+}
+
+func (a *app) searchTagMatch() {
+	s := &a.tagStudio
+	if s.matchLoading {
+		return
+	}
+	query := strings.TrimSpace(s.matchQuery)
+	if query == "" {
+		a.setToast("请输入歌曲名或歌手")
+		return
+	}
+	s.matchLoading = true
+	a.refresh()
+	var songs []qqmusic.Song
+	a.async(&s.matchSlot, 30*time.Second, func(ctx context.Context) error {
+		page, err := a.api.Search(ctx, query, "", 1, 20)
+		if err != nil {
+			return err
+		}
+		songs = page.Songs
+		return nil
+	}, func(err error) {
+		s.matchLoading = false
+		if err != nil {
+			s.matchErr = friendlyError(err)
+			s.matchResults = nil
+			a.refresh()
+			return
+		}
+		s.matchErr = ""
+		s.matchResults = songs
+		a.refresh()
+	})
+}
+
+// bindTagMatch links the picked song to the entry the search started from,
+// which is enough for the completion, lyric and cover lookups to work.
+func (a *app) bindTagMatch(song qqmusic.Song) {
+	s := &a.tagStudio
+	entry := s.activeEntry(s.selected)
+	if entry == nil || !samePath(entry.path, s.matchFor) {
+		s.matchOpen = false
+		a.refresh()
+		return
+	}
+	entry.songMID = song.Mid
+	entry.albumMID = song.AlbumMid
+	s.matchOpen = false
+	a.setToast("已关联「" + song.Title + "」，可继续补全信息")
+}
+
+func (a *app) tagMatchModal(c *ui.Context, col colors) {
+	s := &a.tagStudio
+	a.modal(c, col, &s.matchOpen, "搜索匹配歌曲", 460, func(close func()) {
+		ui.Column(c).FillWidth().Gap(12).Children(func() {
+			ui.Text(c, "选择 QQ 音乐中的歌曲关联到当前文件，之后即可补全信息、获取歌词和封面。").
+				FontSize(12).TextColor(col.muted).LineHeight(1.35)
+			ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+				a.textField(c, col, &s.matchQuery, "歌曲名或歌手", 0, 30, nil, a.searchTagMatch)
+				if s.matchLoading {
+					ui.Spinner(c).Size(14, 14).Shrink(0)
+				} else {
+					secondaryButton(c, col, iconSearch, "搜索", a.searchTagMatch)
+				}
+			})
+			switch {
+			case s.matchErr != "":
+				ui.Row(c).Gap(9).AlignItems(ui.Center).Children(func() {
+					ui.Icon(c, iconAlert).Size(14, 14).TextColor(col.red)
+					ui.Text(c, s.matchErr).FontSize(12).TextColor(col.red).Grow(1).MaxLines(2)
+				})
+			case len(s.matchResults) == 0 && !s.matchLoading:
+				ui.Text(c, "输入关键词开始搜索").FontSize(12).TextColor(col.faint)
+			}
+			if len(s.matchResults) > 0 {
+				ui.Scroll(c).FillWidth().Height(264).Gap(1).Children(func() {
+					for _, song := range s.matchResults {
+						song := song
+						row := ui.ButtonBase(c).FillWidth().Height(46).Radius(8).
+							Padding(6, 8).Gap(9).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(song.Title)
+						if row.Hovered() {
+							row.Background(col.sheetHover)
+						}
+						if row.Clicked() {
+							close()
+							a.bindTagMatch(song)
+						}
+						row.Children(func() {
+							ui.Column(c).Gap(2).Grow(1).MinWidth(0).Children(func() {
+								ui.Text(c, song.Title).FontSize(13).TextColor(col.text).SingleLine()
+								detail := strings.Join(song.Artists, " / ")
+								if song.Album != "" {
+									if detail != "" {
+										detail += " · "
+									}
+									detail += song.Album
+								}
+								ui.Text(c, detail).FontSize(11).TextColor(col.muted).SingleLine().Ellipsis("…")
+							})
+							if song.VIP {
+								ui.Text(c, "VIP").FontSize(9).FontWeight(600).TextColor(col.gold).Shrink(0)
+							}
+						})
+					}
+				})
+			}
+		})
 	})
 }
 

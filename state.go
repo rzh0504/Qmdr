@@ -211,6 +211,16 @@ type tagStudioState struct {
 	// confirmLyricsOverwrite guards the lyric fetch: fetching over lyrics
 	// the user edited in the draft asks before replacing them.
 	confirmLyricsOverwrite bool
+
+	// matchModal searches QQ Music for a song to bind to an entry without
+	// one, unlocking the completion, lyric and cover lookups for it.
+	matchOpen    bool
+	matchFor     string
+	matchSlot    asyncSlot
+	matchQuery   string
+	matchResults []qqmusic.Song
+	matchLoading bool
+	matchErr     string
 }
 
 // tagEntry is one file the Tag Studio list offers. The history fields are
