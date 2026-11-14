@@ -95,7 +95,7 @@ func (a *app) sidebarToggle(c *ui.Context, col colors, rail bool) {
 		icon, tip = iconChevronRight, "展开侧栏"
 	}
 	btn := ui.ButtonBase(c).Size(32, 30).Radius(8).Justify(ui.Center).
-		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(tip).Tooltip(tip)
+		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(tip)
 	if btn.Hovered() {
 		btn.Background(col.cardHover)
 	}
@@ -121,9 +121,6 @@ func (a *app) navItem(c *ui.Context, col colors, key string, icon *ui.SVG, label
 	row := ui.ButtonBase(c).FillWidth().Height(height).Padding(0, 9, 0, pad).Gap(12).
 		Radius(8).Justify(ui.Start).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label(label)
-	if alpha < 1 {
-		row = row.Tooltip(label)
-	}
 	if active {
 		row.Background(col.rowSelected)
 		row = chosen(row, col)
@@ -180,7 +177,7 @@ func (a *app) accountChip(c *ui.Context, col colors, alpha, glide float32) {
 	pad := sidebarChipPad + (sidebarRailChip-sidebarChipPad)*glide
 	chip := ui.ButtonBase(c).FillWidth().Height(50).Padding(0, 10*(1-glide), 0, pad).Gap(12).
 		Radius(8).Justify(ui.Start).AlignItems(ui.Center).
-		Cursor(ui.CursorPointer).Label("账号设置").Tooltip("账号设置")
+		Cursor(ui.CursorPointer).Label("账号设置")
 	if chip.Hovered() {
 		chip.Background(col.cardHover)
 	}
