@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -111,7 +112,10 @@ func (a *app) writeMetadataSafely(ctx context.Context, task downloadTask, dest s
 }
 
 func (a *app) writeMetadata(ctx context.Context, task downloadTask, dest string, coverSize int, lyricsTrans bool) error {
-	lyrics, _ := a.api.Lyric(ctx, task.Mid)
+	lyrics, err := a.api.Lyric(ctx, task.Mid)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("fetch lyrics %s: %v", task.Mid, err)
+	}
 	lyricText := lyrics.LRC
 	if lyricsTrans {
 		lyricText = lrc.Merge(lyricText, lyrics.Translation)
@@ -126,8 +130,14 @@ func (a *app) writeMetadata(ctx context.Context, task downloadTask, dest string,
 			cover, coverMIME = fetched, mime
 		}
 	}
-	meta, _ := a.api.SongMeta(ctx, task.Mid)
-	credits, _ := a.api.SongCredits(ctx, task.Mid)
+	meta, err := a.api.SongMeta(ctx, task.Mid)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("fetch song meta %s: %v", task.Mid, err)
+	}
+	credits, err := a.api.SongCredits(ctx, task.Mid)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("fetch song credits %s: %v", task.Mid, err)
+	}
 	date := task.ReleaseDate
 	if date == "" {
 		date = meta.ReleaseDate
