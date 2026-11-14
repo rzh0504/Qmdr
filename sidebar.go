@@ -19,7 +19,7 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 			ui.Text(c, "资料库").FontSize(11).FontWeight(600).TextColor(col.faint).
 				Padding(0, 9, 6, 9)
 			a.navItem(c, col, "search", iconSearch, "搜索")
-			a.navItem(c, col, "playlists", iconLibrary, "歌单下载")
+			a.navItem(c, col, "playlists", iconLibrary, "歌单")
 			a.navItem(c, col, "downloads", iconDownload, "下载")
 			a.navItem(c, col, "tagstudio", iconTag, "Tag Studio")
 			a.navItem(c, col, "settings", iconSettings, "设置")

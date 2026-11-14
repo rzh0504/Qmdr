@@ -6,7 +6,7 @@ Qmdr 是一个使用 Go + MyGo 原生 UI 的 QQ 音乐桌面下载工具，目�
 
 ## 界面
 
-![Qmdr 歌单下载页运行截图](assets/screenshots/playlists.png)
+![Qmdr 歌单页运行截图](assets/screenshots/playlists.png)
 
 ## 当前进度
 
