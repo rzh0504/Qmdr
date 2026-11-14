@@ -178,7 +178,7 @@ func (a *app) toggleSidebar() {
 // is no card fill in either state — only a hover tint for the click target.
 func (a *app) accountChip(c *ui.Context, col colors, alpha, glide float32) {
 	pad := sidebarChipPad + (sidebarRailChip-sidebarChipPad)*glide
-	chip := ui.ButtonBase(c).FillWidth().Height(50).Padding(0, 10*(1-glide), 0, pad).
+	chip := ui.ButtonBase(c).FillWidth().Height(50).Padding(0, 10*(1-glide), 0, pad).Gap(12).
 		Radius(8).Justify(ui.Start).AlignItems(ui.Center).
 		Cursor(ui.CursorPointer).Label("账号设置").Tooltip("账号设置")
 	if chip.Hovered() {
