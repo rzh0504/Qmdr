@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -16,19 +17,34 @@ import (
 
 // Batch fill statuses shown in the table's status column.
 const (
-	batchUpdated = "已补全"
-	batchNoop    = "无更新"
-	batchFailed  = "失败"
+	batchUpdated   = "已补全"
+	batchNoop      = "无更新"
+	batchUnmatched = "未匹配"
+	batchFailed    = "失败"
 )
 
+// maxBatchSearchFails trips the auto-match circuit breaker: after this many
+// consecutive search failures the batch stops auto matching and marks the
+// remaining entries, instead of hammering a rate-limited endpoint.
+const maxBatchSearchFails = 3
+
+// batchPause sleeps a randomized short interval between batch API calls, so
+// a large batch never hammers QQ Music fast enough to trip risk control.
+func batchPause() {
+	time.Sleep(time.Duration(300+rand.Intn(400)) * time.Millisecond)
+}
+
 // tagBatchItem snapshots one picked entry for the batch fill, so the worker
-// goroutine never touches the live entry list.
+// goroutine never touches the live entry list. query is the auto search
+// built from the entry's own info, used when it has no song MID yet.
 type tagBatchItem struct {
-	path    string
-	songMID string
-	title   string
-	artist  string
-	album   string
+	path     string
+	songMID  string
+	albumMID string
+	query    string
+	title    string
+	artist   string
+	album    string
 }
 
 // enterTagBatch switches the page into the batch table; a dirty draft must
@@ -127,7 +143,7 @@ func (a *app) tagBatchConfirmModal(c *ui.Context, col colors) {
 			ui.Column(c).Gap(4).Grow(1).MinWidth(0).Children(func() {
 				ui.Textf(c, "将为 %d 个文件从 QQ 音乐补全标签信息。", len(a.tagBatchItems())).
 					FontSize(14).TextColor(col.text).LineHeight(1.35)
-				ui.Text(c, "只填写空缺字段（标题、艺人、专辑、日期、流派、语言、作曲、作词）并直接写入文件。").
+				ui.Text(c, "只填写空缺字段（标题、艺人、专辑、日期、流派、语言、作曲、作词）并直接写入文件；未关联的歌曲会先按文件信息自动匹配，匹配不确定的跳过。").
 					FontSize(12).TextColor(col.muted).LineHeight(1.35)
 			})
 		})
@@ -141,21 +157,24 @@ func (a *app) tagBatchConfirmModal(c *ui.Context, col colors) {
 	})
 }
 
-// tagBatchItems snapshots the picked entries into work items: entries with a
-// song MID, in list order.
+// tagBatchItems snapshots the picked entries into work items, in list order.
+// Entries without a song MID carry the auto search query built from their
+// own info — the batch matches them before filling.
 func (a *app) tagBatchItems() []tagBatchItem {
 	s := &a.tagStudio
 	items := []tagBatchItem{}
 	for _, entry := range s.activeEntries() {
-		if !s.picked[pathKey(entry.path)] || entry.songMID == "" {
+		if !s.picked[pathKey(entry.path)] {
 			continue
 		}
 		items = append(items, tagBatchItem{
-			path:    entry.path,
-			songMID: entry.songMID,
-			title:   entry.displayTitle(),
-			artist:  entry.displayArtist(),
-			album:   entry.displayAlbum(),
+			path:     entry.path,
+			songMID:  entry.songMID,
+			albumMID: entry.albumMID,
+			query:    a.tagMatchQuery(&entry),
+			title:    entry.displayTitle(),
+			artist:   entry.displayArtist(),
+			album:    entry.displayAlbum(),
 		})
 	}
 	return items
@@ -168,18 +187,36 @@ func (a *app) startTagBatchFill() {
 	}
 	items := a.tagBatchItems()
 	if len(items) == 0 {
-		a.setToast("勾选的歌曲都没有关联 QQ 音乐 ID")
+		a.setToast("没有勾选的歌曲")
 		return
 	}
 	s.batchBusy = true
 	s.batchDone = 0
 	s.batchTotal = len(items)
 	s.batchResults = map[string]string{}
-	tally := struct{ updated, noop, failed int }{}
+	tally := struct{ updated, noop, unmatched, failed int }{}
 	a.refresh()
 	go func() {
+		// 单轮批量的搜索缓存与失败熔断状态，仅本 goroutine 使用。
+		searchCache := map[string][]qqmusic.Song{}
+		searchFailStreak := 0
 		for _, item := range items {
-			status, info := a.batchFillOne(item)
+			songMID, albumMID := item.songMID, item.albumMID
+			autoMatched := false
+			if songMID == "" && searchFailStreak < maxBatchSearchFails {
+				if song, ok := a.batchAutoMatch(item, searchCache, &searchFailStreak); ok {
+					songMID, albumMID = song.Mid, song.AlbumMid
+					autoMatched = true
+				}
+			}
+			status, info := batchNoop, tag.Info{}
+			if songMID != "" {
+				filled := item
+				filled.songMID, filled.albumMID = songMID, albumMID
+				status, info = a.batchFillOne(filled)
+			} else {
+				status = batchUnmatched
+			}
 			a.update(func() {
 				s.batchDone++
 				switch status {
@@ -189,23 +226,119 @@ func (a *app) startTagBatchFill() {
 				case batchNoop:
 					tally.noop++
 					s.batchResults[pathKey(item.path)] = batchNoop
+				case batchUnmatched:
+					tally.unmatched++
+					s.batchResults[pathKey(item.path)] = batchUnmatched
 				default:
 					tally.failed++
 					s.batchResults[pathKey(item.path)] = batchFailed
+				}
+				if songMID != "" && (autoMatched || status == batchUpdated) {
+					a.bindTagEntryByPath(item.path, songMID, albumMID)
 				}
 				if status == batchUpdated {
 					a.refreshTagEntryAfterBatch(item.path, info)
 				}
 				a.refresh()
 			})
+			// 每个文件处理完都稍作停顿，降低连续请求的密度。
+			batchPause()
 		}
 		a.update(func() {
 			s.batchBusy = false
-			a.toast = fmt.Sprintf("批量补全完成：已补全 %d · 无更新 %d · 失败 %d",
-				tally.updated, tally.noop, tally.failed)
+			note := ""
+			if searchFailStreak >= maxBatchSearchFails {
+				note = "（搜索连续失败，已暂停自动匹配）"
+			}
+			a.toast = fmt.Sprintf("批量补全完成：已补全 %d · 无更新 %d · 未匹配 %d · 失败 %d%s",
+				tally.updated, tally.noop, tally.unmatched, tally.failed, note)
 			a.refresh()
 		})
 	}()
+}
+
+// batchAutoMatch searches by the item's own info and returns the first
+// confidently matching result. Identical queries reuse one search, and a
+// streak of failures pauses further auto matching for the rest of the run.
+func (a *app) batchAutoMatch(item tagBatchItem, cache map[string][]qqmusic.Song, failStreak *int) (qqmusic.Song, bool) {
+	if songs, ok := cache[item.query]; ok {
+		return tagBatchPick(item, songs)
+	}
+	if *failStreak >= maxBatchSearchFails {
+		return qqmusic.Song{}, false
+	}
+	// 搜索前先节流，避免与上一文件的请求贴得太近。
+	batchPause()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	page, err := a.api.Search(ctx, item.query, "", 1, 5)
+	if err != nil {
+		log.Printf("batch auto match %s: %v", item.path, err)
+		*failStreak++
+		return qqmusic.Song{}, false
+	}
+	*failStreak = 0
+	cache[item.query] = page.Songs
+	return tagBatchPick(item, page.Songs)
+}
+
+// tagBatchPick returns the first search result confidently matching the
+// item's own title and artist.
+func tagBatchPick(item tagBatchItem, songs []qqmusic.Song) (qqmusic.Song, bool) {
+	for _, song := range songs {
+		if tagBatchMatchOK(item, song) {
+			return song, true
+		}
+	}
+	return qqmusic.Song{}, false
+}
+
+// tagNormKey folds a string for loose comparison: bracketed noise stripped,
+// lowercased, whitespace removed.
+func tagNormKey(s string) string {
+	s = tagMatchNoise.ReplaceAllString(strings.TrimSpace(s), "")
+	return strings.ToLower(strings.Join(strings.Fields(s), ""))
+}
+
+// tagBatchMatchOK decides whether a search result may be bound to the entry
+// automatically: titles must be equal, or overlap both ways with matching
+// artists — anything looser needs the user's judgement.
+func tagBatchMatchOK(item tagBatchItem, song qqmusic.Song) bool {
+	titleItem, titleSong := tagNormKey(item.title), tagNormKey(song.Title)
+	if titleItem == "" || titleSong == "" {
+		return false
+	}
+	artistItem := tagNormKey(item.artist)
+	var artistSong strings.Builder
+	for _, name := range song.Artists {
+		artistSong.WriteString(tagNormKey(name))
+	}
+	artistMatch := artistSong.String() != "" &&
+		(strings.Contains(artistSong.String(), artistItem) ||
+			strings.Contains(artistItem, artistSong.String()))
+	if titleSong == titleItem {
+		// 标题一致即可绑定；文件没有艺人信息时也不例外。
+		return artistItem == "" || artistMatch
+	}
+	// 标题不完全一致：必须同时有艺人信息且艺人一致，模糊绑定风险太高。
+	if artistItem == "" || !artistMatch {
+		return false
+	}
+	return strings.Contains(titleSong, titleItem) || strings.Contains(titleItem, titleSong)
+}
+
+// bindTagEntryByPath records a matched song's MIDs on every entry with that
+// path, so the association survives a restart (both lists are scanned).
+func (a *app) bindTagEntryByPath(path, songMID, albumMID string) {
+	s := &a.tagStudio
+	for _, entries := range [][]tagEntry{s.historyEntries, s.fileEntries} {
+		for i := range entries {
+			if samePath(entries[i].path, path) {
+				entries[i].songMID = songMID
+				entries[i].albumMID = albumMID
+			}
+		}
+	}
 }
 
 // batchFillOne fills one file's empty tag fields from QQ Music and writes it
@@ -408,6 +541,8 @@ func (a *app) tagBatchStatus(entry *tagEntry, col colors) (string, ui.Color) {
 			return note, col.green
 		case batchFailed:
 			return note, col.red
+		case batchUnmatched:
+			return note, col.gold
 		}
 		return note, col.muted
 	}

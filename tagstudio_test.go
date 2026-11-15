@@ -82,6 +82,34 @@ func TestTagMatchQuery(t *testing.T) {
 	}
 }
 
+func TestTagNormKey(t *testing.T) {
+	if got := tagNormKey("【无损】This Can't Be Us (HQ)"); got != "thiscan'tbeus(hq)" {
+		t.Fatalf("tagNormKey(noise) = %q", got)
+	}
+	if got := tagNormKey("  A  B  "); got != "ab" {
+		t.Fatalf("tagNormKey(spaces) = %q", got)
+	}
+}
+
+func TestTagBatchMatchOK(t *testing.T) {
+	item := tagBatchItem{title: "This Can't Be Us", artist: "ONE OK ROCK"}
+	if !tagBatchMatchOK(item, qqmusic.Song{Title: "This Can't Be Us", Artists: []string{"ONE OK ROCK"}}) {
+		t.Fatal("exact match should bind")
+	}
+	if !tagBatchMatchOK(item, qqmusic.Song{Title: "This Can't Be Us [Live]", Artists: []string{"ONE OK ROCK"}}) {
+		t.Fatal("overlapping title with same artist should bind")
+	}
+	if tagBatchMatchOK(item, qqmusic.Song{Title: "完全不同的歌", Artists: []string{"别人"}}) {
+		t.Fatal("unrelated song should not bind")
+	}
+	if tagBatchMatchOK(item, qqmusic.Song{Title: "This Can't Be Us", Artists: []string{"别的歌手"}}) {
+		t.Fatal("same title with different artist should not bind")
+	}
+	if tagBatchMatchOK(tagBatchItem{title: "Demo"}, qqmusic.Song{Title: "Demo (Deluxe)"}) {
+		t.Fatal("no artist info should not auto bind a fuzzy title")
+	}
+}
+
 func TestApplyTagBatchFill(t *testing.T) {
 	info := tag.Info{Title: "已有标题", Artist: "   "}
 	filled := applyTagBatchFill(&info,
