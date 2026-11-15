@@ -369,9 +369,6 @@ func (a *app) tagStudioForm(c *ui.Context, col colors, entry *tagEntry) {
 				a.tagShortField(c, col, "作词", &s.draft.Lyricist, "作词")
 			})
 		})
-		a.settingsGroup(c, col, "封面", func() {
-			a.tagStudioCover(c, col, entry)
-		})
 		a.settingsGroup(c, col, "歌词", func() {
 			a.tagStudioLyrics(c, col, entry)
 		})
@@ -420,11 +417,11 @@ func (a *app) tagStudioStep(dir int) {
 func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 	s := &a.tagStudio
 	softCard(c, col, func() {
-		ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, iconTag).Size(16, 16).TextColor(col.muted)
-			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+		ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
+			a.tagCoverThumb(c, col)
+			ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, entry.displayTitle()).FontSize(14).FontWeight(600).
+					ui.Text(c, a.tagSummaryTitle(entry)).FontSize(15).FontWeight(600).
 						TextColor(col.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
 					if s.dirty {
 						badge := ui.Row(c).Height(18).Padding(0, 7).Radius(9).
@@ -437,80 +434,110 @@ func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 						})
 					}
 				})
+				if detail := a.tagSummaryDetail(entry); detail != "" {
+					ui.Text(c, detail).FontSize(12).TextColor(col.muted).
+						SingleLine().Ellipsis("…")
+				}
 				ui.Text(c, entry.path).FontSize(11).TextColor(col.muted).
 					SingleLine().Ellipsis("…").Tooltip(entry.path)
-				detail := entry.formatLabel()
-				if size := format.ByteSize(entry.size); size != "" {
-					detail += " · " + size
-				}
-				ui.Text(c, detail).FontSize(11).TextColor(col.faint)
-			})
-			iconButton(c, col, iconChevronLeft, "上一个 (Alt+←)", func() { a.tagStudioStep(-1) })
-			iconButton(c, col, iconChevronRight, "下一个 (Alt+→)", func() { a.tagStudioStep(1) })
-			iconButton(c, col, iconFolder, "在文件夹中显示", func() {
-				a.showHistoryFile(entry.path)
-			})
-			switch {
-			case s.metaBusy:
-				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Spinner(c).Size(13, 13)
-					ui.Text(c, "补全中…").FontSize(12).TextColor(col.muted)
+				ui.Text(c, a.tagSummaryMeta(entry)).FontSize(11).TextColor(col.faint)
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					switch {
+					case s.metaBusy:
+						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+							ui.Spinner(c).Size(13, 13)
+							ui.Text(c, "补全中…").FontSize(12).TextColor(col.muted)
+						})
+					case entry.songMID != "":
+						secondaryButton(c, col, iconSparkles, "从 QQ 音乐补全", a.fillTagStudioMeta)
+					default:
+						secondaryButton(c, col, iconSearch, "搜索匹配", a.openTagMatch)
+					}
+					if s.coverBusy {
+						ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
+							ui.Spinner(c).Size(12, 12)
+							ui.Text(c, "获取封面中…").FontSize(12).TextColor(col.muted)
+						})
+					} else if entry.albumMID != "" {
+						iconButton(c, col, iconDisc, "从 QQ 音乐获取封面", a.fetchTagStudioCover)
+					}
+					if len(s.draft.Cover) > 0 {
+						iconButton(c, col, iconTrash, "移除封面", a.removeTagStudioCover)
+					}
 				})
-			case entry.songMID != "":
-				secondaryButton(c, col, iconSparkles, "从 QQ 音乐补全", a.fillTagStudioMeta)
-			default:
-				secondaryButton(c, col, iconSearch, "搜索匹配", a.openTagMatch)
-			}
+			})
+			ui.Row(c).Gap(4).Shrink(0).AlignItems(ui.Center).Children(func() {
+				iconButton(c, col, iconChevronLeft, "上一个 (Alt+←)", func() { a.tagStudioStep(-1) })
+				iconButton(c, col, iconChevronRight, "下一个 (Alt+→)", func() { a.tagStudioStep(1) })
+				iconButton(c, col, iconFolder, "在文件夹中显示", func() {
+					a.showHistoryFile(entry.path)
+				})
+			})
 		})
 	})
 }
 
-func (a *app) tagStudioCover(c *ui.Context, col colors, entry *tagEntry) {
+// tagSummaryTitle prefers the draft, so the header updates as the user types.
+func (a *app) tagSummaryTitle(entry *tagEntry) string {
+	if title := strings.TrimSpace(a.tagStudio.draft.Title); title != "" {
+		return title
+	}
+	return entry.displayTitle()
+}
+
+// tagSummaryDetail is the artist · album line, also draft-first.
+func (a *app) tagSummaryDetail(entry *tagEntry) string {
 	s := &a.tagStudio
-	ui.Row(c).FillWidth().Padding(11, 8).Gap(14).AlignItems(ui.Start).Children(func() {
-		box := ui.Box(c).Size(128, 128).Radius(8).Background(col.cardAlt).
-			Border(1, col.border).Clip()
-		box.Children(func() {
-			if s.cover != nil {
-				ui.Image(c, s.cover).Size(128, 128).Fit(ui.Cover)
-				return
-			}
-			ui.Row(c).Fill().Center().Children(func() {
-				ui.Icon(c, iconDisc).Size(30, 30).TextColor(col.faint)
-			})
-		})
-		ui.Column(c).Grow(1).MinWidth(0).Gap(8).Children(func() {
-			ui.Text(c, "封面会写入 MP3 的 APIC 或 FLAC 的 PICTURE，仅支持 PNG / JPEG。").
-				FontSize(12).TextColor(col.muted).LineHeight(1.4)
-			if len(s.draft.Cover) > 0 {
-				detail := format.ByteSize(int64(len(s.draft.Cover)))
-				if s.draft.CoverMIME != "" {
-					detail += " · " + s.draft.CoverMIME
-				}
-				ui.Text(c, detail).FontSize(11).TextColor(col.faint)
-			} else {
-				ui.Text(c, "当前没有封面").FontSize(11).TextColor(col.faint)
-			}
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ghostButton(c, col, iconFolder, "选择图片…", a.pickTagStudioCover)
-				if s.coverBusy {
-					ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-						ui.Spinner(c).Size(12, 12)
-						ui.Text(c, "获取中…").FontSize(12).TextColor(col.muted)
-					})
-				} else {
-					ghostButton(c, col, iconSparkles, "从 QQ 音乐获取", func() {
-						if entry.albumMID == "" {
-							a.setToast("该文件没有关联专辑，无法获取封面")
-							return
-						}
-						a.fetchTagStudioCover()
-					})
-				}
-				if len(s.draft.Cover) > 0 {
-					ghostDangerButton(c, col, iconTrash, "移除", a.removeTagStudioCover)
-				}
-			})
+	artist := strings.TrimSpace(s.draft.Artist)
+	if artist == "" {
+		artist = entry.displayArtist()
+	}
+	album := strings.TrimSpace(s.draft.Album)
+	if album == "" {
+		album = entry.displayAlbum()
+	}
+	switch {
+	case artist == "":
+		return album
+	case album == "":
+		return artist
+	}
+	return artist + " · " + album
+}
+
+// tagSummaryMeta is the format, file size and cover size line.
+func (a *app) tagSummaryMeta(entry *tagEntry) string {
+	detail := entry.formatLabel()
+	if size := format.ByteSize(entry.size); size != "" {
+		detail += " · " + size
+	}
+	if cover := format.ByteSize(int64(len(a.tagStudio.draft.Cover))); cover != "" {
+		detail += " · 封面 " + cover
+	}
+	return detail
+}
+
+// tagCoverThumb is the summary's clickable cover: clicking picks a new
+// image, the placeholder invites the first one.
+func (a *app) tagCoverThumb(c *ui.Context, col colors) {
+	s := &a.tagStudio
+	box := ui.ButtonBase(c).Size(96, 96).Radius(8).Background(col.cardAlt).
+		Border(1, col.border).Clip().Cursor(ui.CursorPointer).
+		Label("更换封面").Tooltip("点击更换封面（PNG / JPEG，8 MB 内）")
+	if box.Hovered() {
+		box.Border(1, col.accent)
+	}
+	if box.Clicked() {
+		a.pickTagStudioCover()
+	}
+	box.Children(func() {
+		if s.cover != nil {
+			ui.Image(c, s.cover).Size(96, 96).Fit(ui.Cover)
+			return
+		}
+		ui.Column(c).Fill().Center().Gap(6).Children(func() {
+			ui.Icon(c, iconDisc).Size(26, 26).TextColor(col.faint)
+			ui.Text(c, "点击添加封面").FontSize(10).TextColor(col.faint)
 		})
 	})
 }
