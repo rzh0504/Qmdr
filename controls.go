@@ -43,6 +43,11 @@ func selectControl(c *ui.Context, col colors, value *string, options []string, w
 		fill = bg.Mix(col.text, 0.04)
 	}
 	smoothFlat(trigger, col, 7, fill)
+	// smoothFlat 的自定义填充会盖住 Border 属性，描边需要用 DrawOver 补画。
+	trigger.DrawOver(func(p *ui.Painter, r ui.Rect) {
+		path := smoothRectPath(snapRect(p, r), 7)
+		p.StrokePath(&path, 1, col.fieldStroke)
+	})
 	if trigger.Changed() && onChange != nil {
 		onChange()
 	}

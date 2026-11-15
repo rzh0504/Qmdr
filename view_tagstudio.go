@@ -85,10 +85,9 @@ func (a *app) tagStudioSidebar(c *ui.Context, col colors) {
 			s.filter = ""
 			a.refresh()
 		})
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+		ui.Row(c).FillWidth().Height(34).Gap(7).Padding(0, 11).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "排序").FontSize(12).TextColor(col.faint).Shrink(0)
 			selectControl(c, col, &s.sortBy, tagSortOptions, 120, col.control, a.refresh)
-			ui.Spacer(c)
 		})
 		matched := a.matchedTagEntries()
 		listPanel(c, col, "tag-studio-"+s.source, func() {
