@@ -21,7 +21,6 @@ import (
 	"github.com/rzh0504/qmdr/internal/history"
 	"github.com/rzh0504/qmdr/internal/lrc"
 	"github.com/rzh0504/qmdr/internal/qqmusic"
-	"github.com/rzh0504/qmdr/internal/settings"
 	"github.com/rzh0504/qmdr/internal/tag"
 )
 
@@ -185,13 +184,13 @@ func (a *app) tagStudioSourceSwitch(c *ui.Context, col colors) {
 	track := ui.Row(c).Height(30).Padding(2).Radius(8).AlignItems(ui.Center).Shrink(0)
 	smoothFlat(track, col, 8, col.chip)
 	track.Children(func() {
-			for _, option := range []struct {
-				key   string
-				label string
-			}{
-				{"history", "下载历史"},
-				{"files", "本地文件夹"},
-			} {
+		for _, option := range []struct {
+			key   string
+			label string
+		}{
+			{"history", "下载历史"},
+			{"files", "本地文件夹"},
+		} {
 			option := option
 			active := s.source == option.key
 			seg := ui.ButtonBase(c).Width(78).Height(26).Radius(6).Center().
@@ -441,23 +440,57 @@ func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 	s := &a.tagStudio
 	softCard(c, col, func() {
 		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-			a.tagCoverThumb(c, col)
-			ui.Text(c, a.tagSummaryTitle(entry)).FontSize(14).FontWeight(600).
-				TextColor(col.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-			if s.dirty {
-				badge := ui.Row(c).Height(18).Padding(0, 7).Radius(9).
-					AlignItems(ui.Center).Shrink(0)
-				badge.Background(col.accent.Alpha(0.12)).
-					Border(1, col.accent.Alpha(0.30))
-				badge.Children(func() {
-					ui.Text(c, "未保存").FontSize(10).FontWeight(600).
-						TextColor(col.accent).SingleLine()
+			// The cover: left-click picks a new image, right-click opens the
+			// menu that removes the current one.
+			cover := ui.ButtonBase(c).Size(34, 34).Radius(4).Background(col.cardAlt).
+				Border(1, col.border).Clip().Cursor(ui.CursorPointer).
+				Label("更换封面").Tooltip("点击更换封面，右键移除（PNG / JPEG，8 MB 内）")
+			if cover.Hovered() {
+				cover.Border(1, col.accent)
+			}
+			cover.Children(func() {
+				if s.cover != nil {
+					ui.Image(c, s.cover).Size(34, 34).Fit(ui.Cover)
+				} else {
+					ui.Row(c).Fill().Center().Children(func() {
+						ui.Icon(c, iconDisc).Size(15, 15).TextColor(col.faint)
+					})
+				}
+			})
+			if cover.Clicked() {
+				a.pickTagStudioCover()
+			}
+			if cover.RightClicked() && len(s.draft.Cover) > 0 {
+				b := cover.Bounds()
+				x, y, over := cover.PointerPosition()
+				if !over {
+					x, y = b.W/2, b.H/2
+				}
+				a.contextMenu = contextMenuState{open: true, x: b.X + x, y: b.Y + y, items: []menuAction{
+					{label: "移除封面", run: a.removeTagStudioCover},
+				}}
+				a.refresh()
+			}
+			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, a.tagSummaryTitle(entry)).FontSize(14).FontWeight(600).
+						TextColor(col.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+					if s.dirty {
+						badge := ui.Row(c).Height(18).Padding(0, 7).Radius(9).
+							AlignItems(ui.Center).Shrink(0)
+						badge.Background(col.accent.Alpha(0.12)).
+							Border(1, col.accent.Alpha(0.30))
+						badge.Children(func() {
+							ui.Text(c, "未保存").FontSize(10).FontWeight(600).
+								TextColor(col.accent).SingleLine()
+						})
+					}
 				})
-			}
-			if detail := a.tagSummaryDetail(entry); detail != "" {
-				ui.Text(c, detail).FontSize(12).TextColor(col.muted).
-					SingleLine().Ellipsis("…").Shrink(0).MaxWidth(200)
-			}
+				if detail := a.tagSummaryDetail(entry); detail != "" {
+					ui.Text(c, detail).FontSize(12).TextColor(col.muted).
+						SingleLine().Ellipsis("…")
+				}
+			})
 			ui.Row(c).Gap(8).Shrink(0).AlignItems(ui.Center).Children(func() {
 				switch {
 				case s.metaBusy:
@@ -466,20 +499,21 @@ func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 						ui.Text(c, "补全中…").FontSize(12).TextColor(col.muted)
 					})
 				case entry.songMID != "":
-					secondaryButton(c, col, iconSparkles, "从 QQ 音乐补全", a.fillTagStudioMeta)
+					secondaryButton(c, col, nil, "从 QQ 音乐补全", a.fillTagStudioMeta)
 				default:
 					secondaryButton(c, col, iconSearch, "搜索匹配", a.openTagMatch)
 				}
-				if s.coverBusy {
-					ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-						ui.Spinner(c).Size(12, 12)
-						ui.Text(c, "获取封面中…").FontSize(12).TextColor(col.muted)
+				switch {
+				case s.saving:
+					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+						ui.Spinner(c).Size(13, 13)
+						ui.Text(c, "保存中…").FontSize(12).TextColor(col.muted)
 					})
-				} else if entry.albumMID != "" {
-					iconButton(c, col, iconDisc, "从 QQ 音乐获取封面", a.fetchTagStudioCover)
-				}
-				if len(s.draft.Cover) > 0 {
-					iconButton(c, col, iconTrash, "移除封面", a.removeTagStudioCover)
+				case s.dirty:
+					secondaryButton(c, col, iconRefresh, "还原", a.revertTagStudio)
+					primaryButton(c, col, iconCheck, "保存", a.saveTagStudio)
+				default:
+					primaryButtonDisabled(c, col, iconCheck, "保存")
 				}
 			})
 		})
@@ -514,30 +548,6 @@ func (a *app) tagSummaryDetail(entry *tagEntry) string {
 	return artist + " · " + album
 }
 
-// tagCoverThumb is the summary's clickable cover, sized like the list rows'
-// thumbnails: clicking picks a new image.
-func (a *app) tagCoverThumb(c *ui.Context, col colors) {
-	s := &a.tagStudio
-	box := ui.ButtonBase(c).Size(34, 34).Radius(4).Background(col.cardAlt).
-		Border(1, col.border).Clip().Cursor(ui.CursorPointer).
-		Label("更换封面").Tooltip("点击更换封面（PNG / JPEG，8 MB 内）")
-	if box.Hovered() {
-		box.Border(1, col.accent)
-	}
-	if box.Clicked() {
-		a.pickTagStudioCover()
-	}
-	box.Children(func() {
-		if s.cover != nil {
-			ui.Image(c, s.cover).Size(34, 34).Fit(ui.Cover)
-			return
-		}
-		ui.Row(c).Fill().Center().Children(func() {
-			ui.Icon(c, iconDisc).Size(15, 15).TextColor(col.faint)
-		})
-	})
-}
-
 func (a *app) tagStudioLyrics(c *ui.Context, col colors, entry *tagEntry) {
 	s := &a.tagStudio
 	ui.Column(c).FillWidth().Padding(11, 8).Gap(8).Children(func() {
@@ -553,7 +563,7 @@ func (a *app) tagStudioLyrics(c *ui.Context, col colors, entry *tagEntry) {
 					ui.Text(c, "获取中…").FontSize(12).TextColor(col.muted)
 				})
 			} else {
-				secondaryButton(c, col, iconSparkles, "获取歌词", a.requestTagLyrics)
+				secondaryButton(c, col, nil, "获取歌词", a.requestTagLyrics)
 			}
 		})
 		frame := ui.Column(c).FillWidth().Padding(8, 6)
@@ -1391,52 +1401,6 @@ func (a *app) fetchTagStudioLyrics() {
 	})
 }
 
-func (a *app) fetchTagStudioCover() {
-	s := &a.tagStudio
-	entry := s.activeEntry(s.selected)
-	if entry == nil || s.coverBusy {
-		return
-	}
-	if entry.albumMID == "" {
-		a.setToast("该文件没有关联专辑，无法获取封面")
-		return
-	}
-	albumMID := entry.albumMID
-	target := entry.path
-	size := settings.CoverSizeValue(a.coverSize)
-	s.coverBusy = true
-	a.refresh()
-	var data []byte
-	var mime string
-	var bitmap *ui.Bitmap
-	a.async(&s.coverSlot, 30*time.Second, func(ctx context.Context) error {
-		var err error
-		data, mime, err = a.metadataCover(ctx, albumMID, size)
-		if err != nil {
-			return err
-		}
-		bitmap, err = ui.DecodeBitmap(data)
-		return err
-	}, func(err error) {
-		s.coverBusy = false
-		current := s.activeEntry(s.selected)
-		if current == nil || !samePath(current.path, target) {
-			a.refresh()
-			return
-		}
-		if err != nil {
-			a.toast = "获取封面失败：" + friendlyError(err)
-		} else {
-			s.draft.Cover = data
-			s.draft.CoverMIME = mime
-			s.cover = bitmap
-			s.dirty = true
-			a.toast = "封面已更新"
-		}
-		a.refresh()
-	})
-}
-
 // openTagMatch starts a song search for the selected entry, so files the
 // download history does not know can still use the QQ Music lookups. The
 // query is built from the file's own tags or name and the search fires
@@ -1532,8 +1496,8 @@ func (a *app) tagMatchModal(c *ui.Context, col colors) {
 	s := &a.tagStudio
 	a.modal(c, col, &s.matchOpen, "搜索匹配歌曲", 460, func(close func()) {
 		ui.Column(c).FillWidth().Gap(12).Children(func() {
-		ui.Text(c, "已按文件信息自动搜索，结果不对可修改关键词重搜；点选歌曲关联后即可补全信息、获取歌词和封面。").
-			FontSize(12).TextColor(col.muted).LineHeight(1.35)
+			ui.Text(c, "已按文件信息自动搜索，结果不对可修改关键词重搜；点选歌曲关联后即可补全信息、获取歌词和封面。").
+				FontSize(12).TextColor(col.muted).LineHeight(1.35)
 			ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 				a.textField(c, col, &s.matchQuery, "歌曲名或歌手", 0, 30, nil, a.searchTagMatch)
 				if s.matchLoading {

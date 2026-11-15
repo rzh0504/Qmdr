@@ -180,7 +180,6 @@ type tagStudioState struct {
 	readSlot  asyncSlot
 	metaSlot  asyncSlot
 	lyricSlot asyncSlot
-	coverSlot asyncSlot
 	saveSlot  asyncSlot
 
 	source         string // "history" or "files"
@@ -203,7 +202,6 @@ type tagStudioState struct {
 
 	metaBusy  bool
 	lyricBusy bool
-	coverBusy bool
 
 	confirmDiscard bool
 	pendingAction  func()
