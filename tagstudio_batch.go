@@ -435,6 +435,17 @@ func (a *app) tagBatchView(c *ui.Context, col colors) {
 				primaryButtonDisabled(c, col, nil, "开始补全")
 			}
 		})
+		if len(s.activeEntries()) == 0 {
+			// 来源为空：本地文件夹给出选择入口，下载历史提示为空。
+			if s.source == "files" {
+				ui.Column(c).Fill().Center().Children(func() {
+					a.tagFolderInvite(c, col)
+				})
+			} else {
+				emptyState(c, col, iconQueue, "下载历史为空", "退出批量模式，先在来源中加入文件。")
+			}
+			return
+		}
 		// 表头勾选列即全选：与数据行的勾选框同列，点击切换全选。
 		allLabel := a.tagAllPickedLabel()
 		ui.Row(c).FillWidth().Gap(10).Padding(0, 10).AlignItems(ui.Center).Children(func() {
@@ -451,7 +462,7 @@ func (a *app) tagBatchView(c *ui.Context, col colors) {
 			ui.Text(c, "专辑").FontSize(12).TextColor(col.faint).Width(150)
 			ui.Text(c, "状态").FontSize(12).TextColor(col.faint).Width(130)
 		})
-		// 表格行无行距无圆角：连续选中时呈现为一整块。
+		// 表格行无行距：连续选中时呈现为一整块。
 		panel := ui.Column(c).Grow(1).MinHeight(0).FillWidth().Padding(4)
 		smoothFlat(panel, col, 12, col.chip)
 		panel.Children(func() {
