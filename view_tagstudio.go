@@ -26,6 +26,10 @@ import (
 
 const maxTagCoverBytes = 8 << 20
 
+// maxTagFolderFiles caps how many audio files one folder scan adds, so a
+// huge tree cannot flood the list.
+const maxTagFolderFiles = 500
+
 // tagSortNatural is the list's own order: the history source shows the
 // download order, the files source shows the order files were opened.
 const tagSortNatural = "下载时间"
@@ -69,7 +73,6 @@ func (a *app) tagStudioSidebar(c *ui.Context, col colors) {
 		ui.Row(c).Height(30).FillWidth().AlignItems(ui.Center).Gap(4).Children(func() {
 			a.tagStudioSourceSwitch(c, col)
 			ui.Spacer(c)
-			iconButton(c, col, iconFolder, "打开本地文件", a.pickTagFiles)
 			if s.source == "history" {
 				iconButton(c, col, iconRefresh, "刷新下载历史", a.refreshTagHistory)
 			}
@@ -87,7 +90,14 @@ func (a *app) tagStudioSidebar(c *ui.Context, col colors) {
 		listPanel(c, col, "tag-studio-"+s.source, func() {
 			if len(matched) == 0 {
 				if len(s.activeEntries()) == 0 {
-					ui.Text(c, "暂无文件").FontSize(12).TextColor(col.faint).Padding(8, 10)
+					if s.source == "files" {
+						ui.Column(c).FillWidth().AlignItems(ui.Center).
+							Padding(56, 0, 0, 0).Children(func() {
+							a.tagFolderInvite(c, col)
+						})
+					} else {
+						ui.Text(c, "暂无文件").FontSize(12).TextColor(col.faint).Padding(8, 10)
+					}
 				} else {
 					ui.Text(c, "没有匹配的文件").FontSize(12).TextColor(col.faint).Padding(8, 10)
 				}
@@ -97,13 +107,19 @@ func (a *app) tagStudioSidebar(c *ui.Context, col colors) {
 				a.tagEntryRow(c, col, index)
 			}
 		})
-		if len(matched) == len(s.activeEntries()) {
-			ui.Textf(c, "共 %d 个文件", len(matched)).FontSize(11).
-				TextColor(col.faint).Padding(0, 4)
-		} else {
-			ui.Textf(c, "匹配 %d / 共 %d 个文件", len(matched), len(s.activeEntries())).FontSize(11).
-				TextColor(col.faint).Padding(0, 4)
-		}
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+			if len(matched) == len(s.activeEntries()) {
+				ui.Textf(c, "共 %d 个文件", len(matched)).FontSize(11).
+					TextColor(col.faint).Padding(0, 4)
+			} else {
+				ui.Textf(c, "匹配 %d / 共 %d 个文件", len(matched), len(s.activeEntries())).FontSize(11).
+					TextColor(col.faint).Padding(0, 4)
+			}
+			if s.source == "files" {
+				ui.Spacer(c)
+				ghostButton(c, col, iconFolder, "选择文件夹", a.pickTagFolder)
+			}
+		})
 	})
 }
 
@@ -173,7 +189,7 @@ func (a *app) tagStudioSourceSwitch(c *ui.Context, col colors) {
 				label string
 			}{
 				{"history", "下载历史"},
-				{"files", "本地文件"},
+				{"files", "本地文件夹"},
 			} {
 			option := option
 			active := s.source == option.key
@@ -290,21 +306,20 @@ func (a *app) tagStudioPanel(c *ui.Context, col colors) {
 
 func (a *app) tagStudioEmptyState(c *ui.Context, col colors) {
 	s := &a.tagStudio
-	title, hint := "下载历史为空", "下载过的歌曲会出现在这里，也可以直接打开本地文件。"
+	title, hint := "下载历史为空", "下载过的歌曲会出现在这里。"
 	if s.source == "files" {
-		title, hint = "没有本地文件", "点击上方「打开本地文件」选择 MP3 / FLAC 后即可编辑标签。"
+		title, hint = "未选择本地文件夹", "选择一个文件夹，扫描其中的 MP3 / FLAC 添加到列表。"
 	} else if a.history.err != "" {
 		title, hint = "下载历史不可用", a.history.err
 	}
 	ui.Column(c).Fill().Center().Children(func() {
 		ui.Column(c).Width(420).Children(func() {
 			emptyState(c, col, iconTag, title, hint)
-			ui.Row(c).Gap(8).Justify(ui.Center).Children(func() {
-				secondaryButton(c, col, iconFolder, "打开文件…", a.pickTagFiles)
-				if s.source == "history" {
+			if s.source == "history" {
+				ui.Row(c).Gap(8).Justify(ui.Center).Children(func() {
 					secondaryButton(c, col, iconRefresh, "重新加载", a.retryTagHistory)
-				}
-			})
+				})
+			}
 		})
 	})
 }
@@ -999,27 +1014,69 @@ func (a *app) showTagEntry(entry *tagEntry) {
 	s.dirty = false
 }
 
-func (a *app) pickTagFiles() {
+// pickTagFolder opens a folder dialog and adds every MP3 / FLAC inside it,
+// scanned recursively, to the local files list.
+func (a *app) pickTagFolder() {
 	win := a.win
 	if win == nil {
 		return
 	}
 	go func() {
-		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
-			Parent:   win,
-			Title:    "打开音乐文件",
-			Filters:  []mygo.FileFilter{{Name: "音乐文件", Extensions: []string{"mp3", "flac"}}},
-			Multiple: true,
+		dirs, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+			Parent:    win,
+			Title:     "选择本地文件夹",
+			Directory: true,
 		})
 		if err != nil {
-			a.update(func() { a.toast = "打开文件选择器失败：" + err.Error() })
+			a.update(func() { a.toast = "打开文件夹选择器失败：" + err.Error() })
 			return
 		}
-		if len(paths) == 0 {
+		if len(dirs) == 0 {
 			return
 		}
-		a.update(func() { a.addTagFiles(paths) })
+		var paths []string
+		truncated := false
+		err = filepath.WalkDir(dirs[0], func(path string, entry os.DirEntry, err error) error {
+			if err != nil || entry.IsDir() || !tag.Supported(path) {
+				return nil
+			}
+			if len(paths) >= maxTagFolderFiles {
+				truncated = true
+				return filepath.SkipAll
+			}
+			paths = append(paths, path)
+			return nil
+		})
+		if err != nil {
+			a.update(func() { a.toast = "扫描文件夹失败：" + friendlyError(err) })
+			return
+		}
+		sort.Strings(paths)
+		a.update(func() {
+			a.addTagFiles(paths)
+			if truncated {
+				a.toast = "文件夹较大，仅加载前 " + strconv.Itoa(maxTagFolderFiles) + " 个音频文件"
+			}
+		})
 	}()
+}
+
+// tagFolderInvite is the empty local folder list's centered call to action.
+func (a *app) tagFolderInvite(c *ui.Context, col colors) {
+	invite := ui.ButtonBase(c).Column().Width(200).Height(92).Radius(10).
+		Background(col.cardAlt).Border(1, col.border).
+		Justify(ui.Center).AlignItems(ui.Center).Gap(8).
+		Cursor(ui.CursorPointer).Label("选择本地文件夹")
+	if invite.Hovered() {
+		invite.Border(1, col.accent)
+	}
+	if invite.Clicked() {
+		a.pickTagFolder()
+	}
+	invite.Children(func() {
+		ui.Icon(c, iconFolder).Size(26, 26).TextColor(col.muted)
+		ui.Text(c, "选择本地文件夹").FontSize(12).TextColor(col.muted)
+	})
 }
 
 func (a *app) addTagFiles(paths []string) {
@@ -1041,9 +1098,10 @@ func (a *app) addTagFiles(paths []string) {
 		}
 	}
 	if added == 0 {
-		a.setToast("所选文件已在列表中，或不是 MP3 / FLAC")
+		a.setToast("没有可添加的新文件（可能已在列表中）")
 		return
 	}
+	a.toast = fmt.Sprintf("已添加 %d 个本地文件", added)
 	target := first
 	a.requestTagStudioAction(func() {
 		s.source = "files"
