@@ -1,6 +1,10 @@
 package main
 
-import "github.com/egoist/mygo/ui"
+import (
+	"time"
+
+	"github.com/egoist/mygo/ui"
+)
 
 // downloadsView is the merged download page: a tab bar that stays in place,
 // with each tab keeping its own scroll position.
@@ -29,8 +33,17 @@ func (a *app) downloadsView(c *ui.Context, col colors) {
 
 func (a *app) downloadsTabs(c *ui.Context, col colors) {
 	ui.Row(c).FillWidth().Height(30).AlignItems(ui.Center).Children(func() {
+		segW := float32(84)
 		track := ui.Row(c).Height(30).Padding(2).Radius(8).AlignItems(ui.Center).Shrink(0)
-		smoothFlat(track, col, 8, col.chip)
+		pos := track.Animate("downloads-tab", b2f(a.view == viewHistory), 160*time.Millisecond)
+		track.Draw(func(p *ui.Painter, r ui.Rect) {
+			chip := smoothRectPath(snapRect(p, r), 8)
+			p.FillPath(&chip, col.chip)
+			thumb := smoothRectPath(snapRect(p, ui.Rect{
+				X: r.X + 2 + pos*segW, Y: r.Y + 2, W: segW, H: 26,
+			}), 6)
+			p.FillPath(&thumb, col.segThumb)
+		})
 		track.Children(func() {
 			for _, option := range []struct {
 				view  viewID
@@ -41,19 +54,8 @@ func (a *app) downloadsTabs(c *ui.Context, col colors) {
 			} {
 				option := option
 				active := a.view == option.view
-				seg := ui.ButtonBase(c).Height(26).Padding(0, 14).Radius(6).Center().
+				seg := ui.ButtonBase(c).Width(segW).Height(26).Radius(6).Center().
 					Cursor(ui.CursorPointer).Label(option.label)
-				if active {
-					seg.Background(col.segThumb)
-					if col.dark {
-						seg.Shadow(0, 1, 1, 0, ui.RGBA(0, 0, 0, 0.25))
-					} else {
-						seg.Shadow(0, 0.5, 1.5, 0, ui.RGBA(0, 0, 0, 0.16)).
-							Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.04))
-					}
-				} else if seg.Hovered() {
-					seg.Background(col.cardHover)
-				}
 				if seg.Clicked() {
 					a.showDownloadsTab(option.view)
 				}

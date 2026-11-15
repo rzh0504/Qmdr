@@ -181,11 +181,21 @@ func (a *app) sortedTagIndices(indices []int) []int {
 }
 
 // tagStudioSourceSwitch changes sources through a request so a dirty draft
-// is not dropped without confirmation.
+// is not dropped without confirmation. The highlight is a thumb painted in
+// the track's Draw phase (under the labels) that eases to the active segment.
 func (a *app) tagStudioSourceSwitch(c *ui.Context, col colors) {
 	s := &a.tagStudio
+	segW := float32(78)
 	track := ui.Row(c).Height(30).Padding(2).Radius(8).AlignItems(ui.Center).Shrink(0)
-	smoothFlat(track, col, 8, col.chip)
+	pos := track.Animate("source", b2f(s.source == "files"), 160*time.Millisecond)
+	track.Draw(func(p *ui.Painter, r ui.Rect) {
+		chip := smoothRectPath(snapRect(p, r), 8)
+		p.FillPath(&chip, col.chip)
+		thumb := smoothRectPath(snapRect(p, ui.Rect{
+			X: r.X + 2 + pos*segW, Y: r.Y + 2, W: segW, H: 26,
+		}), 6)
+		p.FillPath(&thumb, col.segThumb)
+	})
 	track.Children(func() {
 		for _, option := range []struct {
 			key   string
@@ -196,17 +206,8 @@ func (a *app) tagStudioSourceSwitch(c *ui.Context, col colors) {
 		} {
 			option := option
 			active := s.source == option.key
-			seg := ui.ButtonBase(c).Width(78).Height(26).Radius(6).Center().
+			seg := ui.ButtonBase(c).Width(segW).Height(26).Radius(6).Center().
 				Cursor(ui.CursorPointer).Label(option.label)
-			if active {
-				seg.Background(col.segThumb)
-				if col.dark {
-					seg.Shadow(0, 1, 1, 0, ui.RGBA(0, 0, 0, 0.25))
-				} else {
-					seg.Shadow(0, 0.5, 1.5, 0, ui.RGBA(0, 0, 0, 0.16)).
-						Shadow(0, 0, 0, 0.5, ui.RGBA(0, 0, 0, 0.04))
-				}
-			}
 			if seg.Clicked() {
 				a.requestTagSource(option.key)
 			}
