@@ -174,7 +174,7 @@ func (a *app) tagStudioSourceSwitch(c *ui.Context, col colors) {
 			label string
 		}{
 			{"history", "下载历史"},
-			{"files", "已打开"},
+			{"files", "本地文件"},
 		} {
 			option := option
 			active := s.source == option.key
@@ -293,7 +293,7 @@ func (a *app) tagStudioEmptyState(c *ui.Context, col colors) {
 	s := &a.tagStudio
 	title, hint := "下载历史为空", "下载过的歌曲会出现在这里，也可以直接打开本地文件。"
 	if s.source == "files" {
-		title, hint = "还没有打开文件", "打开本地的 MP3 / FLAC 文件后即可编辑标签。"
+		title, hint = "没有本地文件", "点击上方「打开本地文件」选择 MP3 / FLAC 后即可编辑标签。"
 	} else if a.history.err != "" {
 		title, hint = "下载历史不可用", a.history.err
 	}
