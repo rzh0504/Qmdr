@@ -81,3 +81,24 @@ func TestTagMatchQuery(t *testing.T) {
 		t.Fatalf("tagMatchQuery(untagged) = %q, want r1cky - Demo", q)
 	}
 }
+
+func TestApplyTagBatchFill(t *testing.T) {
+	info := tag.Info{Title: "已有标题", Artist: "   "}
+	filled := applyTagBatchFill(&info,
+		qqmusic.SongMeta{ReleaseDate: "2024-01-01", Genre: "流行"},
+		qqmusic.SongCredits{Composer: "某人"},
+		"", "周深", "专辑")
+	if filled != 5 {
+		t.Fatalf("filled = %d, want 5", filled)
+	}
+	if info.Title != "已有标题" {
+		t.Fatalf("Title = %q, want unchanged", info.Title)
+	}
+	if info.Artist != "周深" || info.Album != "专辑" || info.Date != "2024-01-01" ||
+		info.Genre != "流行" || info.Composer != "某人" {
+		t.Fatalf("info = %+v, want filled fields", info)
+	}
+	if info.Language != "" || info.Lyricist != "" {
+		t.Fatalf("empty sources should leave fields empty: %+v", info)
+	}
+}

@@ -90,6 +90,7 @@ func (a *app) viewRoot(c *ui.Context) {
 	a.tagStudioDiscardModal(c, col)
 	a.tagStudioLyricsModal(c, col)
 	a.tagMatchModal(c, col)
+	a.tagBatchConfirmModal(c, col)
 	a.aboutModal(c, col)
 	a.updateModal(c, col)
 	a.menuView(c, col)

@@ -58,6 +58,10 @@ func (a *app) tagStudioView(c *ui.Context, col colors) {
 			a.loadTagEntry(0, false)
 		}
 	}
+	if s.batchMode {
+		a.tagBatchView(c, col)
+		return
+	}
 	c.OnShortcut(ui.Cmd, ui.KeyS, a.saveTagStudio)
 	c.OnShortcut(ui.Alt, ui.KeyLeft, func() { a.tagStudioStep(-1) })
 	c.OnShortcut(ui.Alt, ui.KeyRight, func() { a.tagStudioStep(1) })
@@ -281,6 +285,109 @@ func (a *app) tagEntryRow(c *ui.Context, col colors, index int) {
 		}
 		ui.Text(c, entry.formatLabel()).FontSize(10).TextColor(col.faint).Shrink(0)
 	})
+}
+
+// tagBatchView is the batch mode workbench: a toolbar with the source and
+// actions above a full-width table of the current entries.
+func (a *app) tagBatchView(c *ui.Context, col colors) {
+	s := &a.tagStudio
+	ui.Column(c).Fill().Gap(10).Children(func() {
+		ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
+			a.tagStudioSourceSwitch(c, col)
+			searchBox(c, col, &s.filter, "筛选标题、艺人或路径", nil, func() {
+				s.filter = ""
+				a.refresh()
+			})
+			ui.Spacer(c)
+			ghostButton(c, col, nil, a.tagAllPickedLabel(), a.toggleAllTagPicked)
+			if len(a.tagBatchItems()) > 0 {
+				primaryButton(c, col, nil, "开始补全", a.openTagBatchConfirm)
+			} else {
+				primaryButtonDisabled(c, col, nil, "开始补全")
+			}
+		})
+		ui.Row(c).FillWidth().Padding(0, 10).AlignItems(ui.Center).Children(func() {
+			ui.Box(c).Width(46)
+			ui.Text(c, "标题").FontSize(12).TextColor(col.faint).Grow(1)
+			ui.Text(c, "艺人").FontSize(12).TextColor(col.faint).Width(150)
+			ui.Text(c, "专辑").FontSize(12).TextColor(col.faint).Width(150)
+			ui.Text(c, "状态").FontSize(12).TextColor(col.faint).Width(130)
+		})
+		listPanel(c, col, "tag-batch", func() {
+			if len(s.activeEntries()) == 0 {
+				emptyState(c, col, iconQueue, "列表为空", "退出批量模式，先在来源中加入文件。")
+				return
+			}
+			for _, index := range a.matchedTagEntries() {
+				a.tagBatchRow(c, col, index)
+			}
+		})
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+			ui.Textf(c, "共 %d 个文件 · 已选 %d", len(s.activeEntries()), a.tagPickedCount()).
+				FontSize(11).TextColor(col.faint).Padding(0, 4)
+		})
+	})
+}
+
+func (a *app) tagAllPickedLabel() string {
+	if a.tagAllPicked() {
+		return "取消全选"
+	}
+	return "全选"
+}
+
+// tagBatchRow is one table row: click toggles the pick, the status column
+// shows what the batch would do or did with the file.
+func (a *app) tagBatchRow(c *ui.Context, col colors, index int) {
+	s := &a.tagStudio
+	entry := &s.activeEntries()[index]
+	picked := s.picked[pathKey(entry.path)]
+	row := ui.ButtonBase(c).FillWidth().Height(44).Padding(0, 10).Gap(10).
+		Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(entry.displayTitle())
+	if picked {
+		row.Background(col.rowSelected)
+		row = chosen(row, col)
+	} else if row.Hovered() {
+		row.Background(col.sheetHover)
+	}
+	if row.Clicked() {
+		a.toggleTagPicked(entry)
+	}
+	status, statusColor := a.tagBatchStatus(entry, col)
+	row.Children(func() {
+		ui.Row(c).Width(36).Center().Children(func() {
+			songSelectionMark(c, col, picked)
+		})
+		ui.Text(c, entry.displayTitle()).FontSize(13).TextColor(col.text).
+			SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+		ui.Text(c, entry.displayArtist()).FontSize(12).TextColor(col.muted).
+			SingleLine().Ellipsis("…").Width(150)
+		ui.Text(c, entry.displayAlbum()).FontSize(12).TextColor(col.muted).
+			SingleLine().Ellipsis("…").Width(150)
+		ui.Text(c, status).FontSize(11).TextColor(statusColor).
+			SingleLine().Width(130)
+	})
+}
+
+// tagBatchStatus is the table's status column: what the batch would do or
+// did with this entry.
+func (a *app) tagBatchStatus(entry *tagEntry, col colors) (string, ui.Color) {
+	if entry.missing {
+		return "文件缺失", col.red
+	}
+	if note, ok := a.tagStudio.batchResults[pathKey(entry.path)]; ok {
+		switch note {
+		case batchUpdated:
+			return note, col.green
+		case batchFailed:
+			return note, col.red
+		}
+		return note, col.muted
+	}
+	if entry.songMID == "" {
+		return "未关联", col.faint
+	}
+	return "就绪", col.muted
 }
 
 func (a *app) tagStudioPanel(c *ui.Context, col colors) {
@@ -1632,6 +1739,10 @@ func (a *app) revertTagStudio() {
 
 func (a *app) saveTagStudio() {
 	s := &a.tagStudio
+	if s.batchBusy {
+		a.setToast("批量补全进行中，请稍候")
+		return
+	}
 	if s.saving {
 		a.setToast("正在保存，请稍候")
 		return

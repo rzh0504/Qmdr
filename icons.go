@@ -14,6 +14,7 @@ var (
 	iconSearch       = mustIcon(`<circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/>`)
 	iconLibrary      = mustIcon(`<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>`)
 	iconQueue        = mustIcon(`<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>`)
+	iconTable        = mustIcon(`<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>`)
 	iconSettings     = mustIcon(`<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>`)
 	iconChevronLeft  = mustIcon(`<path d="m15 18-6-6 6-6"/>`)
 	iconChevronRight = mustIcon(`<path d="m9 18 6-6-6-6"/>`)

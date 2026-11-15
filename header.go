@@ -58,7 +58,18 @@ func (a *app) headerActions(c *ui.Context, col colors) {
 			return
 		}
 		iconButton(c, col, iconFolder, "打开下载目录", a.openDownloadDir)
-		case viewQueue:
+	case viewTagStudio:
+		s := &a.tagStudio
+		if s.batchBusy {
+			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Spinner(c).Size(13, 13)
+				ui.Textf(c, "批量补全 %d/%d", s.batchDone, s.batchTotal).FontSize(12).
+					TextColor(col.muted)
+			})
+			return
+		}
+		a.tagBatchToggle(c, col)
+	case viewQueue:
 		_, done, skipped, _, active := a.queueCounts()
 		if a.queue.downloading {
 			ghostDangerButton(c, col, iconX, "取消", a.cancelQueue)
@@ -70,6 +81,36 @@ func (a *app) headerActions(c *ui.Context, col colors) {
 			primaryButton(c, col, iconPlay, "开始", a.startQueue)
 		}
 	}
+}
+
+// tagBatchToggle is the header icon that switches Tag Studio between the
+// editor and the batch table; the active tint marks batch mode.
+func (a *app) tagBatchToggle(c *ui.Context, col colors) {
+	s := &a.tagStudio
+	tip := "批量模式"
+	if s.batchMode {
+		tip = "退出批量模式"
+	}
+	btn := ui.ButtonBase(c).Size(28, 26).Radius(6).Justify(ui.Center).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(tip).Tooltip(tip)
+	fg := col.muted
+	if s.batchMode {
+		// 批量模式只给图标本身上色，不加底框。
+		fg = col.accent
+	} else if btn.Hovered() {
+		btn.Background(col.cardHover)
+		fg = col.text
+	}
+	if btn.Clicked() {
+		if s.batchMode {
+			a.exitTagBatch()
+		} else {
+			a.enterTagBatch()
+		}
+	}
+	btn.Children(func() {
+		ui.Icon(c, iconTable).Size(16, 16).TextColor(fg)
+	})
 }
 
 func (a *app) windowControls(c *ui.Context, col colors) {

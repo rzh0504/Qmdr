@@ -203,6 +203,15 @@ type tagStudioState struct {
 	metaBusy  bool
 	lyricBusy bool
 
+	// 批量模式：批量补全工作台。
+	batchMode    bool
+	picked       map[string]bool   // pathKey → 已勾选的条目
+	batchResults map[string]string // pathKey → 已补全 / 无更新 / 失败
+	batchConfirm bool
+	batchBusy    bool
+	batchDone    int
+	batchTotal   int
+
 	confirmDiscard bool
 	pendingAction  func()
 
