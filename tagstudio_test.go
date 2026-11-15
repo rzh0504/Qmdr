@@ -65,3 +65,19 @@ func TestNumberText(t *testing.T) {
 		t.Fatalf("numberText(0, 12) = %q, want empty", got)
 	}
 }
+
+func TestTagMatchQuery(t *testing.T) {
+	a := &app{}
+	tagged := &tagEntry{title: "花开忘忧", artist: "周深"}
+	if q := a.tagMatchQuery(tagged); q != "花开忘忧 周深" {
+		t.Fatalf("tagMatchQuery(tagged) = %q, want 花开忘忧 周深", q)
+	}
+	noisy := &tagEntry{title: "【无损】花开忘忧 [HQ]"}
+	if q := a.tagMatchQuery(noisy); q != "花开忘忧" {
+		t.Fatalf("tagMatchQuery(noisy) = %q, want 花开忘忧", q)
+	}
+	untagged := &tagEntry{path: "E:\\Music\\r1cky - Demo.flac"}
+	if q := a.tagMatchQuery(untagged); q != "r1cky - Demo" {
+		t.Fatalf("tagMatchQuery(untagged) = %q, want r1cky - Demo", q)
+	}
+}

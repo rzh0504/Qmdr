@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -1449,7 +1450,9 @@ func (a *app) fetchTagStudioCover() {
 }
 
 // openTagMatch starts a song search for the selected entry, so files the
-// download history does not know can still use the QQ Music lookups.
+// download history does not know can still use the QQ Music lookups. The
+// query is built from the file's own tags or name and the search fires
+// right away; the field stays editable for a re-search.
 func (a *app) openTagMatch() {
 	s := &a.tagStudio
 	entry := s.activeEntry(s.selected)
@@ -1457,11 +1460,34 @@ func (a *app) openTagMatch() {
 		return
 	}
 	s.matchFor = entry.path
-	s.matchQuery = ""
+	s.matchQuery = a.tagMatchQuery(entry)
 	s.matchResults = nil
 	s.matchErr = ""
 	s.matchOpen = true
 	a.refresh()
+	if strings.TrimSpace(s.matchQuery) != "" {
+		a.searchTagMatch()
+	}
+}
+
+// tagMatchNoise strips bracketed noise like [HQ] or 【无损】 from a
+// filename-derived query.
+var tagMatchNoise = regexp.MustCompile(`[\[【][^\]】]*[\]】]`)
+
+// tagMatchQuery builds the search query for an entry from its own tags,
+// falling back to its file name.
+func (a *app) tagMatchQuery(entry *tagEntry) string {
+	title := tagMatchNoise.ReplaceAllString(strings.TrimSpace(entry.displayTitle()), "")
+	title = strings.Join(strings.Fields(title), " ")
+	artist := tagMatchNoise.ReplaceAllString(strings.TrimSpace(entry.displayArtist()), "")
+	artist = strings.Join(strings.Fields(artist), " ")
+	switch {
+	case title != "" && artist != "":
+		return title + " " + artist
+	case title != "":
+		return title
+	}
+	return artist
 }
 
 func (a *app) searchTagMatch() {
@@ -1518,8 +1544,8 @@ func (a *app) tagMatchModal(c *ui.Context, col colors) {
 	s := &a.tagStudio
 	a.modal(c, col, &s.matchOpen, "搜索匹配歌曲", 460, func(close func()) {
 		ui.Column(c).FillWidth().Gap(12).Children(func() {
-			ui.Text(c, "选择 QQ 音乐中的歌曲关联到当前文件，之后即可补全信息、获取歌词和封面。").
-				FontSize(12).TextColor(col.muted).LineHeight(1.35)
+		ui.Text(c, "已按文件信息自动搜索，结果不对可修改关键词重搜；点选歌曲关联后即可补全信息、获取歌词和封面。").
+			FontSize(12).TextColor(col.muted).LineHeight(1.35)
 			ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 				a.textField(c, col, &s.matchQuery, "歌曲名或歌手", 0, 30, nil, a.searchTagMatch)
 				if s.matchLoading {
