@@ -16,7 +16,6 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/rzh0504/qmdr/internal/format"
 	"github.com/rzh0504/qmdr/internal/fsutil"
 	"github.com/rzh0504/qmdr/internal/history"
 	"github.com/rzh0504/qmdr/internal/lrc"
@@ -169,13 +168,13 @@ func (a *app) tagStudioSourceSwitch(c *ui.Context, col colors) {
 	track := ui.Row(c).Height(30).Padding(2).Radius(8).AlignItems(ui.Center).Shrink(0)
 	smoothFlat(track, col, 8, col.chip)
 	track.Children(func() {
-		for _, option := range []struct {
-			key   string
-			label string
-		}{
-			{"history", "下载历史"},
-			{"files", "本地文件"},
-		} {
+			for _, option := range []struct {
+				key   string
+				label string
+			}{
+				{"history", "下载历史"},
+				{"files", "本地文件"},
+			} {
 			option := option
 			active := s.source == option.key
 			seg := ui.ButtonBase(c).Width(78).Height(26).Radius(6).Center().
@@ -362,9 +361,8 @@ func (a *app) tagStudioForm(c *ui.Context, col colors, entry *tagEntry) {
 				a.tagShortField(c, col, "流派", &s.draft.Genre, "如 流行")
 				a.tagShortField(c, col, "语言", &s.draft.Language, "如 国语")
 			})
-		})
-		a.settingsGroup(c, col, "创作者", func() {
-			ui.Row(c).FillWidth().Gap(12).Padding(11, 4).AlignItems(ui.End).Children(func() {
+			divider(c, col)
+			ui.Row(c).FillWidth().Gap(12).Padding(11, 0).AlignItems(ui.End).Children(func() {
 				a.tagShortField(c, col, "作曲", &s.draft.Composer, "作曲")
 				a.tagShortField(c, col, "作词", &s.draft.Lyricist, "作词")
 			})
@@ -419,7 +417,7 @@ func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 	softCard(c, col, func() {
 		ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
 			a.tagCoverThumb(c, col)
-			ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
+			ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
 				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, a.tagSummaryTitle(entry)).FontSize(15).FontWeight(600).
 						TextColor(col.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
@@ -438,9 +436,6 @@ func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 					ui.Text(c, detail).FontSize(12).TextColor(col.muted).
 						SingleLine().Ellipsis("…")
 				}
-				ui.Text(c, entry.path).FontSize(11).TextColor(col.muted).
-					SingleLine().Ellipsis("…").Tooltip(entry.path)
-				ui.Text(c, a.tagSummaryMeta(entry)).FontSize(11).TextColor(col.faint)
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 					switch {
 					case s.metaBusy:
@@ -503,18 +498,6 @@ func (a *app) tagSummaryDetail(entry *tagEntry) string {
 		return artist
 	}
 	return artist + " · " + album
-}
-
-// tagSummaryMeta is the format, file size and cover size line.
-func (a *app) tagSummaryMeta(entry *tagEntry) string {
-	detail := entry.formatLabel()
-	if size := format.ByteSize(entry.size); size != "" {
-		detail += " · " + size
-	}
-	if cover := format.ByteSize(int64(len(a.tagStudio.draft.Cover))); cover != "" {
-		detail += " · 封面 " + cover
-	}
-	return detail
 }
 
 // tagCoverThumb is the summary's clickable cover: clicking picks a new
