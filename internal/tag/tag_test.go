@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	id3v2 "github.com/bogem/id3v2/v2"
 	"github.com/go-flac/flacvorbis/v2"
 	flac "github.com/go-flac/go-flac/v2"
 )
@@ -406,5 +407,85 @@ func TestUnsupportedFormat(t *testing.T) {
 	}
 	if Supported(path) {
 		t.Fatal("Supported(m4a) = true")
+	}
+}
+
+func TestQQCommentRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+
+	flacPath := filepath.Join(dir, "song.flac")
+	writeMinimalFLAC(t, flacPath)
+	if err := Write(flacPath, Info{Title: "One", SongMID: "0039MnYb", AlbumMID: "000abc"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Read(flacPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SongMID != "0039MnYb" || got.AlbumMID != "000abc" {
+		t.Fatalf("flac comment = %q / %q", got.SongMID, got.AlbumMID)
+	}
+	// 无关联的 info 重写后，旧的关联 COMMENT 被移除。
+	if err := Write(flacPath, Info{Title: "One"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = Read(flacPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SongMID != "" || got.AlbumMID != "" {
+		t.Fatalf("stale flac comment survived: %q / %q", got.SongMID, got.AlbumMID)
+	}
+
+	mp3Path := filepath.Join(dir, "song.mp3")
+	audio := bytes.Repeat([]byte{0x00}, 64)
+	copy(audio, []byte{0xFF, 0xFB, 0x90, 0x64})
+	if err := os.WriteFile(mp3Path, audio, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(mp3Path, Info{Title: "One"}); err != nil {
+		t.Fatal(err)
+	}
+	// 用户自己的 COMM 帧必须在关联重写后原样保留。
+	id3, err := id3v2.Open(mp3Path, id3v2.Options{Parse: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id3.AddCommentFrame(id3v2.CommentFrame{
+		Encoding:    id3v2.EncodingUTF8,
+		Language:    "eng",
+		Description: "my note",
+		Text:        "keep me",
+	})
+	if err = id3.Save(); err != nil {
+		_ = id3.Close()
+		t.Fatal(err)
+	}
+	id3.Close()
+
+	if err := Write(mp3Path, Info{Title: "One", SongMID: "0039MnYb", AlbumMID: "000abc"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = Read(mp3Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.SongMID != "0039MnYb" || got.AlbumMID != "000abc" {
+		t.Fatalf("mp3 comment = %q / %q", got.SongMID, got.AlbumMID)
+	}
+	kept := false
+	id3, err = id3v2.Open(mp3Path, id3v2.Options{Parse: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer id3.Close()
+	for _, frame := range id3.GetFrames("COMM") {
+		if comment, ok := frame.(id3v2.CommentFrame); ok &&
+			comment.Description == "my note" && comment.Text == "keep me" {
+			kept = true
+		}
+	}
+	if !kept {
+		t.Fatal("user comment was dropped")
 	}
 }

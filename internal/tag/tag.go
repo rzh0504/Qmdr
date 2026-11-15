@@ -33,6 +33,35 @@ type Info struct {
 	Language    string
 	Composer    string
 	Lyricist    string
+	SongMID     string // QQ 音乐关联，经 COMMENT 帧随文件持久化
+	AlbumMID    string
+}
+
+// qqCommentDesc marks the COMM frame / COMMENT field Qmdr uses to persist
+// the QQ Music association inside the file itself.
+const qqCommentDesc = "Qmdr"
+
+// qqCommentField builds the persisted association text; empty when there is
+// no song MID, so callers can skip writing it.
+func qqCommentField(songMID, albumMID string) string {
+	if strings.TrimSpace(songMID) == "" {
+		return ""
+	}
+	return "QQMID=" + songMID + "; QQALBUM=" + albumMID
+}
+
+// parseQQComment reads "QQMID=…; QQALBUM=…" back into the two MIDs.
+func parseQQComment(text string) (songMID, albumMID string) {
+	for _, part := range strings.Split(text, ";") {
+		part = strings.TrimSpace(part)
+		switch {
+		case strings.HasPrefix(part, "QQMID="):
+			songMID = strings.TrimSpace(strings.TrimPrefix(part, "QQMID="))
+		case strings.HasPrefix(part, "QQALBUM="):
+			albumMID = strings.TrimSpace(strings.TrimPrefix(part, "QQALBUM="))
+		}
+	}
+	return songMID, albumMID
 }
 
 func Supported(path string) bool {
@@ -94,6 +123,14 @@ func readMP3(path string) (Info, error) {
 		if info.Lyrics != "" {
 			break
 		}
+	}
+	for _, frame := range file.GetFrames("COMM") {
+		comment, ok := frame.(id3v2.CommentFrame)
+		if !ok || comment.Description != qqCommentDesc {
+			continue
+		}
+		info.SongMID, info.AlbumMID = parseQQComment(comment.Text)
+		break
 	}
 	var fallback *id3v2.PictureFrame
 	for _, frame := range file.GetFrames("APIC") {
@@ -183,6 +220,7 @@ func readFLAC(path string) (Info, error) {
 					info.DiscTotal = intValue(value("TOTALDISCS"))
 				}
 			}
+			info.SongMID, info.AlbumMID = parseQQComment(value("COMMENT"))
 		case flac.Picture:
 			if info.Cover != nil {
 				continue
@@ -298,6 +336,7 @@ var ownedComments = map[string]bool{
 	"LYRICIST":       true,
 	"LYRICS":         true,
 	"UNSYNCEDLYRICS": true,
+	"COMMENT":        true,
 }
 
 func commentKey(comment string) string {
@@ -372,6 +411,7 @@ func writeFLAC(path string, info Info) error {
 			{"COMPOSER", info.Composer},
 			{"LYRICIST", info.Lyricist},
 			{"LYRICS", info.Lyrics},
+			{"COMMENT", qqCommentField(info.SongMID, info.AlbumMID)},
 		} {
 			if strings.TrimSpace(field.value) == "" {
 				continue
@@ -437,6 +477,26 @@ func writeMP3(path string, info Info) error {
 			"TRCK", "TPOS", "TDRC", "TYER", "TCON", "TLAN", "TCOM", "TEXT",
 		} {
 			file.DeleteFrames(id)
+		}
+		// 重建 COMM：只替换 Qmdr 的关联帧，用户自己的评论原样保留。
+		var userComments []id3v2.CommentFrame
+		for _, frame := range file.GetFrames("COMM") {
+			comment, ok := frame.(id3v2.CommentFrame)
+			if ok && comment.Description != qqCommentDesc {
+				userComments = append(userComments, comment)
+			}
+		}
+		file.DeleteFrames("COMM")
+		for _, comment := range userComments {
+			file.AddCommentFrame(comment)
+		}
+		if field := qqCommentField(info.SongMID, info.AlbumMID); field != "" {
+			file.AddCommentFrame(id3v2.CommentFrame{
+				Encoding:    id3v2.EncodingUTF8,
+				Language:    "eng",
+				Description: qqCommentDesc,
+				Text:        field,
+			})
 		}
 
 		if strings.TrimSpace(info.Title) != "" {
