@@ -440,58 +440,47 @@ func (a *app) tagStudioStep(dir int) {
 func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 	s := &a.tagStudio
 	softCard(c, col, func() {
-		ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 			a.tagCoverThumb(c, col)
-			ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
-				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, a.tagSummaryTitle(entry)).FontSize(15).FontWeight(600).
-						TextColor(col.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
-					if s.dirty {
-						badge := ui.Row(c).Height(18).Padding(0, 7).Radius(9).
-							AlignItems(ui.Center).Shrink(0)
-						badge.Background(col.accent.Alpha(0.12)).
-							Border(1, col.accent.Alpha(0.30))
-						badge.Children(func() {
-							ui.Text(c, "未保存").FontSize(10).FontWeight(600).
-								TextColor(col.accent).SingleLine()
-						})
-					}
+			ui.Text(c, a.tagSummaryTitle(entry)).FontSize(14).FontWeight(600).
+				TextColor(col.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+			if s.dirty {
+				badge := ui.Row(c).Height(18).Padding(0, 7).Radius(9).
+					AlignItems(ui.Center).Shrink(0)
+				badge.Background(col.accent.Alpha(0.12)).
+					Border(1, col.accent.Alpha(0.30))
+				badge.Children(func() {
+					ui.Text(c, "未保存").FontSize(10).FontWeight(600).
+						TextColor(col.accent).SingleLine()
 				})
-				if detail := a.tagSummaryDetail(entry); detail != "" {
-					ui.Text(c, detail).FontSize(12).TextColor(col.muted).
-						SingleLine().Ellipsis("…")
+			}
+			if detail := a.tagSummaryDetail(entry); detail != "" {
+				ui.Text(c, detail).FontSize(12).TextColor(col.muted).
+					SingleLine().Ellipsis("…").Shrink(0).MaxWidth(200)
+			}
+			ui.Row(c).Gap(8).Shrink(0).AlignItems(ui.Center).Children(func() {
+				switch {
+				case s.metaBusy:
+					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+						ui.Spinner(c).Size(13, 13)
+						ui.Text(c, "补全中…").FontSize(12).TextColor(col.muted)
+					})
+				case entry.songMID != "":
+					secondaryButton(c, col, iconSparkles, "从 QQ 音乐补全", a.fillTagStudioMeta)
+				default:
+					secondaryButton(c, col, iconSearch, "搜索匹配", a.openTagMatch)
 				}
-				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-					switch {
-					case s.metaBusy:
-						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-							ui.Spinner(c).Size(13, 13)
-							ui.Text(c, "补全中…").FontSize(12).TextColor(col.muted)
-						})
-					case entry.songMID != "":
-						secondaryButton(c, col, iconSparkles, "从 QQ 音乐补全", a.fillTagStudioMeta)
-					default:
-						secondaryButton(c, col, iconSearch, "搜索匹配", a.openTagMatch)
-					}
-					if s.coverBusy {
-						ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-							ui.Spinner(c).Size(12, 12)
-							ui.Text(c, "获取封面中…").FontSize(12).TextColor(col.muted)
-						})
-					} else if entry.albumMID != "" {
-						iconButton(c, col, iconDisc, "从 QQ 音乐获取封面", a.fetchTagStudioCover)
-					}
-					if len(s.draft.Cover) > 0 {
-						iconButton(c, col, iconTrash, "移除封面", a.removeTagStudioCover)
-					}
-				})
-			})
-			ui.Row(c).Gap(4).Shrink(0).AlignItems(ui.Center).Children(func() {
-				iconButton(c, col, iconChevronLeft, "上一个 (Alt+←)", func() { a.tagStudioStep(-1) })
-				iconButton(c, col, iconChevronRight, "下一个 (Alt+→)", func() { a.tagStudioStep(1) })
-				iconButton(c, col, iconFolder, "在文件夹中显示", func() {
-					a.showHistoryFile(entry.path)
-				})
+				if s.coverBusy {
+					ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
+						ui.Spinner(c).Size(12, 12)
+						ui.Text(c, "获取封面中…").FontSize(12).TextColor(col.muted)
+					})
+				} else if entry.albumMID != "" {
+					iconButton(c, col, iconDisc, "从 QQ 音乐获取封面", a.fetchTagStudioCover)
+				}
+				if len(s.draft.Cover) > 0 {
+					iconButton(c, col, iconTrash, "移除封面", a.removeTagStudioCover)
+				}
 			})
 		})
 	})
@@ -525,11 +514,11 @@ func (a *app) tagSummaryDetail(entry *tagEntry) string {
 	return artist + " · " + album
 }
 
-// tagCoverThumb is the summary's clickable cover: clicking picks a new
-// image, the placeholder invites the first one.
+// tagCoverThumb is the summary's clickable cover, sized like the list rows'
+// thumbnails: clicking picks a new image.
 func (a *app) tagCoverThumb(c *ui.Context, col colors) {
 	s := &a.tagStudio
-	box := ui.ButtonBase(c).Size(96, 96).Radius(8).Background(col.cardAlt).
+	box := ui.ButtonBase(c).Size(34, 34).Radius(4).Background(col.cardAlt).
 		Border(1, col.border).Clip().Cursor(ui.CursorPointer).
 		Label("更换封面").Tooltip("点击更换封面（PNG / JPEG，8 MB 内）")
 	if box.Hovered() {
@@ -540,12 +529,11 @@ func (a *app) tagCoverThumb(c *ui.Context, col colors) {
 	}
 	box.Children(func() {
 		if s.cover != nil {
-			ui.Image(c, s.cover).Size(96, 96).Fit(ui.Cover)
+			ui.Image(c, s.cover).Size(34, 34).Fit(ui.Cover)
 			return
 		}
-		ui.Column(c).Fill().Center().Gap(6).Children(func() {
-			ui.Icon(c, iconDisc).Size(26, 26).TextColor(col.faint)
-			ui.Text(c, "点击添加封面").FontSize(10).TextColor(col.faint)
+		ui.Row(c).Fill().Center().Children(func() {
+			ui.Icon(c, iconDisc).Size(15, 15).TextColor(col.faint)
 		})
 	})
 }
