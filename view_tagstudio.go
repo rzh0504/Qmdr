@@ -235,9 +235,18 @@ func (a *app) tagEntryRow(c *ui.Context, col colors, index int) {
 		a.requestTagStudioAction(func() { a.loadTagEntry(index, false) })
 	}
 	row.Children(func() {
-		if entry.albumMID != "" {
+		switch {
+		case entry.cover != nil:
+			// The entry is loaded: show the cover embedded in the file, the
+			// same art the editor panel shows.
+			thumb := ui.Box(c).Size(34, 34).Radius(4).Background(col.cardAlt).
+				Border(1, col.border).Clip()
+			thumb.Children(func() {
+				ui.Image(c, entry.cover).Size(34, 34).Fit(ui.Cover)
+			})
+		case entry.albumMID != "":
 			a.cover(c, col, entry.albumMID, 34)
-		} else {
+		default:
 			box := ui.Box(c).Size(34, 34).Radius(4).Background(col.cardAlt).
 				Border(1, col.border).Clip()
 			box.Children(func() {
@@ -1011,6 +1020,12 @@ func (a *app) showTagEntry(entry *tagEntry) {
 	s.trackText = numberText(entry.info.TrackNumber, entry.info.TrackTotal)
 	s.discText = numberText(entry.info.DiscNumber, entry.info.DiscTotal)
 	s.cover = entry.cover
+	if s.cover == nil && len(entry.info.Cover) > 0 {
+		// The entry was saved with a new cover after its bitmap was
+		// invalidated; decode the embedded art once, now.
+		s.cover = tagCoverBitmap(entry.info.Cover)
+		entry.cover = s.cover
+	}
 	s.dirty = false
 }
 
