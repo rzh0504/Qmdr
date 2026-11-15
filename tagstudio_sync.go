@@ -510,7 +510,9 @@ func (a *app) searchTagMatch() {
 }
 
 // bindTagMatch links the picked song to the entry the search started from,
-// which is enough for the completion, lyric and cover lookups to work.
+// which is enough for the completion, lyric and cover lookups to work. The
+// binding marks the draft dirty, so the next save persists it into the
+// file's COMMENT frame.
 func (a *app) bindTagMatch(song qqmusic.Song) {
 	s := &a.tagStudio
 	entry := s.activeEntry(s.selected)
@@ -519,17 +521,27 @@ func (a *app) bindTagMatch(song qqmusic.Song) {
 		a.refresh()
 		return
 	}
+	changed := entry.songMID != song.Mid || entry.albumMID != song.AlbumMid
 	entry.songMID = song.Mid
 	entry.albumMID = song.AlbumMid
+	if entry.loaded {
+		entry.info.SongMID = song.Mid
+		entry.info.AlbumMID = song.AlbumMid
+		s.draft.SongMID = song.Mid
+		s.draft.AlbumMID = song.AlbumMid
+		if changed {
+			s.dirty = true
+		}
+	}
 	s.matchOpen = false
-	a.setToast("已关联「" + song.Title + "」，可继续补全信息")
+	a.setToast("已关联「" + song.Title + "」，保存后关联写入文件")
 }
 
 func (a *app) tagMatchModal(c *ui.Context, col colors) {
 	s := &a.tagStudio
 	a.modal(c, col, &s.matchOpen, "搜索匹配歌曲", 460, func(close func()) {
 		ui.Column(c).FillWidth().Gap(12).Children(func() {
-			ui.Text(c, "已按文件信息自动搜索，结果不对可修改关键词重搜；点选歌曲关联后即可补全信息、获取歌词和封面。").
+			ui.Text(c, "已按文件信息自动搜索，结果不对可修改关键词重搜；点选关联后即可补全信息，保存时关联写入文件。").
 				FontSize(12).TextColor(col.muted).LineHeight(1.35)
 			ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 				a.textField(c, col, &s.matchQuery, "歌曲名或歌手", 0, 30, nil, a.searchTagMatch)

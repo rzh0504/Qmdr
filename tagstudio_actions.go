@@ -193,6 +193,20 @@ func (a *app) loadTagEntry(index int, refresh bool) {
 		current.loaded = true
 		current.err = ""
 		current.missing = false
+		// 关联双向补齐：文件 COMMENT 里的 MID 填补空缺；数据库/搜索匹配
+		// 已有的 MID 补进 info，下一次保存时随 COMMENT 帧落盘。
+		if info.SongMID == "" && current.songMID != "" {
+			info.SongMID = current.songMID
+		}
+		if info.AlbumMID == "" && current.albumMID != "" {
+			info.AlbumMID = current.albumMID
+		}
+		if current.songMID == "" && info.SongMID != "" {
+			current.songMID = info.SongMID
+		}
+		if current.albumMID == "" && info.AlbumMID != "" {
+			current.albumMID = info.AlbumMID
+		}
 		current.info = info
 		current.size = fsutil.FileSize(path)
 		current.cover = tagCoverBitmap(info.Cover)
