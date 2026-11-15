@@ -296,28 +296,42 @@ func (a *app) tagBatchView(c *ui.Context, col colors) {
 				a.refresh()
 			})
 			ui.Spacer(c)
-			ghostButton(c, col, nil, a.tagAllPickedLabel(), a.toggleAllTagPicked)
 			if len(a.tagBatchItems()) > 0 {
 				primaryButton(c, col, nil, "开始补全", a.openTagBatchConfirm)
 			} else {
 				primaryButtonDisabled(c, col, nil, "开始补全")
 			}
 		})
-		ui.Row(c).FillWidth().Padding(0, 10).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Width(46)
+		// 表头勾选列即全选：与数据行的勾选框同列，点击切换全选。
+		allLabel := a.tagAllPickedLabel()
+		ui.Row(c).FillWidth().Gap(10).Padding(0, 10).AlignItems(ui.Center).Children(func() {
+			headerCheck := ui.ButtonBase(c).Width(36).Height(24).Center().
+				Cursor(ui.CursorPointer).Label(allLabel).Tooltip(allLabel)
+			headerCheck.Children(func() {
+				songSelectionMark(c, col, a.tagAllPicked())
+			})
+			if headerCheck.Clicked() {
+				a.toggleAllTagPicked()
+			}
 			ui.Text(c, "标题").FontSize(12).TextColor(col.faint).Grow(1)
 			ui.Text(c, "艺人").FontSize(12).TextColor(col.faint).Width(150)
 			ui.Text(c, "专辑").FontSize(12).TextColor(col.faint).Width(150)
 			ui.Text(c, "状态").FontSize(12).TextColor(col.faint).Width(130)
 		})
-		listPanel(c, col, "tag-batch", func() {
-			if len(s.activeEntries()) == 0 {
-				emptyState(c, col, iconQueue, "列表为空", "退出批量模式，先在来源中加入文件。")
-				return
-			}
-			for _, index := range a.matchedTagEntries() {
-				a.tagBatchRow(c, col, index)
-			}
+		// 表格行无行距无圆角：连续选中时呈现为一整块。
+		panel := ui.Column(c).Grow(1).MinHeight(0).FillWidth().Padding(4)
+		smoothFlat(panel, col, 12, col.chip)
+		panel.Children(func() {
+			ui.Scroll(c).Key("tag-batch").Grow(1).MinHeight(0).FillWidth().Children(func() {
+				matched := a.matchedTagEntries()
+				for i, index := range matched {
+					// 邻行的选中态决定本行圆角：连续选中块首/尾保留外圈
+					// 圆角，中间行直角，整块呈现为一个整体。
+					prevPicked := i > 0 && a.tagPickedAt(matched[i-1])
+					nextPicked := i < len(matched)-1 && a.tagPickedAt(matched[i+1])
+					a.tagBatchRow(c, col, index, prevPicked, nextPicked)
+				}
+			})
 		})
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			ui.Textf(c, "共 %d 个文件 · 已选 %d", len(s.activeEntries()), a.tagPickedCount()).
@@ -333,17 +347,33 @@ func (a *app) tagAllPickedLabel() string {
 	return "全选"
 }
 
+func (a *app) tagPickedAt(index int) bool {
+	s := &a.tagStudio
+	entry := s.activeEntry(index)
+	return entry != nil && s.picked[pathKey(entry.path)]
+}
+
 // tagBatchRow is one table row: click toggles the pick, the status column
-// shows what the batch would do or did with the file.
-func (a *app) tagBatchRow(c *ui.Context, col colors, index int) {
+// shows what the batch would do or did with the file. prevPicked/nextPicked
+// drive the row's corners, so a run of selected rows reads as one block.
+func (a *app) tagBatchRow(c *ui.Context, col colors, index int, prevPicked, nextPicked bool) {
 	s := &a.tagStudio
 	entry := &s.activeEntries()[index]
 	picked := s.picked[pathKey(entry.path)]
+	tl, tr, br, bl := float32(8), float32(8), float32(8), float32(8)
+	if picked {
+		if prevPicked {
+			tl, tr = 0, 0
+		}
+		if nextPicked {
+			br, bl = 0, 0
+		}
+	}
 	row := ui.ButtonBase(c).FillWidth().Height(44).Padding(0, 10).Gap(10).
-		Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(entry.displayTitle())
+		Radius(tl, tr, br, bl).
+		AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(entry.displayTitle())
 	if picked {
 		row.Background(col.rowSelected)
-		row = chosen(row, col)
 	} else if row.Hovered() {
 		row.Background(col.sheetHover)
 	}
