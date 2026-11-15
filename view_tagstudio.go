@@ -407,7 +407,7 @@ func (a *app) tagStudioPanel(c *ui.Context, col colors) {
 				"从左侧列表选择文件，或打开本地的 MP3 / FLAC 文件。")
 			return
 		}
-		if s.loading {
+		if s.loading && s.loadedPath == "" {
 			loadingState(c, col, "正在读取标签…")
 			return
 		}
@@ -471,8 +471,9 @@ func (a *app) tagStudioReadError(c *ui.Context, col colors, entry *tagEntry) {
 
 func (a *app) tagStudioForm(c *ui.Context, col colors, entry *tagEntry) {
 	s := &a.tagStudio
-	scroll := ui.Scroll(c).Key("tag-studio-editor").Grow(1).MinHeight(0).Gap(18)
-	scroll.Children(func() {
+	// 两段式：摘要与基本信息固定在上，歌词区吃掉剩余高度——全屏时文本框
+	// 拉伸填满而不是在下方留白。
+	ui.Column(c).Fill().Gap(18).Children(func() {
 		a.tagStudioSummary(c, col, entry)
 		a.settingsGroup(c, col, "基本信息", func() {
 			a.settingRow(c, col, "标题", "", true, func() {
@@ -498,8 +499,14 @@ func (a *app) tagStudioForm(c *ui.Context, col colors, entry *tagEntry) {
 				a.tagShortField(c, col, "作词", &s.draft.Lyricist, "作词")
 			})
 		})
-		a.settingsGroup(c, col, "歌词", func() {
-			a.tagStudioLyrics(c, col, entry)
+		lyrics := ui.Column(c).FillWidth().Grow(1).MinHeight(150).Gap(8)
+		lyrics.Children(func() {
+			groupTitle(c, col, "歌词")
+			card := ui.Column(c).FillWidth().FillHeight().MinHeight(0).Padding(2, 16)
+			smoothFlat(card, col, 12, col.chip)
+			card.Children(func() {
+				a.tagStudioLyrics(c, col, entry)
+			})
 		})
 	})
 }
@@ -546,7 +553,9 @@ func (a *app) tagStudioStep(dir int) {
 func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 	s := &a.tagStudio
 	softCard(c, col, func() {
-		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+		// 固定行高：不同文件的字形走不同字体回退，行高会有±1px差异，
+		// 钉死高度让卡片在切换时完全不动。
+		ui.Row(c).Height(50).Gap(12).AlignItems(ui.Center).Children(func() {
 			// The cover: left-click picks a new image, right-click opens the
 			// menu that removes the current one.
 			cover := ui.ButtonBase(c).Size(34, 34).Radius(4).Background(col.cardAlt).
@@ -578,10 +587,11 @@ func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 				}}
 				a.refresh()
 			}
-			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Column(c).Grow(1).MinWidth(0).FillHeight().Gap(2).Children(func() {
+				ui.Row(c).FillWidth().Height(22).Gap(6).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, a.tagSummaryTitle(entry)).FontSize(14).FontWeight(600).
-						TextColor(col.text).SingleLine().Ellipsis("…").Grow(1).MinWidth(0)
+						TextColor(col.text).SingleLine().Ellipsis("…").
+						MaxWidthPercent(60).Shrink(0)
 					if s.dirty {
 						badge := ui.Row(c).Height(18).Padding(0, 7).Radius(9).
 							AlignItems(ui.Center).Shrink(0)
@@ -592,11 +602,12 @@ func (a *app) tagStudioSummary(c *ui.Context, col colors, entry *tagEntry) {
 								TextColor(col.accent).SingleLine()
 						})
 					}
+					ui.Spacer(c)
 				})
-				if detail := a.tagSummaryDetail(entry); detail != "" {
-					ui.Text(c, detail).FontSize(12).TextColor(col.muted).
+				ui.Row(c).FillWidth().Height(18).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, a.tagSummaryDetail(entry)).FontSize(12).TextColor(col.muted).
 						SingleLine().Ellipsis("…")
-				}
+				})
 			})
 			ui.Row(c).Gap(8).Shrink(0).AlignItems(ui.Center).Children(func() {
 				switch {
@@ -657,7 +668,7 @@ func (a *app) tagSummaryDetail(entry *tagEntry) string {
 
 func (a *app) tagStudioLyrics(c *ui.Context, col colors, entry *tagEntry) {
 	s := &a.tagStudio
-	ui.Column(c).FillWidth().Padding(11, 8).Gap(8).Children(func() {
+	ui.Column(c).FillWidth().FillHeight().Padding(11, 8).Gap(8).Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
 				ui.Text(c, "歌词文本").FontSize(13).TextColor(col.text)
@@ -673,11 +684,11 @@ func (a *app) tagStudioLyrics(c *ui.Context, col colors, entry *tagEntry) {
 				secondaryButton(c, col, nil, "获取歌词", a.requestTagLyrics)
 			}
 		})
-		frame := ui.Column(c).FillWidth().Padding(8, 6)
+		frame := ui.Column(c).FillWidth().FillHeight().MinHeight(96).Padding(8, 6)
 		var input ui.Element
 		frame.Children(func() {
 			input = ui.TextAreaBase(c, &s.draft.Lyrics).FontSize(12).
-				Lines(6, 12).FocusRing(false)
+				Lines(6, 12).FocusRing(false).FillHeight()
 			if input.Changed() {
 				s.dirty = true
 			}
@@ -1065,13 +1076,17 @@ func (a *app) loadTagEntry(index int, refresh bool) {
 	}
 	entry.err = ""
 	s.loading = true
-	s.draft = tag.Info{}
-	s.original = tag.Info{}
-	s.cover = nil
-	s.trackText = ""
-	s.discText = ""
-	s.loadedPath = ""
-	s.dirty = false
+	if s.loadedPath == "" {
+		// 首次进入：没有可保持显示的旧表单，先清空并显示加载状态。
+		s.draft = tag.Info{}
+		s.original = tag.Info{}
+		s.cover = nil
+		s.trackText = ""
+		s.discText = ""
+		s.loadedPath = ""
+		s.dirty = false
+	}
+	// 否则保留上一个文件的表单直到新标签读取完成，避免面板闪烁。
 	if !tag.Supported(entry.path) {
 		s.loading = false
 		entry.err = tag.ErrUnsupported.Error()
