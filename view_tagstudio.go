@@ -292,7 +292,9 @@ func (a *app) tagEntryRow(c *ui.Context, col colors, index int) {
 func (a *app) tagBatchView(c *ui.Context, col colors) {
 	s := &a.tagStudio
 	ui.Column(c).Fill().Gap(10).Children(func() {
-		ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
+		// 顶对齐：来源切换控件与普通模式的行顶完全一致，切换批量模式时
+		// tab 不会因工具条被搜索框撑高而往下跳。
+		ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Start).Children(func() {
 			a.tagStudioSourceSwitch(c, col)
 			searchBox(c, col, &s.filter, "筛选标题、艺人或路径", nil, func() {
 				s.filter = ""
