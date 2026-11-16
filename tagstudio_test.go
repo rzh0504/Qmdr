@@ -76,7 +76,7 @@ func TestTagMatchQuery(t *testing.T) {
 	if q := a.tagMatchQuery(noisy); q != "花开忘忧" {
 		t.Fatalf("tagMatchQuery(noisy) = %q, want 花开忘忧", q)
 	}
-	untagged := &tagEntry{path: "E:\\Music\\r1cky - Demo.flac"}
+	untagged := &tagEntry{path: "r1cky - Demo.flac"}
 	if q := a.tagMatchQuery(untagged); q != "r1cky - Demo" {
 		t.Fatalf("tagMatchQuery(untagged) = %q, want r1cky - Demo", q)
 	}
