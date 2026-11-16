@@ -19,7 +19,7 @@ import (
 
 // appVersion is the version local builds report; release builds override it
 // with -X main.appVersion=<tag>.
-var appVersion = "0.3.1"
+var appVersion = "0.4.0"
 
 const (
 	repoURL           = "https://github.com/rzh0504/Qmdr"
