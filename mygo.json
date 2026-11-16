@@ -1,0 +1,10 @@
+{
+  "name": "Qmdr",
+  "identifier": "com.rzh0504.qmdr",
+  "version": "0.4.0",
+  "icon": "assets/icons/QMDR.png",
+  "updates": {
+    "publicKey": "NlAQ0svLvqeY82ZghXCEDAghqWoLt0zXM6pxeLoZHvk=",
+    "github": "rzh0504/Qmdr"
+  }
+}

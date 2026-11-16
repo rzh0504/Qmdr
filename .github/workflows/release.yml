@@ -2,8 +2,7 @@ name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
 
 permissions:
   contents: write
@@ -26,17 +25,28 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
 
-  build:
+  draft-release:
     needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --draft --verify-tag --title "Qmdr $GITHUB_REF_NAME" --generate-notes
+          fi
+
+  build:
+    needs: [test, draft-release]
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            target: windows-amd64
-          - os: ubuntu-latest
-            target: linux-amd64
-          - os: macos-latest
-            target: macos-universal
+          - { name: macOS, os: macos-latest, platform: "darwin/arm64,darwin/amd64" }
+          - { name: Windows, os: ubuntu-latest, platform: "windows/amd64,windows/arm64" }
+          - { name: Linux, os: ubuntu-latest, platform: "linux/amd64,linux/arm64" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -44,96 +54,20 @@ jobs:
         with:
           go-version: "1.27.x"
           cache: true
-      - name: Read version
-        id: version
+      - name: Check the version matches the tag
         shell: bash
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Build Windows
-        if: runner.os == 'Windows'
-        shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.value }}
-          CGO_ENABLED: "0"
         run: |
-          mkdir -p dist
-          go build -trimpath -ldflags "-s -w -H=windowsgui -X main.appVersion=${VERSION}" \
-            -o "dist/qmdr-${VERSION}-windows-amd64.exe" .
-
-      - name: Build Linux
-        if: runner.os == 'Linux'
-        shell: bash
+          tag="${GITHUB_REF_NAME#v}"
+          conf="$(python3 -c 'import json; print(json.load(open("mygo.json"))["version"])')"
+          if [ "$tag" != "$conf" ]; then
+            echo "mygo.json 的版本 $conf 与标签 v$tag 不一致" >&2
+            exit 1
+          fi
+      - name: Install NSIS, for the Windows installers
+        if: matrix.name == 'Windows'
+        run: sudo apt-get update && sudo apt-get install -y nsis
+      - name: Build and upload
         env:
-          VERSION: ${{ steps.version.outputs.value }}
-          CGO_ENABLED: "0"
-        run: |
-          mkdir -p build dist
-          GOOS=linux GOARCH=amd64 go build -trimpath \
-            -ldflags "-s -w -X main.appVersion=${VERSION}" \
-            -o "build/qmdr-${VERSION}-linux-amd64" .
-          tar -czf "dist/qmdr-${VERSION}-linux-amd64.tar.gz" \
-            -C build "qmdr-${VERSION}-linux-amd64"
-
-      - name: Build macOS
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          VERSION: ${{ steps.version.outputs.value }}
-          CGO_ENABLED: "0"
-        run: |
-          mkdir -p build dist
-          GOOS=darwin GOARCH=arm64 go build -trimpath \
-            -ldflags "-s -w -X main.appVersion=${VERSION}" \
-            -o build/qmdr-arm64 .
-          GOOS=darwin GOARCH=amd64 go build -trimpath \
-            -ldflags "-s -w -X main.appVersion=${VERSION}" \
-            -o build/qmdr-amd64 .
-          lipo -create -output build/qmdr build/qmdr-arm64 build/qmdr-amd64
-
-          app="dist/Qmdr.app"
-          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-          cp build/qmdr "$app/Contents/MacOS/Qmdr"
-          chmod +x "$app/Contents/MacOS/Qmdr"
-          cp assets/qmdr.icns "$app/Contents/Resources/qmdr.icns"
-          cat > "$app/Contents/Info.plist" <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleName</key><string>Qmdr</string>
-            <key>CFBundleDisplayName</key><string>Qmdr</string>
-            <key>CFBundleIdentifier</key><string>com.rzh0504.qmdr</string>
-            <key>CFBundleVersion</key><string>${VERSION}</string>
-            <key>CFBundleShortVersionString</key><string>${VERSION}</string>
-            <key>CFBundleExecutable</key><string>Qmdr</string>
-            <key>CFBundleIconFile</key><string>qmdr</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-            <key>LSMinimumSystemVersion</key><string>11.0</string>
-            <key>NSHighResolutionCapable</key><true/>
-          </dict>
-          </plist>
-          EOF
-          (cd dist && zip -qry "qmdr-${VERSION}-macos-universal.zip" "Qmdr.app")
-          rm -rf "$app"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.target }}
-          path: dist/*
-          if-no-files-found: error
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-      - uses: softprops/action-gh-release@v2
-        with:
-          name: Qmdr ${{ github.ref_name }}
-          generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          files: dist/*
+          GH_TOKEN: ${{ github.token }}
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: go tool mygo build -platform "${{ matrix.platform }}" -upload

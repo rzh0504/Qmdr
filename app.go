@@ -35,13 +35,17 @@ type app struct {
 	api       *qqmusic.Client
 	brandIcon *ui.Bitmap
 
-	view         viewID
-	downloadsTab viewID
-	closed       atomic.Bool
-	toast        string
-	updating     bool
-	aboutOpen    bool
-	updateInfo   updatePrompt
+	view             viewID
+	downloadsTab     viewID
+	closed           atomic.Bool
+	toast            string
+	updating         bool
+	aboutOpen        bool
+	updateInfo       updatePrompt
+	updateReady      *mygo.Update
+	updateInstalling bool
+	updateInstalled  bool
+	updateProgress   float64
 
 	diskJobs chan func()
 

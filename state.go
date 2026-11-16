@@ -114,10 +114,12 @@ type menuAction struct {
 	run       func()
 }
 
-// updatePrompt is the in-app "new version available" dialog.
+// updatePrompt is the in-app "new version available" dialog. notes 来自
+// mygo 清单（CHANGELOG 的版本章节）；url 是回退的发布页地址。
 type updatePrompt struct {
 	open    bool
 	version string
+	notes   string
 	detail  string
 	url     string
 }
