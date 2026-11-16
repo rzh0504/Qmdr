@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 
 	"github.com/egoist/mygo/ui"
@@ -12,6 +13,7 @@ var appIconPNG []byte
 //go:embed assets/icons/Qmdr_badge.svg
 var qmdrBadgeSVG []byte
 
-// qmdrBadge is the sidebar wordmark lockup (white artwork, drawn on an
-// accent plate).
-var qmdrBadge = ui.MustParseSVG(qmdrBadgeSVG)
+// qmdrBadge parses the wordmark with currentColor fills, so it follows the
+// theme (dark ink on light, white on dark) via TextColor.
+var qmdrBadge = ui.MustParseSVG(bytes.ReplaceAll(qmdrBadgeSVG,
+	[]byte(`fill="white"`), []byte(`fill="currentColor"`)))

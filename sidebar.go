@@ -67,14 +67,8 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 				a.sidebarToggle(c, col, rail)
 				return
 			}
-			// 品牌 plaque：白色徽标落在 accent 底板上，浅色/深色主题都清晰。
-			plate := ui.Box(c).Size(49, 26).Radius(6).
-				Background(col.accent.Alpha(alpha)).Shrink(0)
-			plate.Children(func() {
-				ui.Row(c).Fill().Center().Children(func() {
-					ui.Icon(c, qmdrBadge).Size(41, 18)
-				})
-			})
+			// 品牌徽标：颜色随主题（浅色深字、深色白字），随折叠渐隐。
+			ui.Icon(c, qmdrBadge).Size(41, 18).TextColor(col.text.Alpha(alpha))
 			ui.Spacer(c)
 			a.sidebarToggle(c, col, rail)
 		})
