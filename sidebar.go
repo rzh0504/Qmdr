@@ -67,9 +67,14 @@ func (a *app) sidebar(c *ui.Context, col colors) {
 				a.sidebarToggle(c, col, rail)
 				return
 			}
-			a.logoMark(c, col, 22)
-			ui.Text(c, "Qmdr").FontSize(13).FontWeight(600).
-				TextColor(col.text.Alpha(alpha))
+			// 品牌 plaque：白色徽标落在 accent 底板上，浅色/深色主题都清晰。
+			plate := ui.Box(c).Size(49, 26).Radius(6).
+				Background(col.accent.Alpha(alpha)).Shrink(0)
+			plate.Children(func() {
+				ui.Row(c).Fill().Center().Children(func() {
+					ui.Icon(c, qmdrBadge).Size(41, 18)
+				})
+			})
 			ui.Spacer(c)
 			a.sidebarToggle(c, col, rail)
 		})
